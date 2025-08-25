@@ -25,6 +25,7 @@ dependencies = [
     "numpy",
     "scipy",
     "ml-collections",
+    "librosa",
     "absl-py",
     "gradio",
     "av",
