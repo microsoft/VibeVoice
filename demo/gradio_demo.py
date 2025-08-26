@@ -136,6 +136,7 @@ class VibeVoiceDemo:
                                  speaker_4: str = None,
                                  cfg_scale: float = 1.3) -> Iterator[tuple]:
         try:
+            
             # Reset stop flag and set generating state
             self.stop_generation = False
             self.is_generating = True
@@ -144,6 +145,9 @@ class VibeVoiceDemo:
             if not script.strip():
                 self.is_generating = False
                 raise gr.Error("Error: Please provide a script.")
+
+            # Defend against common mistake
+            script = script.replace("’", "'")
             
             if num_speakers < 1 or num_speakers > 4:
                 self.is_generating = False

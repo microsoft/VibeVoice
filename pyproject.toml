@@ -24,6 +24,7 @@ dependencies = [
     "tqdm",
     "numpy",
     "scipy",
+    "librosa",
     "ml-collections",
     "absl-py",
     "gradio",
