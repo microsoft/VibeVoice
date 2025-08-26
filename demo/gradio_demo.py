@@ -992,6 +992,11 @@ Or paste text directly and it will auto-assign speakers.""",
             inputs=[],
             outputs=[audio_output, complete_audio_output],
             queue=False
+        ).then(  # Immediate UI update to hide Generate, show Stop (non-queued)
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
+            inputs=[],
+            outputs=[generate_btn, stop_btn],
+            queue=False
         ).then(
             fn=generate_podcast_wrapper,
             inputs=[num_speakers, script_input] + speaker_selections + [cfg_scale],
