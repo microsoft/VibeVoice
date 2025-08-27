@@ -29,8 +29,7 @@ dependencies = [
     "absl-py",
     "gradio",
     "av",
-    "aiortc",
-    "librosa"
+    "aiortc"
 ]
 
 
