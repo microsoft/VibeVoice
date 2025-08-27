@@ -243,6 +243,7 @@ def main():
     
     # Prepare data for model
     full_script = '\n'.join(scripts)
+    full_script = full_script.replace("’", "'")    
     
     # Load processor
     print(f"Loading processor & model from {args.model_path}")
