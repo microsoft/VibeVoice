@@ -24,6 +24,7 @@ dependencies = [
     "tqdm",
     "numpy",
     "scipy",
+    "librosa",
     "ml-collections",
     "absl-py",
     "gradio",
@@ -37,5 +38,5 @@ dependencies = [
 "Homepage" = "https://github.com/microsoft/VibeVoice"
 "Bug Tracker" = "https://github.com/microsoft/VibeVoice/issues"
 
-[tool.setuptools]
-packages = ["vibevoice",]
+[tool.setuptools.packages.find]
+where = ["."]
