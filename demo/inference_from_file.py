@@ -214,7 +214,7 @@ def main():
     # Map speaker numbers to provided speaker names
     speaker_name_mapping = {}
     speaker_names_list = args.speaker_names if isinstance(args.speaker_names, list) else [args.speaker_names]
-    for i, name in enumerate(speaker_names_list, 1):
+    for i, name in enumerate(speaker_names_list, 0):
         speaker_name_mapping[str(i)] = name
     
     print(f"\nSpeaker mapping:")
