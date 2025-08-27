@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  vibevoice:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: vibevoice:latest
+    container_name: vibevoice-demo
+    ports:
+      - "7860:7860"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Model path configuration - choose one of the following:
+      # For 1.5B model (default): microsoft/VibeVoice-1.5B
+      # For Large model: WestZhang/VibeVoice-Large-pt
+      - MODEL_PATH=microsoft/VibeVoice-1.5B
+    volumes:
+      # Optional: Mount local directory for persistent data or model cache
+      - ./cache:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    networks:
+      - vibevoice-network
+
+networks:
+  vibevoice-network:
+    driver: bridge
+
+volumes:
+  cache:
+    driver: local
