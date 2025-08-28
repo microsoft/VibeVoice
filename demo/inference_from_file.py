@@ -167,8 +167,8 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device for tensor tests",
+        default="cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"),
+        help="Device for tensor tests (cuda, mps, or cpu)",
     )
     parser.add_argument(
         "--cfg_scale",
@@ -181,6 +181,22 @@ def parse_args():
 
 def main():
     args = parse_args()
+    
+    # Validate and setup device
+    if args.device == "mps":
+        if not torch.backends.mps.is_available():
+            print("Warning: MPS not available, falling back to CPU")
+            args.device = "cpu"
+        else:
+            print("Using MPS (Metal Performance Shaders) device")
+    elif args.device == "cuda":
+        if not torch.cuda.is_available():
+            print("Warning: CUDA not available, falling back to CPU")
+            args.device = "cpu"
+        else:
+            print(f"Using CUDA device")
+    else:
+        print("Using CPU device")
 
     # Initialize voice mapper
     voice_mapper = VoiceMapper()
@@ -246,11 +262,21 @@ def main():
     processor = VibeVoiceProcessor.from_pretrained(args.model_path)
 
     # Load model
+    print(f"Loading model on device: {args.device}")
+    
+    # Determine device_map based on selected device
+    if args.device == "mps":
+        device_map = "mps"
+    elif args.device == "cuda":
+        device_map = "cuda"
+    else:
+        device_map = "cpu"
+    
     try:
         model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             args.model_path,
             torch_dtype=torch.bfloat16,
-            device_map='cuda',
+            device_map=device_map,
             attn_implementation='flash_attention_2' # flash_attention_2 is recommended
         )
     except Exception as e:
@@ -260,7 +286,7 @@ def main():
         model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             args.model_path,
             torch_dtype=torch.bfloat16,
-            device_map='cuda',
+            device_map=device_map,
             attn_implementation='sdpa'
         )
 
@@ -278,6 +304,10 @@ def main():
         return_tensors="pt",
         return_attention_mask=True,
     )
+    
+    # Move inputs to the correct device
+    if args.device != "cpu":
+        inputs = {k: v.to(args.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
     print(f"Starting generation with cfg_scale: {args.cfg_scale}")
 
     # Generate audio
