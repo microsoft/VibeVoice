@@ -53,13 +53,34 @@ class VibeVoiceDemo:
             self.model_path,
         )
         
-        # Load model
-        self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            self.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation="flash_attention_2",
-        )
+        # Load model - use CPU first then move to MPS if available
+        # MPS doesn't work well with device_map, so we'll load on CPU first
+        
+        print("Loading model on CPU first...")
+        try:
+            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                self.model_path,
+                torch_dtype=torch.float32,  # Use float32 for better compatibility
+                attn_implementation="sdpa",  # Use SDPA which works on Mac
+            )
+        except Exception as e:
+            print(f"Failed to load with SDPA, trying eager attention: {e}")
+            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                self.model_path,
+                torch_dtype=torch.float32,
+                attn_implementation="eager",  # Fallback to eager attention
+            )
+        
+        # Move to MPS if available
+        if torch.backends.mps.is_available():
+            print("Moving model to MPS device...")
+            try:
+                self.model = self.model.to('mps')
+                print("Successfully moved model to MPS")
+            except Exception as e:
+                print(f"Failed to move to MPS, keeping on CPU: {e}")
+        else:
+            print("MPS not available, keeping model on CPU")
         self.model.eval()
         
         # Use SDE solver by default

@@ -145,6 +145,32 @@ python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --t
 python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --txt_path demo/text_examples/2p_music.txt --speaker_names Alice Frank
 ```
 
+### Usage 3: CPU Inference
+
+For users without NVIDIA GPUs, we provide CPU-based inference:
+
+```bash
+# Install additional dependencies
+pip install librosa soundfile
+
+# Basic usage
+python demo/inference_cpu.py --text "Your text here" --output output.wav
+
+# With voice cloning (provide a voice sample)
+python demo/inference_cpu.py --text "Your text here" --voice demo/voices/en-Alice_woman.wav
+
+# Play the output
+afplay output.wav  # Mac
+# or
+aplay output.wav   # Linux
+```
+
+**Note for CPU inference:**
+- Inference will be slower than GPU
+- Ensure sufficient RAM (16GB+ recommended for 1.5B model)
+- The model uses eager attention instead of Flash Attention
+- Generation quality is identical to GPU inference
+
 ## FAQ
 #### Q1: Is this a pretrained model?
 **A:** Yes, it's a pretrained model without any post-training or benchmark-specific optimizations. In a way, this makes VibeVoice very versatile and fun to use.

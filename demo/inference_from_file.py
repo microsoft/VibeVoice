@@ -245,23 +245,44 @@ def main():
     print(f"Loading processor & model from {args.model_path}")
     processor = VibeVoiceProcessor.from_pretrained(args.model_path)
 
-    # Load model
+    # Load model - detect best device
+    if torch.cuda.is_available():
+        device = 'cuda'
+        dtype = torch.bfloat16
+    elif torch.backends.mps.is_available():
+        device = 'mps'
+        dtype = torch.bfloat16
+    else:
+        device = 'cpu'
+        dtype = torch.float32
+        
+    print(f"Using device: {device}")
+    
     try:
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='flash_attention_2' # flash_attention_2 is recommended
-        )
+        # Try flash attention for CUDA
+        if device == 'cuda':
+            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                args.model_path,
+                torch_dtype=dtype,
+                device_map=device,
+                attn_implementation='flash_attention_2'
+            )
+        else:
+            # Use SDPA for MPS/CPU
+            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                args.model_path,
+                torch_dtype=dtype,
+                device_map=device,
+                attn_implementation='sdpa'
+            )
     except Exception as e:
         print(f"[ERROR] : {type(e).__name__}: {e}")
-        print(traceback.format_exc())
-        print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
+        print("Trying eager attention as fallback...")
         model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='sdpa'
+            torch_dtype=dtype,
+            device_map=device,
+            attn_implementation='eager'
         )
 
     model.eval()
