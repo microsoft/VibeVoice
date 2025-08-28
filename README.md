@@ -14,7 +14,10 @@
 </div> -->
 
 <div align="center">
-<img src="Figures/VibeVoice_logo.png" alt="VibeVoice Logo" width="300">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Figures/VibeVoice_logo_white.png">
+  <img src="Figures/VibeVoice_logo.png" alt="VibeVoice Logo" width="300">
+</picture>
 </div>
 
 VibeVoice is a novel framework designed for generating **expressive**, **long-form**, **multi-speaker** conversational audio, such as podcasts, from text. It addresses significant challenges in traditional Text-to-Speech (TTS) systems, particularly in scalability, speaker consistency, and natural turn-taking.
