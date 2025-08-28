@@ -1,12 +1,19 @@
 import argparse
 import os
 import re
+import sys
 from typing import List, Tuple, Union, Dict, Any
 import time
 import torch
 
+# On macOS, set up MPS environment early to avoid potential issues
+if sys.platform == "darwin":
+    from vibevoice.utils.device_config import setup_mps_environment_early
+    setup_mps_environment_early()
+
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+from vibevoice.utils.device_config import get_optimal_config
 from transformers.utils import logging
 
 logging.set_verbosity_info()
@@ -100,7 +107,90 @@ def parse_txt_script(txt_content: str) -> Tuple[List[str], List[str]]:
     speaker_numbers = []
     
     # Pattern to match "Speaker X:" format where X is a number
-    speaker_pattern = r'^Speaker\s+(\d+):\s*(.*)$'
+    speaker_pattern = r'^Speaker\s+(\d+):\s*(.*)
+    model.set_ddpm_inference_steps(num_steps=10)
+
+    if hasattr(model.model, 'language_model'):
+       print(f"Language model attention: {model.model.language_model.config._attn_implementation}")
+       
+    # Prepare inputs for the model
+    inputs = processor(
+        text=[full_script],  # Wrap in list for batch processing
+        voice_samples=[voice_samples],  # Wrap in list for batch processing
+        padding=True,
+        return_tensors="pt",
+        return_attention_mask=True,
+    )
+    print(f"Starting generation with cfg_scale: {args.cfg_scale}")
+
+    # Generate audio
+    start_time = time.time()
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=None,
+        cfg_scale=args.cfg_scale,
+        tokenizer=processor.tokenizer,
+        # generation_config={'do_sample': False, 'temperature': 0.95, 'top_p': 0.95, 'top_k': 0},
+        generation_config={'do_sample': False},
+        verbose=True,
+    )
+    generation_time = time.time() - start_time
+    print(f"Generation time: {generation_time:.2f} seconds")
+    
+    # Calculate audio duration and additional metrics
+    if outputs.speech_outputs and outputs.speech_outputs[0] is not None:
+        # Assuming 24kHz sample rate (common for speech synthesis)
+        sample_rate = 24000
+        audio_samples = outputs.speech_outputs[0].shape[-1] if len(outputs.speech_outputs[0].shape) > 0 else len(outputs.speech_outputs[0])
+        audio_duration = audio_samples / sample_rate
+        rtf = generation_time / audio_duration if audio_duration > 0 else float('inf')
+        
+        print(f"Generated audio duration: {audio_duration:.2f} seconds")
+        print(f"RTF (Real Time Factor): {rtf:.2f}x")
+    else:
+        print("No audio output generated")
+    
+    # Calculate token metrics
+    input_tokens = inputs['input_ids'].shape[1]  # Number of input tokens
+    output_tokens = outputs.sequences.shape[1]  # Total tokens (input + generated)
+    generated_tokens = output_tokens - input_tokens
+    
+    print(f"Prefilling tokens: {input_tokens}")
+    print(f"Generated tokens: {generated_tokens}")
+    print(f"Total tokens: {output_tokens}")
+
+    # Save output
+    txt_filename = os.path.splitext(os.path.basename(args.txt_path))[0]
+    output_path = os.path.join(args.output_dir, f"{txt_filename}_generated.wav")
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    processor.save_audio(
+        outputs.speech_outputs[0],  # First (and only) batch item
+        output_path=output_path,
+    )
+    print(f"Saved output to {output_path}")
+    
+    # Print summary
+    print("\n" + "="*50)
+    print("GENERATION SUMMARY")
+    print("="*50)
+    print(f"Input file: {args.txt_path}")
+    print(f"Output file: {output_path}")
+    print(f"Speaker names: {args.speaker_names}")
+    print(f"Number of unique speakers: {len(set(speaker_numbers))}")
+    print(f"Number of segments: {len(scripts)}")
+    print(f"Prefilling tokens: {input_tokens}")
+    print(f"Generated tokens: {generated_tokens}")
+    print(f"Total tokens: {output_tokens}")
+    print(f"Generation time: {generation_time:.2f} seconds")
+    print(f"Audio duration: {audio_duration:.2f} seconds")
+    print(f"RTF (Real Time Factor): {rtf:.2f}x")
+    
+    print("="*50)
+
+if __name__ == "__main__":
+    main()
+
     
     current_speaker = None
     current_text = ""
@@ -134,7 +224,6 @@ def parse_txt_script(txt_content: str) -> Tuple[List[str], List[str]]:
     
     return scripts, speaker_numbers
 
-
 def parse_args():
     parser = argparse.ArgumentParser(description="VibeVoice Processor TXT Input Test")
     parser.add_argument(
@@ -166,8 +255,23 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device for tensor tests",
+        default="auto",
+        choices=["auto", "cuda", "mps", "cpu"],
+        help="Device for inference. 'auto' will detect the optimal device.",
+    )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "bf16", "fp16", "fp32"],
+        help="Data type for inference. 'auto' will detect the optimal dtype.",
+    )
+    parser.add_argument(
+        "--attn-impl",
+        type=str,
+        default="auto",
+        choices=["auto", "flash_attention_2", "sdpa"],
+        help="Attention implementation. 'auto' will detect the optimal implementation.",
     )
     parser.add_argument(
         "--cfg_scale",
@@ -175,16 +279,35 @@ def parse_args():
         default=1.3,
         help="CFG (Classifier-Free Guidance) scale for generation (default: 1.3)",
     )
-    parser.add_argument(
-        "--use_eager",
-        action="store_true",
-        help="Use eager attention mode instead of flash_attention_2",
-    )
     
     return parser.parse_args()
 
 def main():
     args = parse_args()
+
+    # --- Device and dtype configuration ---
+    optimal_device, optimal_dtype, optimal_attn_impl = get_optimal_config()
+
+    device = args.device if args.device != "auto" else optimal_device
+    
+    dtype_map = {
+        "bf16": torch.bfloat16,
+        "fp16": torch.float16,
+        "fp32": torch.float32,
+    }
+    if args.dtype == "auto":
+        torch_dtype = optimal_dtype
+    else:
+        torch_dtype = dtype_map[args.dtype]
+
+    attn_impl = args.attn_impl if args.attn_impl != "auto" else optimal_attn_impl
+
+    print("\n" + "="*50)
+    print("Resolved Configuration:")
+    print(f"  Device: {device}")
+    print(f"  Data Type: {torch_dtype}")
+    print(f"  Attention Implementation: {attn_impl}")
+    print("="*50 + "\n")
 
     # Initialize voice mapper
     voice_mapper = VoiceMapper()
@@ -249,15 +372,15 @@ def main():
     processor = VibeVoiceProcessor.from_pretrained(args.model_path)
 
     # Load model
-    attn_implementation = "flash_attention_2" if not args.use_eager else "eager"
     model = VibeVoiceForConditionalGenerationInference.from_pretrained(
         args.model_path,
-        torch_dtype=torch.bfloat16,
-        device_map='cuda',
-        attn_implementation=attn_implementation # flash_attention_2 is recommended, eager may lead to lower audio quality
+        torch_dtype=torch_dtype,
+        device_map=device,
+        attn_implementation=attn_impl
     )
 
     model.eval()
+
     model.set_ddpm_inference_steps(num_steps=10)
 
     if hasattr(model.model, 'language_model'):

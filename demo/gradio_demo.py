@@ -17,13 +17,18 @@ import gradio as gr
 import librosa
 import soundfile as sf
 import torch
-import os
 import traceback
+
+# On macOS, set up MPS environment early to avoid potential issues
+if sys.platform == "darwin":
+    from vibevoice.utils.device_config import setup_mps_environment_early
+    setup_mps_environment_early()
 
 from vibevoice.modular.configuration_vibevoice import VibeVoiceConfig
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 from vibevoice.modular.streamer import AudioStreamer
+from vibevoice.utils.device_config import get_optimal_config
 from transformers.utils import logging
 from transformers import set_seed
 
@@ -32,10 +37,12 @@ logger = logging.get_logger(__name__)
 
 
 class VibeVoiceDemo:
-    def __init__(self, model_path: str, device: str = "cuda", inference_steps: int = 5):
+    def __init__(self, model_path: str, device: str, dtype: torch.dtype, attn_impl: str, inference_steps: int = 5):
         """Initialize the VibeVoice demo with model loading."""
         self.model_path = model_path
         self.device = device
+        self.dtype = dtype
+        self.attn_impl = attn_impl
         self.inference_steps = inference_steps
         self.is_generating = False  # Track generation state
         self.stop_generation = False  # Flag to stop generation
@@ -56,16 +63,16 @@ class VibeVoiceDemo:
         # Load model
         self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             self.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation="flash_attention_2",
+            torch_dtype=self.dtype,
+            device_map=self.device,
+            attn_implementation=self.attn_impl,
         )
         self.model.eval()
         
         # Use SDE solver by default
         self.model.model.noise_scheduler = self.model.model.noise_scheduler.from_config(
             self.model.model.noise_scheduler.config, 
-            algorithm_type='sde-dpmsolver++',
+            algorithm_type='sde-dpmsolver++', 
             beta_schedule='squaredcos_cap_v2'
         )
         self.model.set_ddpm_inference_steps(num_steps=self.inference_steps)
@@ -820,7 +827,8 @@ def create_demo_interface(demo_instance: VibeVoiceDemo):
                 
                 script_input = gr.Textbox(
                     label="Conversation Script",
-                    placeholder="""Enter your podcast script here. You can format it as:
+                    placeholder="""
+Enter your podcast script here. You can format it as:
 
 Speaker 0: Welcome to our podcast today!
 Speaker 1: Thanks for having me. I'm excited to discuss...
@@ -904,10 +912,12 @@ Or paste text directly and it will auto-assign speakers.""",
                     visible=False  # Initially hidden, shown when audio is ready
                 )
                 
-                gr.Markdown("""
-                *💡 **Streaming**: Audio plays as it's being generated (may have slight pauses)  
-                *💡 **Complete Audio**: Will appear below after generation finishes*
-                """)
+                gr.Markdown(
+                    """
+                    *💡 **Streaming**: Audio plays as it's being generated (may have slight pauses)  
+                    *💡 **Complete Audio**: Will appear below after generation finishes*
+                    """
+                )
                 
                 # Generation log
                 log_output = gr.Textbox(
@@ -1048,15 +1058,17 @@ Or paste text directly and it will auto-assign speakers.""",
         )
         
         # Add usage tips
-        gr.Markdown("""
-        ### 💡 **Usage Tips**
-        
-        - Click **🚀 Generate Podcast** to start audio generation
-        - **Live Streaming** tab shows audio as it's generated (may have slight pauses)
-        - **Complete Audio** tab provides the full, uninterrupted podcast after generation
-        - During generation, you can click **🛑 Stop Generation** to interrupt the process
-        - The streaming indicator shows real-time generation progress
-        """)
+        gr.Markdown(
+            """
+            ### 💡 **Usage Tips**
+            
+            - Click **🚀 Generate Podcast** to start audio generation
+            - **Live Streaming** tab shows audio as it's generated (may have slight pauses)
+            - **Complete Audio** tab provides the full, uninterrupted podcast after generation
+            - During generation, you can click **🛑 Stop Generation** to interrupt the process
+            - The streaming indicator shows real-time generation progress
+            """
+        )
         
         # Add example scripts
         gr.Markdown("### 📚 **Example Scripts**")
@@ -1107,8 +1119,23 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device for inference",
+        default="auto",
+        choices=["auto", "cuda", "mps", "cpu"],
+        help="Device for inference. 'auto' will detect the optimal device.",
+    )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "bf16", "fp16", "fp32"],
+        help="Data type for inference. 'auto' will detect the optimal dtype.",
+    )
+    parser.add_argument(
+        "--attn-impl",
+        type=str,
+        default="auto",
+        choices=["auto", "flash_attention_2", "sdpa"],
+        help="Attention implementation. 'auto' will detect the optimal implementation.",
     )
     parser.add_argument(
         "--inference_steps",
@@ -1137,12 +1164,38 @@ def main():
     
     set_seed(42)  # Set a fixed seed for reproducibility
 
+    # --- Device and dtype configuration ---
+    optimal_device, optimal_dtype, optimal_attn_impl = get_optimal_config()
+
+    device = args.device if args.device != "auto" else optimal_device
+    
+    dtype_map = {
+        "bf16": torch.bfloat16,
+        "fp16": torch.float16,
+        "fp32": torch.float32,
+    }
+    if args.dtype == "auto":
+        torch_dtype = optimal_dtype
+    else:
+        torch_dtype = dtype_map[args.dtype]
+
+    attn_impl = args.attn_impl if args.attn_impl != "auto" else optimal_attn_impl
+
+    print("\n" + "="*50)
+    print("Resolved Configuration:")
+    print(f"  Device: {device}")
+    print(f"  Data Type: {torch_dtype}")
+    print(f"  Attention Implementation: {attn_impl}")
+    print("="*50 + "\n")
+
     print("🎙️ Initializing VibeVoice Demo with Streaming Support...")
     
     # Initialize demo instance
     demo_instance = VibeVoiceDemo(
         model_path=args.model_path,
-        device=args.device,
+        device=device,
+        dtype=torch_dtype,
+        attn_impl=attn_impl,
         inference_steps=args.inference_steps
     )
     
