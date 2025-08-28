@@ -29,6 +29,7 @@ from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForCondition
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 from vibevoice.modular.streamer import AudioStreamer
 from vibevoice.utils.device_config import get_optimal_config
+from vibevoice.model import load_vibevoice_model
 from transformers.utils import logging
 from transformers import set_seed
 
@@ -37,42 +38,21 @@ logger = logging.get_logger(__name__)
 
 
 class VibeVoiceDemo:
-    def __init__(self, model_path: str, device: str, dtype: torch.dtype, attn_impl: str, inference_steps: int = 5):
-        """Initialize the VibeVoice demo with model loading."""
-        self.model_path = model_path
-        self.device = device
-        self.dtype = dtype
-        self.attn_impl = attn_impl
+    def __init__(self, model, processor, inference_steps: int = 5):
+        """Initialize the VibeVoice demo with a pre-loaded model and processor."""
+        self.model = model
+        self.processor = processor
         self.inference_steps = inference_steps
         self.is_generating = False  # Track generation state
         self.stop_generation = False  # Flag to stop generation
         self.current_streamer = None  # Track current audio streamer
-        self.load_model()
         self.setup_voice_presets()
         self.load_example_scripts()  # Load example scripts
         
-    def load_model(self):
-        """Load the VibeVoice model and processor."""
-        print(f"Loading processor & model from {self.model_path}")
-        
-        # Load processor
-        self.processor = VibeVoiceProcessor.from_pretrained(
-            self.model_path,
-        )
-        
-        # Load model
-        self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            self.model_path,
-            torch_dtype=self.dtype,
-            device_map=self.device,
-            attn_implementation=self.attn_impl,
-        )
-        self.model.eval()
-        
-        # Use SDE solver by default
+        # Configure model for inference
         self.model.model.noise_scheduler = self.model.model.noise_scheduler.from_config(
             self.model.model.noise_scheduler.config, 
-            algorithm_type='sde-dpmsolver++', 
+            algorithm_type='sde-dpmsolver++',
             beta_schedule='squaredcos_cap_v2'
         )
         self.model.set_ddpm_inference_steps(num_steps=self.inference_steps)
@@ -1188,14 +1168,20 @@ def main():
     print(f"  Attention Implementation: {attn_impl}")
     print("="*50 + "\n")
 
+    # Load the model and processor
+    model, processor = load_vibevoice_model(
+        args.model_path,
+        device=device,
+        torch_dtype=torch_dtype,
+        attn_implementation=attn_impl
+    )
+
     print("🎙️ Initializing VibeVoice Demo with Streaming Support...")
     
     # Initialize demo instance
     demo_instance = VibeVoiceDemo(
-        model_path=args.model_path,
-        device=device,
-        dtype=torch_dtype,
-        attn_impl=attn_impl,
+        model=model,
+        processor=processor,
         inference_steps=args.inference_steps
     )
     

@@ -14,6 +14,7 @@ if sys.platform == "darwin":
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 from vibevoice.utils.device_config import get_optimal_config
+from vibevoice.model import load_vibevoice_model
 from transformers.utils import logging
 
 logging.set_verbosity_info()
@@ -367,19 +368,13 @@ def main():
     # Prepare data for model
     full_script = '\n'.join(scripts)
     
-    # Load processor
-    print(f"Loading processor & model from {args.model_path}")
-    processor = VibeVoiceProcessor.from_pretrained(args.model_path)
-
-    # Load model
-    model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+    # Load model and processor
+    model, processor = load_vibevoice_model(
         args.model_path,
+        device=device,
         torch_dtype=torch_dtype,
-        device_map=device,
         attn_implementation=attn_impl
     )
-
-    model.eval()
 
     model.set_ddpm_inference_steps(num_steps=10)
 
