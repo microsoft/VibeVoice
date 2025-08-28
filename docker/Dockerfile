@@ -7,7 +7,7 @@ WORKDIR /app
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV MODEL_PATH=microsoft/VibeVoice-1.5B
+ENV MODEL_PATH=WestZhang/VibeVoice-Large-pt
 
 # Update system and install required packages
 RUN apt-get update && \
@@ -19,7 +19,7 @@ RUN apt-get update && \
 RUN pip install flash-attn --no-build-isolation
 
 # Clone VibeVoice repository
-RUN git clone https://github.com/microsoft/VibeVoice.git .
+RUN git clone https://github.com/brianxiadong/VibeVoice.git .
 
 # Install VibeVoice dependencies
 RUN pip install -e .
