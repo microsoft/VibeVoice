@@ -1,0 +1,10 @@
+torch>=2.0.0
+numpy>=1.20.0
+transformers>=4.31.0
+huggingface_hub>=0.15.1
+scipy>=1.10.0
+tqdm>=4.65.0
+soundfile>=0.12.1
+librosa>=0.10.0
+ffmpeg-python>=0.2.0
+gradio>=4.0.0  # For demo UI
