@@ -93,17 +93,66 @@ Try your own samples at [Demo](https://aka.ms/VibeVoice-Demo).
 | VibeVoice-7B-Preview| 32K | ~45 min | [HF link](https://huggingface.co/WestZhang/VibeVoice-Large-pt) |
 
 ## Installation
-We recommend to use NVIDIA Deep Learning Container to manage the CUDA environment. 
+
+### Option 1: Basic Installation (macOS/Linux)
+For general use on macOS or Linux systems without CUDA:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e .
+
+# Or using uv (recommended)
+uv sync
+```
+
+### Option 2: Installation with Extras
+
+#### For Apple Silicon (MPS) users:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e ".[mps]"
+
+# Or using uv (recommended)
+uv sync --extra mps
+```
+
+#### For CUDA users:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e ".[cuda]"
+
+# Or using uv (recommended)
+uv sync --extra cuda
+```
+
+#### For Development:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e ".[dev]"
+
+# Or using uv (recommended)
+uv sync --extra dev
+```
+
+### Option 3: NVIDIA Docker Container (Recommended for CUDA)
+We recommend using NVIDIA Deep Learning Container to manage the CUDA environment.
 
 1. Launch docker
 ```bash
 # NVIDIA PyTorch Container 24.07 / 24.10 / 24.12 verified. 
 # Later versions are also compatible.
 sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulimit stack=-1:-1 --gpus all --rm -it  nvcr.io/nvidia/pytorch:24.07-py3
-
-## If flash attention is not included in your docker environment, you need to install it manually
-## Refer to https://github.com/Dao-AILab/flash-attention for installation instructions
-# pip install flash-attn --no-build-isolation
 ```
 
 2. Install from github
@@ -111,7 +160,11 @@ sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulim
 git clone https://github.com/microsoft/VibeVoice.git
 cd VibeVoice/
 
-pip install -e .
+# Using pip
+pip install -e ".[cuda]"
+
+# Or using uv (recommended)
+uv sync --extra cuda
 ```
 
 ## Usages
