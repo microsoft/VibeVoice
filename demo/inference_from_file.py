@@ -2,8 +2,9 @@ import argparse
 import os
 import re
 import sys
-from typing import List, Tuple
 import time
+import traceback
+from typing import List, Tuple
 
 # On macOS, set up MPS environment early to avoid potential issues
 if sys.platform == "darwin":
@@ -293,6 +294,7 @@ def main():
 
     # Prepare data for model
     full_script = "\n".join(scripts)
+    full_script = full_script.replace("’", "'")
 
     # --- Device and dtype configuration ---
     # Use the centralized helper function to resolve configuration
@@ -308,13 +310,19 @@ def main():
     print(f"  Attention Implementation: {attn_impl}")
     print("=" * 50 + "\n")
 
-    # Load model and processor
-    model, processor = load_vibevoice_model(
-        args.model_path,
-        device=device,
-        torch_dtype=torch_dtype,
-        attn_implementation=attn_impl,
-    )
+    # Load model and processor with explicit error handling
+    try:
+        model, processor = load_vibevoice_model(
+            args.model_path,
+            device=device,
+            torch_dtype=torch_dtype,
+            attn_implementation=attn_impl,
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to load the model: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        # Exit gracefully if the model can't be loaded
+        return
 
     model.set_ddpm_inference_steps(num_steps=10)
 
