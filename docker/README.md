@@ -75,19 +75,65 @@ MODEL_PATH=microsoft/VibeVoice-7B docker compose up --build
 
 ## Usage
 
-### Start the Service (Detached Mode)
+### Gradio Web Interface
+
+#### Start the Service (Detached Mode)
 
 ```bash
 cd docker
 docker compose up -d
 ```
 
-### Start the Service (Interactive Mode)
+Once running, access the web interface at `http://localhost:7860`.
+
+#### Start the Service (Interactive Mode)
 
 ```bash
 cd docker
 docker compose up
 ```
+
+### News Podcast Generation
+
+The container also includes news podcast generation capabilities. You can access the container and run commands directly:
+
+#### Enter the Container
+
+```bash
+docker compose exec vibevoice bash
+```
+
+#### Generate News Podcast
+
+Once inside the container:
+
+```bash
+# Quick test (text-only, no audio)
+python test_news_pipeline.py
+
+# Generate complete podcast with audio
+python generate_news_podcast.py
+
+# Generate with custom parameters
+python generate_news_podcast.py \
+    --speakers 3 \
+    --model-path microsoft/VibeVoice-1.5B \
+    --output-dir /app/podcast_output
+
+# List available voices
+python generate_news_podcast.py --list-voices
+```
+
+#### Access Generated Files
+
+The podcast files will be saved to the mounted volume and accessible at:
+- Host path: `./docker/podcast_output/`
+- Container path: `/app/podcast_output/`
+
+Generated files include:
+- `news_podcast_TIMESTAMP.wav` - Final audio file
+- `news_podcast_TIMESTAMP_dialogue.txt` - Dialogue script
+- `news_podcast_TIMESTAMP_news.json` - Raw news data
 
 ### View Logs
 

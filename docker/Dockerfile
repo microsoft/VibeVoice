@@ -9,9 +9,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV MODEL_PATH=microsoft/VibeVoice-1.5B
 
-# Update system and install ffmpeg
+# Update system and install required packages
 RUN apt-get update && \
-    apt-get install -y ffmpeg git && \
+    apt-get install -y ffmpeg git curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -23,6 +23,21 @@ RUN git clone https://github.com/microsoft/VibeVoice.git .
 
 # Install VibeVoice dependencies
 RUN pip install -e .
+
+# Install additional dependencies for news podcast functionality
+RUN pip install soundfile requests
+
+# Copy news podcast functionality (this will be included in the repo)
+# COPY news_podcast/ /app/news_podcast/
+# COPY generate_news_podcast.py /app/
+# COPY test_news_pipeline.py /app/
+
+# Copy container setup script
+COPY docker/setup_container.sh /app/setup_container.sh
+RUN chmod +x /app/setup_container.sh
+
+# Create output directory
+RUN mkdir -p /app/podcast_output
 
 # Expose Gradio default port
 EXPOSE 7860

@@ -175,3 +175,5 @@ tags
 /checkpoints/
 exp
 .gradio/
+
+/test_output
