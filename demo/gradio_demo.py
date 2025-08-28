@@ -54,10 +54,11 @@ class VibeVoiceDemo:
         )
         
         # Load model
+        device_map = self.device if self.device in ["cuda", "mps"] else "cpu"
         self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             self.model_path,
             torch_dtype=torch.bfloat16,
-            device_map='cuda',
+            device_map=device_map,
             attn_implementation="flash_attention_2",
         )
         self.model.eval()
@@ -1122,8 +1123,8 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device for inference",
+        default="cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"),
+        help="Device for inference (cuda, mps, or cpu)",
     )
     parser.add_argument(
         "--inference_steps",
