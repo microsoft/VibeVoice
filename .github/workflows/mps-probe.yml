@@ -1,0 +1,36 @@
+name: MPS Probe
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  mps-probe:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: [3.9, "3.10", 3.11]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[dev]
+
+    - name: Run MPS diagnostic utility
+      run: |
+        python -m vibevoice.utils.diagnose
+
+    - name: Run probe-only mode (inference_from_file.py)
+      run: |
+        python demo/inference_from_file.py --probe-only
