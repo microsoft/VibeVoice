@@ -233,7 +233,7 @@ VibeVoice includes utilities to help diagnose and benchmark your MPS setup:
 
 1. **MPS Diagnostic Tool**: Check your MPS setup and compatibility
    ```bash
-   python -m vibevoice.utils.diagnose
+   python -m vibevoice.utils.mps_diagnose
    ```
 
 2. **Performance Benchmark**: Measure inference performance on your device

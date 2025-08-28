@@ -19,12 +19,11 @@ def setup_mps_environment_early() -> None:
 
 
 def _flash_attn_available() -> bool:
-    """Check if flash attention is available by attempting to import the module."""
+    """Check if flash attention is available using importlib.util.find_spec for safer checking."""
     try:
-        import importlib
-        importlib.import_module('flash_attn')
-        return True
-    except ImportError:
+        import importlib.util
+        return importlib.util.find_spec("flash_attn") is not None
+    except Exception:
         return False
 
 
@@ -53,18 +52,57 @@ def _sdpa_supported_on_mps(dtype: torch.dtype) -> bool:
         return False
 
 
+def resolve_config_from_args(args) -> Dict[str, Any]:
+    """Resolve device, dtype, and attention implementation configuration from command line args.
+    
+    This function centralizes the duplicated logic from demo scripts.
+    
+    Args:
+        args: Parsed command line arguments with device, dtype, and attn_impl attributes
+        
+    Returns:
+        dict: Configuration with keys:
+        - device: device type as string ("cuda", "mps", or "cpu")
+        - dtype: optimal torch dtype
+        - attn_implementation: attention implementation to use
+    """
+    # Get optimal config which provides defaults
+    config = get_optimal_config()
+
+    # Override with command line args if specified
+    device = args.device if args.device != "auto" else config["device"]
+    
+    dtype_map = {
+        "bf16": torch.bfloat16,
+        "fp16": torch.float16,
+        "fp32": torch.float32,
+    }
+    if args.dtype == "auto":
+        torch_dtype = config["dtype"]
+    else:
+        torch_dtype = dtype_map[args.dtype]
+
+    attn_impl = args.attn_impl if args.attn_impl != "auto" else config["attn_implementation"]
+
+    return {
+        "device": device,
+        "dtype": torch_dtype,
+        "attn_implementation": attn_impl,
+    }
+
+
 def get_optimal_config() -> Dict[str, Any]:
     """Get optimal device, dtype, and attention implementation configuration.
 
     Returns:
         dict: Configuration with keys:
-        - device: torch device to use
+        - device: device type as string ("cuda", "mps", or "cpu")
         - dtype: optimal torch dtype
         - attn_implementation: attention implementation to use
     """
     # CUDA path
     if torch.cuda.is_available():
-        device = torch.device("cuda")
+        device = "cuda"
         dtype = torch.bfloat16
         attn_implementation = "flash_attention_2" if _flash_attn_available() else "sdpa"
         return {
@@ -75,7 +113,7 @@ def get_optimal_config() -> Dict[str, Any]:
 
     # MPS path
     if torch.backends.mps.is_available():
-        device = torch.device("mps")
+        device = "mps"
 
         # Check if bfloat16 is supported with SDPA
         if _sdpa_supported_on_mps(torch.bfloat16):
@@ -105,7 +143,7 @@ def get_optimal_config() -> Dict[str, Any]:
         }
 
     # CPU path
-    device = torch.device("cpu")
+    device = "cpu"
     dtype = torch.float32
     attn_implementation = "sdpa"
 

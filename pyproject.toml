@@ -39,7 +39,8 @@ cuda = [
 ]
 mps = []
 dev = [
-  "pytest"
+  "pytest",
+  "psutil"
 ]
 
 

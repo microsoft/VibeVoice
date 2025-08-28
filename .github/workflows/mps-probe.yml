@@ -8,7 +8,7 @@ on:
 
 jobs:
   mps-probe:
-    runs-on: macos-latest
+    runs-on: macos-14
     strategy:
       matrix:
         python-version: [3.9, "3.10", 3.11]
@@ -29,7 +29,7 @@ jobs:
 
     - name: Run MPS diagnostic utility
       run: |
-        python -m vibevoice.utils.diagnose
+        python -m vibevoice.utils.mps_diagnose
 
     - name: Run probe-only mode (inference_from_file.py)
       run: |
