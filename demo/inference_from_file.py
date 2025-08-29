@@ -1,13 +1,19 @@
 import argparse
 import os
 import re
-import traceback
-from typing import List, Tuple, Union, Dict, Any
+import sys
 import time
-import torch
+import traceback
+from typing import List, Tuple
 
-from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
-from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+# On macOS, set up MPS environment early to avoid potential issues
+if sys.platform == "darwin":
+    from vibevoice.utils.device_config import setup_mps_environment_early
+
+    setup_mps_environment_early()
+
+from vibevoice.model import load_vibevoice_model
+from vibevoice.utils.device_config import resolve_config_from_args
 from transformers.utils import logging
 
 logging.set_verbosity_info()
@@ -167,8 +173,23 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device for tensor tests",
+        default="auto",
+        choices=["auto", "cuda", "mps", "cpu"],
+        help="Device for inference. 'auto' will detect the optimal device.",
+    )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "bf16", "fp16", "fp32"],
+        help="Data type for inference. 'auto' will detect the optimal dtype.",
+    )
+    parser.add_argument(
+        "--attn-impl",
+        type=str,
+        default="auto",
+        choices=["auto", "flash_attention_2", "sdpa"],
+        help="Attention implementation. 'auto' will detect the optimal implementation.",
     )
     parser.add_argument(
         "--cfg_scale",
@@ -176,11 +197,33 @@ def parse_args():
         default=1.3,
         help="CFG (Classifier-Free Guidance) scale for generation (default: 1.3)",
     )
-    
+    parser.add_argument(
+        "--probe-only",
+        action="store_true",
+        help="Print resolved device/dtype/attn configuration and exit without loading model",
+    )
+
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
+
+    # Handle probe-only mode
+    if args.probe_only:
+        # Use the centralized helper function to resolve configuration
+        config = resolve_config_from_args(args)
+
+        # Print configuration as JSON for easy parsing
+        import json
+
+        config_dict = {
+            "device": str(config["device"]),
+            "dtype": str(config["dtype"]),
+            "attn_implementation": str(config["attn_implementation"]),
+        }
+        print(json.dumps(config_dict))
+        return
 
     # Initialize voice mapper
     voice_mapper = VoiceMapper()
@@ -241,35 +284,41 @@ def main():
     full_script = '\n'.join(scripts)
     full_script = full_script.replace("’", "'")        
     
-    # Load processor
-    print(f"Loading processor & model from {args.model_path}")
-    processor = VibeVoiceProcessor.from_pretrained(args.model_path)
+    # --- Device and dtype configuration ---
+    # Use the centralized helper function to resolve configuration
+    config = resolve_config_from_args(args)
+    device = config["device"]
+    torch_dtype = config["dtype"]
+    attn_impl = config["attn_implementation"]
 
-    # Load model
+    print("\n" + "="*50)
+    print("Resolved Configuration:")
+    print(f"  Device: {device}")
+    print(f"  Data Type: {torch_dtype}")
+    print(f"  Attention Implementation: {attn_impl}")
+    print("="*50 + "\n")
+
+    # Load model and processor with explicit error handling
     try:
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+        model, processor = load_vibevoice_model(
             args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='flash_attention_2' # flash_attention_2 is recommended
+            device=device,
+            torch_dtype=torch_dtype,
+            attn_implementation=attn_impl,
         )
     except Exception as e:
-        print(f"[ERROR] : {type(e).__name__}: {e}")
+        print(f"[ERROR] Failed to load the model: {type(e).__name__}: {e}")
         print(traceback.format_exc())
-        print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='sdpa'
-        )
+        # Exit gracefully if the model can't be loaded
+        return
 
-    model.eval()
     model.set_ddpm_inference_steps(num_steps=10)
 
-    if hasattr(model.model, 'language_model'):
-       print(f"Language model attention: {model.model.language_model.config._attn_implementation}")
-       
+    if hasattr(model.model, "language_model"):
+        print(
+            f"Language model attention: {model.model.language_model.config._attn_implementation}"
+        )
+
     # Prepare inputs for the model
     inputs = processor(
         text=[full_script],  # Wrap in list for batch processing
