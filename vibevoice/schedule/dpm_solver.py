@@ -381,7 +381,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
                     f"{self.config.timestep_spacing} is not supported. Please make sure to choose one of 'linspace', 'leading' or 'trailing'."
                 )
 
-        sigmas = np.array(((1 - self.alphas_cumprod) / self.alphas_cumprod) ** 0.5)
+        sigmas = (((1 - self.alphas_cumprod) / self.alphas_cumprod) ** 0.5).cpu().numpy()
         log_sigmas = np.log(sigmas)
 
         if self.config.use_karras_sigmas:
