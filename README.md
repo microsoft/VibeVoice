@@ -122,6 +122,25 @@ cd VibeVoice/
 pip install -e .
 ```
 
+### Device Support
+
+VibeVoice automatically detects and uses the best available device:
+- **CUDA** (NVIDIA GPUs) - preferred when available
+- **MPS** (Apple Silicon) - automatically used on macOS with Apple Silicon
+- **CPU** - fallback when no GPU acceleration is available
+
+No additional configuration is needed. The demos will automatically use the optimal device and settings.
+
+**For optimal CUDA performance**, install with flash attention:
+```bash
+pip install -e .[cuda]
+```
+
+**For MPS users**: Ensure you have PyTorch 2.1+ on macOS with Apple Silicon. If you encounter unsupported operations, set:
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+```
+
 ## Usages
 
 ### 🚨 Tips
