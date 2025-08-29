@@ -33,7 +33,7 @@ RUN pip install soundfile requests
 # COPY test_news_pipeline.py /app/
 
 # Copy container setup script
-COPY docker/setup_container.sh /app/setup_container.sh
+COPY ./setup_container.sh /app/setup_container.sh
 RUN chmod +x /app/setup_container.sh
 
 # Create output directory

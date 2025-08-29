@@ -43,12 +43,25 @@ class PodcastAudioGenerator:
         """Load VibeVoice model and processor"""
         try:
             logger.info(f"Loading VibeVoice model: {self.model_path}")
+            
+            # Load processor
+            self.processor = VibeVoiceProcessor.from_pretrained(self.model_path)
+            
+            # Load model with correct parameters (same as inference_from_file.py)
+            attn_implementation = "flash_attention_2"  # Recommended for better audio quality
             self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
                 self.model_path,
-                torch_dtype=torch.float16,
-                device_map="auto"
+                torch_dtype=torch.bfloat16,
+                device_map='cuda',
+                attn_implementation=attn_implementation
             )
-            self.processor = VibeVoiceProcessor.from_pretrained(self.model_path)
+            
+            self.model.eval()
+            self.model.set_ddpm_inference_steps(num_steps=10)
+            
+            if hasattr(self.model.model, 'language_model'):
+                logger.info(f"Language model attention: {self.model.model.language_model.config._attn_implementation}")
+            
             logger.info("Model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading model: {e}")
@@ -110,22 +123,32 @@ class PodcastAudioGenerator:
     def generate_audio_segment(self, text: str, voice_path: str) -> torch.Tensor:
         """Generate audio for a single text segment with specified voice"""
         try:
-            # Process the input
+            # Process the input - use correct format with lists
             inputs = self.processor(
-                text=text,
-                voice=voice_path,
-                return_tensors="pt"
+                text=[text],  # Wrap in list for batch processing
+                voice_samples=[voice_path],  # Wrap in list for batch processing
+                padding=True,
+                return_tensors="pt",
+                return_attention_mask=True,
             )
             
-            # Move inputs to the same device as model
-            device = next(self.model.parameters()).device
-            inputs = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-            
-            # Generate audio
+            # Generate audio with correct parameters
             with torch.no_grad():
-                audio_output = self.model.generate(**inputs)
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=None,
+                    cfg_scale=1.3,
+                    tokenizer=self.processor.tokenizer,
+                    generation_config={'do_sample': False},
+                    verbose=True,
+                )
             
-            return audio_output
+            # Extract audio from outputs.speech_outputs[0]
+            if outputs.speech_outputs and outputs.speech_outputs[0] is not None:
+                return outputs.speech_outputs[0]
+            else:
+                logger.error("No audio output generated")
+                return None
             
         except Exception as e:
             logger.error(f"Error generating audio for text '{text[:50]}...': {e}")
@@ -142,8 +165,8 @@ class PodcastAudioGenerator:
         if not valid_segments:
             return torch.tensor([])
         
-        # Add brief silence between segments (0.5 seconds at 16kHz)
-        sample_rate = 16000
+        # Add brief silence between segments (0.5 seconds at 24kHz)
+        sample_rate = 24000
         silence_duration = int(0.5 * sample_rate)
         silence = torch.zeros(silence_duration, dtype=valid_segments[0].dtype, device=valid_segments[0].device)
         
@@ -226,24 +249,18 @@ class PodcastAudioGenerator:
             logger.error(f"Error generating podcast audio: {e}")
             return False
     
-    def save_audio(self, audio_tensor: torch.Tensor, output_path: str, sample_rate: int = 16000):
-        """Save audio tensor to file"""
+    def save_audio(self, audio_tensor: torch.Tensor, output_path: str, sample_rate: int = 24000):
+        """Save audio tensor to file using processor.save_audio"""
         try:
-            import soundfile as sf
-            
-            # Convert to numpy and ensure correct shape
-            audio_np = audio_tensor.cpu().numpy()
-            if audio_np.ndim > 1:
-                audio_np = audio_np.squeeze()
-            
             # Create output directory if it doesn't exist
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
-            # Save audio file
-            sf.write(output_path, audio_np, sample_rate)
+            # Use processor.save_audio method (same as inference_from_file.py)
+            self.processor.save_audio(
+                audio_tensor,
+                output_path=output_path,
+            )
             
-        except ImportError:
-            logger.error("soundfile package required for saving audio. Install with: pip install soundfile")
         except Exception as e:
             logger.error(f"Error saving audio: {e}")
     
