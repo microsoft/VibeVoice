@@ -24,6 +24,7 @@ from vibevoice.modular.configuration_vibevoice import VibeVoiceConfig
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 from vibevoice.modular.streamer import AudioStreamer
+from vibevoice.utils.devices import detect_device, recommended_dtype_for, get_attention_implementation
 from transformers.utils import logging
 from transformers import set_seed
 
@@ -32,35 +33,17 @@ logger = logging.get_logger(__name__)
 
 
 class VibeVoiceDemo:
-    def __init__(self, model_path: str, device: str = "cuda", inference_steps: int = 5):
-        """Initialize the VibeVoice demo with model loading."""
-        self.model_path = model_path
+    def __init__(self, model, processor, device, inference_steps: int = 5):
+        """Initialize the VibeVoice demo with a pre-loaded model and processor."""
+        self.model = model
+        self.processor = processor
         self.device = device
         self.inference_steps = inference_steps
         self.is_generating = False  # Track generation state
         self.stop_generation = False  # Flag to stop generation
         self.current_streamer = None  # Track current audio streamer
-        self.load_model()
         self.setup_voice_presets()
         self.load_example_scripts()  # Load example scripts
-        
-    def load_model(self):
-        """Load the VibeVoice model and processor."""
-        print(f"Loading processor & model from {self.model_path}")
-        
-        # Load processor
-        self.processor = VibeVoiceProcessor.from_pretrained(
-            self.model_path,
-        )
-        
-        # Load model
-        self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            self.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation="flash_attention_2",
-        )
-        self.model.eval()
         
         # Use SDE solver by default
         self.model.model.noise_scheduler = self.model.model.noise_scheduler.from_config(
@@ -227,6 +210,9 @@ class VibeVoiceDemo:
                 return_tensors="pt",
                 return_attention_mask=True,
             )
+            
+            # Move inputs to the detected device
+            inputs = {k: v.to(self.device) if torch.is_tensor(v) else v for k, v in inputs.items()}
             
             # Create audio streamer
             audio_streamer = AudioStreamer(
@@ -1149,38 +1135,62 @@ def parse_args():
 def main():
     """Main function to run the demo."""
     args = parse_args()
-    
-    set_seed(42)  # Set a fixed seed for reproducibility
+    set_seed(42)
 
-    print("🎙️ Initializing VibeVoice Demo with Streaming Support...")
-    
-    # Initialize demo instance
+    # 1. Detect configuration and load the model ONCE in the main process
+    device = detect_device()
+    dtype = recommended_dtype_for(device)
+    attn_impl = get_attention_implementation(device)
+
+    print("\n" + "=" * 50)
+    print("VibeVoice Gradio Demo Configuration:")
+    print(f"  Device: {device}")
+    print(f"  Data Type: {dtype}")
+    print(f"  Attention Implementation: {attn_impl}")
+    print("=" * 50 + "\n")
+
+    try:
+        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+            args.model_path,
+            torch_dtype=dtype,
+            attn_implementation=attn_impl,
+        ).to(device)
+    except Exception as e:
+        print(f"[ERROR] Failed to load model: {e}")
+        if attn_impl == 'flash_attention_2':
+            print("Retrying with SDPA attention...")
+            attn_impl = 'sdpa'
+            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                args.model_path,
+                torch_dtype=dtype,
+                attn_implementation=attn_impl,
+            ).to(device)
+        else:
+            raise e
+            
+    processor = VibeVoiceProcessor.from_pretrained(args.model_path)
+    model.eval()
+
+    print("🎙️ Initializing VibeVoice Demo with pre-loaded model...")
+
+    # 2. Initialize the demo instance, INJECTING the pre-loaded model and processor
     demo_instance = VibeVoiceDemo(
-        model_path=args.model_path,
-        device=args.device,
+        model=model, 
+        processor=processor, 
+        device=device,
         inference_steps=args.inference_steps
     )
-    
-    # Create interface
+
+    # 3. Create and launch the Gradio interface
     interface = create_demo_interface(demo_instance)
-    
+
     print(f"🚀 Launching demo on port {args.port}")
-    print(f"📁 Model path: {args.model_path}")
-    print(f"🎭 Available voices: {len(demo_instance.available_voices)}")
-    print(f"🔴 Streaming mode: ENABLED")
-    print(f"🔒 Session isolation: ENABLED")
-    
-    # Launch the interface
     try:
-        interface.queue(
-            max_size=20,  # Maximum queue size
-            default_concurrency_limit=1  # Process one request at a time
-        ).launch(
+        interface.queue(max_size=20, default_concurrency_limit=1).launch(
             share=args.share,
-            # server_port=args.port,
             server_name="0.0.0.0" if args.share else "127.0.0.1",
             show_error=True,
-            show_api=False  # Hide API docs for cleaner interface
+            show_api=False,
         )
     except KeyboardInterrupt:
         print("\n🛑 Shutting down gracefully...")

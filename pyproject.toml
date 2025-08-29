@@ -34,6 +34,10 @@ dependencies = [
     "aiortc"
 ]
 
+[project.optional-dependencies]
+cuda = [
+    "flash-attn>=2.5.0"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/microsoft/VibeVoice"
