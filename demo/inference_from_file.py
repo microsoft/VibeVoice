@@ -8,6 +8,7 @@ import torch
 
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+from vibevoice.utils.devices import detect_device, recommended_dtype_for, get_attention_implementation
 from transformers.utils import logging
 
 logging.set_verbosity_info()
@@ -182,6 +183,16 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Auto-detect optimal device and settings
+    device = detect_device()
+    dtype = recommended_dtype_for(device)
+    attn_impl = get_attention_implementation(device)
+    
+    print(f"\n🔧 Auto-detected configuration:")
+    print(f"   Device: {device}")
+    print(f"   Data type: {dtype}")
+    print(f"   Attention: {attn_impl}\n")
+
     # Initialize voice mapper
     voice_mapper = VoiceMapper()
     
@@ -245,24 +256,32 @@ def main():
     print(f"Loading processor & model from {args.model_path}")
     processor = VibeVoiceProcessor.from_pretrained(args.model_path)
 
-    # Load model
+    # Load model with auto-detected configuration
     try:
         model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='flash_attention_2' # flash_attention_2 is recommended
+            torch_dtype=dtype,
+            attn_implementation=attn_impl
         )
+        # Explicitly move model to detected device
+        model = model.to(device)
     except Exception as e:
-        print(f"[ERROR] : {type(e).__name__}: {e}")
+        print(f"[ERROR] Failed to load model: {type(e).__name__}: {e}")
         print(traceback.format_exc())
-        print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='sdpa'
-        )
+        if attn_impl == 'flash_attention_2':
+            print("Retrying with SDPA attention...")
+            try:
+                model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                    args.model_path,
+                    torch_dtype=dtype,
+                    attn_implementation='sdpa'
+                )
+                model = model.to(device)
+            except Exception as e2:
+                print(f"[ERROR] Failed with SDPA: {type(e2).__name__}: {e2}")
+                return
+        else:
+            return
 
     model.eval()
     model.set_ddpm_inference_steps(num_steps=10)
@@ -278,6 +297,9 @@ def main():
         return_tensors="pt",
         return_attention_mask=True,
     )
+    
+    # Move inputs to the detected device
+    inputs = {k: v.to(device) if torch.is_tensor(v) else v for k, v in inputs.items()}
     print(f"Starting generation with cfg_scale: {args.cfg_scale}")
 
     # Generate audio
