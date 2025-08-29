@@ -40,11 +40,11 @@ python -m news_podcast.main
 
 Advanced usage with options:
 ```bash
-python -m news_podcast.main \\
-    --model-path "WestZhang/VibeVoice-Large-pt" \\
-    --speakers 3 \\
-    --output-dir "./my_podcasts" \\
-    --news-limit 20 \\
+python -m news_podcast.main \
+    --model-path "WestZhang/VibeVoice-Large-pt" \
+    --speakers 3 \
+    --output-dir "./my_podcasts" \
+    --news-limit 20 \
     --voice-config voice_config_example.json
 ```
 

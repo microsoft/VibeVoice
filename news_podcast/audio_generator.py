@@ -69,23 +69,51 @@ class PodcastAudioGenerator:
     
     def parse_dialogue(self, dialogue_text: str) -> List[Tuple[str, str]]:
         """Parse dialogue text into (speaker, text) pairs"""
-        lines = dialogue_text.strip().split('\\n')
+        # Debug logging to see what dialogue_text is being received
+        logger.info(f"Parsing dialogue text (length: {len(dialogue_text)})")
+        logger.info(f"First 500 characters: {dialogue_text[:500]}")
+        
+        lines = dialogue_text.strip().split('\n')
         parsed_dialogue = []
         
-        for line in lines:
+        logger.info(f"Split into {len(lines)} lines")
+        
+        for i, line in enumerate(lines):
             line = line.strip()
             if not line:
                 continue
             
-            # Look for "Speaker X:" format (VibeVoice format)
-            if ':' in line and line.startswith('Speaker '):
+            logger.debug(f"Processing line {i+1}: '{line}'")
+            
+            # Look for various dialogue formats
+            if ':' in line:
                 parts = line.split(':', 1)
                 if len(parts) == 2:
-                    speaker = parts[0].strip()  # e.g., "Speaker 1"
+                    speaker = parts[0].strip()
                     text = parts[1].strip()
-                    if text:  # Only add non-empty text
-                        parsed_dialogue.append((speaker, text))
+                    
+                    # Accept various speaker formats:
+                    # - "Speaker 1:", "Speaker 2:", etc. (VibeVoice format)
+                    # - "Host:", "Analyst:", "Reporter:", etc. (named speakers)
+                    # - Any text followed by colon
+                    if text and speaker:  # Only add non-empty text and speaker
+                        # Normalize speaker names for consistency
+                        if speaker.startswith('Speaker '):
+                            # Keep VibeVoice format as-is
+                            normalized_speaker = speaker
+                        else:
+                            # Convert other formats to Speaker format for voice assignment
+                            # But keep original for logging
+                            normalized_speaker = speaker
+                        
+                        parsed_dialogue.append((normalized_speaker, text))
+                        logger.debug(f"Added dialogue pair: {normalized_speaker} -> {text[:50]}...")
+                    else:
+                        logger.debug(f"Skipped line with empty speaker or text: '{line}'")
+            else:
+                logger.debug(f"Line has no colon, skipping: '{line}'")
         
+        logger.info(f"Parsed {len(parsed_dialogue)} dialogue pairs")
         return parsed_dialogue
     
     def assign_voices_to_speakers(self, speakers: List[str], voice_preferences: Optional[Dict[str, str]] = None) -> Dict[str, str]:
