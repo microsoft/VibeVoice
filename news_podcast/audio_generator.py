@@ -171,12 +171,15 @@ class PodcastAudioGenerator:
         logger.info(f"Voice assignments: {voice_assignment}")
         return voice_assignment
     
-    def generate_audio_segment(self, text: str, voice_path: str) -> torch.Tensor:
+    def generate_audio_segment(self, speaker: str, text: str, voice_path: str) -> torch.Tensor:
         """Generate audio for a single text segment with specified voice"""
         try:
+            # Format text with speaker information as expected by VibeVoice
+            formatted_text = f"{speaker}: {text}"
+            
             # Process the input - use correct format with lists
             inputs = self.processor(
-                text=[text],  # Wrap in list for batch processing
+                text=[formatted_text],  # Wrap in list for batch processing
                 voice_samples=[voice_path],  # Wrap in list for batch processing
                 padding=True,
                 return_tensors="pt",
@@ -202,7 +205,7 @@ class PodcastAudioGenerator:
                 return None
             
         except Exception as e:
-            logger.error(f"Error generating audio for text '{text[:50]}...': {e}")
+            logger.error(f"Error generating audio for text '{formatted_text[:50]}...': {e}")
             return None
     
     def concatenate_audio_segments(self, audio_segments: List[torch.Tensor]) -> torch.Tensor:
@@ -277,7 +280,7 @@ class PodcastAudioGenerator:
                     logger.warning(f"No voice assigned to speaker: {speaker}")
                     continue
                 
-                audio_segment = self.generate_audio_segment(text, voice_path)
+                audio_segment = self.generate_audio_segment(speaker, text, voice_path)
                 if audio_segment is not None:
                     audio_segments.append(audio_segment)
                 else:
