@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  vibevoice:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: vibevoice:latest
+    container_name: vibevoice-demo
+    ports:
+      - "7860:7860"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Model path configuration - choose one of the following:
+      # For 1.5B model (default): microsoft/VibeVoice-1.5B
+      # For Large model: WestZhang/VibeVoice-Large-pt
+      - MODEL_PATH=WestZhang/VibeVoice-Large-pt
+      # Ollama configuration for news podcast functionality
+      - OLLAMA_URL=http://172.36.237.245:11434
+      - OLLAMA_MODEL=qwen2.5-coder:1.5b
+    volumes:
+      # Optional: Mount local directory for persistent data or model cache
+      - ./cache:/root/.cache
+      # Mount output directory for podcast files
+      - ./podcast_output:/app/podcast_output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    networks:
+      - vibevoice-network
+
+networks:
+  vibevoice-network:
+    driver: bridge
+
+volumes:
+  cache:
+    driver: local
