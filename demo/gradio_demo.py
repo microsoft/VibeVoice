@@ -3,27 +3,27 @@ VibeVoice Gradio Demo - High-Quality Dialogue Generation Interface with Streamin
 """
 
 import argparse
-import json
 import os
 import sys
-import tempfile
 import time
-from pathlib import Path
-from typing import List, Dict, Any, Iterator
-from datetime import datetime
+from typing import Iterator
 import threading
 import numpy as np
 import gradio as gr
 import librosa
 import soundfile as sf
 import torch
-import os
 import traceback
 
-from vibevoice.modular.configuration_vibevoice import VibeVoiceConfig
-from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
-from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+# On macOS, set up MPS environment early to avoid potential issues
+if sys.platform == "darwin":
+    from vibevoice.utils.device_config import setup_mps_environment_early
+
+    setup_mps_environment_early()
+
 from vibevoice.modular.streamer import AudioStreamer
+from vibevoice.model import load_vibevoice_model
+from vibevoice.utils.device_config import resolve_config_from_args
 from transformers.utils import logging
 from transformers import set_seed
 
@@ -32,37 +32,18 @@ logger = logging.get_logger(__name__)
 
 
 class VibeVoiceDemo:
-    def __init__(self, model_path: str, device: str = "cuda", inference_steps: int = 5):
-        """Initialize the VibeVoice demo with model loading."""
-        self.model_path = model_path
-        self.device = device
+    def __init__(self, model, processor, inference_steps: int = 5):
+        """Initialize the VibeVoice demo with a pre-loaded model and processor."""
+        self.model = model
+        self.processor = processor
         self.inference_steps = inference_steps
         self.is_generating = False  # Track generation state
         self.stop_generation = False  # Flag to stop generation
         self.current_streamer = None  # Track current audio streamer
-        self.load_model()
         self.setup_voice_presets()
         self.load_example_scripts()  # Load example scripts
-        
-    def load_model(self):
-        """Load the VibeVoice model and processor."""
-        print(f"Loading processor & model from {self.model_path}")
-        
-        # Load processor
-        self.processor = VibeVoiceProcessor.from_pretrained(
-            self.model_path,
-        )
-        
-        # Load model
-        self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            self.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation="flash_attention_2",
-        )
-        self.model.eval()
-        
-        # Use SDE solver by default
+
+        # Configure model for inference
         self.model.model.noise_scheduler = self.model.model.noise_scheduler.from_config(
             self.model.model.noise_scheduler.config, 
             algorithm_type='sde-dpmsolver++',
@@ -1122,8 +1103,23 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device for inference",
+        default="auto",
+        choices=["auto", "cuda", "mps", "cpu"],
+        help="Device for inference. 'auto' will detect the optimal device.",
+    )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "bf16", "fp16", "fp32"],
+        help="Data type for inference. 'auto' will detect the optimal dtype.",
+    )
+    parser.add_argument(
+        "--attn-impl",
+        type=str,
+        default="auto",
+        choices=["auto", "flash_attention_2", "sdpa"],
+        help="Attention implementation. 'auto' will detect the optimal implementation.",
     )
     parser.add_argument(
         "--inference_steps",
@@ -1149,21 +1145,41 @@ def parse_args():
 def main():
     """Main function to run the demo."""
     args = parse_args()
-    
+
     set_seed(42)  # Set a fixed seed for reproducibility
 
+    # --- Device and dtype configuration ---
+    # Use the centralized helper function to resolve configuration
+    config = resolve_config_from_args(args)
+    device = config["device"]
+    torch_dtype = config["dtype"]
+    attn_impl = config["attn_implementation"]
+
+    print("\n" + "=" * 50)
+    print("Resolved Configuration:")
+    print(f"  Device: {device}")
+    print(f"  Data Type: {torch_dtype}")
+    print(f"  Attention Implementation: {attn_impl}")
+    print("=" * 50 + "\n")
+
+    # Load the model and processor
+    model, processor = load_vibevoice_model(
+        args.model_path,
+        device=device,
+        torch_dtype=torch_dtype,
+        attn_implementation=attn_impl,
+    )
+
     print("🎙️ Initializing VibeVoice Demo with Streaming Support...")
-    
+
     # Initialize demo instance
     demo_instance = VibeVoiceDemo(
-        model_path=args.model_path,
-        device=args.device,
-        inference_steps=args.inference_steps
+        model=model, processor=processor, inference_steps=args.inference_steps
     )
-    
+
     # Create interface
     interface = create_demo_interface(demo_instance)
-    
+
     print(f"🚀 Launching demo on port {args.port}")
     print(f"📁 Model path: {args.model_path}")
     print(f"🎭 Available voices: {len(demo_instance.available_voices)}")

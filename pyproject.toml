@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A model for speech generation with an AR + diffusion architecture."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     # "License :: OSI Approved :: MIT License",
@@ -31,6 +31,16 @@ dependencies = [
     "av",
     "aiortc",
     "librosa"
+]
+
+[project.optional-dependencies]
+cuda = [
+  "flash-attn>=2.5.0"
+]
+mps = []
+dev = [
+  "pytest",
+  "psutil"
 ]
 
 

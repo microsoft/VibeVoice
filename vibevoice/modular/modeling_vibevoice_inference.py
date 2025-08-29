@@ -465,9 +465,10 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
             if is_prefill:
                 # we process the speech inputs only during the first generation step
                 prefill_inputs = {
-                    "speech_tensors": speech_tensors.to(device=device),
-                    "speech_masks": speech_masks.to(device),
-                    "speech_input_mask": speech_input_mask.to(device),
+                    # Add None checks for robustness
+                    "speech_tensors": speech_tensors.to(device=device) if speech_tensors is not None else None,
+                    "speech_masks": speech_masks.to(device) if speech_masks is not None else None,
+                    "speech_input_mask": speech_input_mask.to(device) if speech_input_mask is not None else None,
                 }
                 is_prefill = False
             else:

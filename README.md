@@ -95,17 +95,66 @@ Try it on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/b
 | VibeVoice-7B-Preview| 32K | ~45 min | [HF link](https://huggingface.co/WestZhang/VibeVoice-Large-pt) |
 
 ## Installation
-We recommend to use NVIDIA Deep Learning Container to manage the CUDA environment. 
+
+### Option 1: Basic Installation (macOS/Linux)
+For general use on macOS or Linux systems without CUDA:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e .
+
+# Or using uv (recommended)
+uv sync
+```
+
+### Option 2: Installation with Extras
+
+#### For Apple Silicon (MPS) users:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e ".[mps]"
+
+# Or using uv (recommended)
+uv sync --extra mps
+```
+
+#### For CUDA users:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e ".[cuda]"
+
+# Or using uv (recommended)
+uv sync --extra cuda
+```
+
+#### For Development:
+```bash
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice/
+
+# Using pip
+pip install -e ".[dev]"
+
+# Or using uv (recommended)
+uv sync --extra dev
+```
+
+### Option 3: NVIDIA Docker Container (Recommended for CUDA)
+We recommend using NVIDIA Deep Learning Container to manage the CUDA environment.
 
 1. Launch docker
 ```bash
 # NVIDIA PyTorch Container 24.07 / 24.10 / 24.12 verified. 
 # Later versions are also compatible.
 sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulimit stack=-1:-1 --gpus all --rm -it  nvcr.io/nvidia/pytorch:24.07-py3
-
-## If flash attention is not included in your docker environment, you need to install it manually
-## Refer to https://github.com/Dao-AILab/flash-attention for installation instructions
-# pip install flash-attn --no-build-isolation
 ```
 
 2. Install from github
@@ -113,10 +162,99 @@ sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulim
 git clone https://github.com/microsoft/VibeVoice.git
 cd VibeVoice/
 
-pip install -e .
+# Using pip
+pip install -e ".[cuda]"
+
+# Or using uv (recommended)
+uv sync --extra cuda
 ```
 
+## Apple Silicon (MPS) Support
+
+VibeVoice has full support for Apple Silicon Macs using the Metal Performance Shaders (MPS) backend. Here's what you need to know:
+
+### MPS Configuration and Optimization
+
+VibeVoice automatically detects and configures the optimal settings for MPS:
+
+1. **BFloat16 Preference**: VibeVoice prefers BFloat16 precision on MPS for best performance, with automatic fallback to Float16 if needed.
+2. **Attention Implementation**: Uses Scaled Dot Product Attention (SDPA) on MPS. Flash Attention is only available for CUDA and is not used on MPS.
+3. **Environment Setup**: VibeVoice automatically sets the required environment variables:
+   - `PYTORCH_ENABLE_MPS_FALLBACK=1` - Enables fallback operations for unsupported MPS operations
+   - `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` - Optimizes memory management on MPS
+
+If you prefer to set these manually in your shell, add these lines to your `~/.zshrc`:
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+```
+
+### Performance Considerations
+
+When running on Apple Silicon, keep these points in mind:
+
+1. **Timing Variance**: MPS timings can have higher variance compared to CUDA due to the unified memory architecture. For benchmarking, it's recommended to run multiple tests and use the median result.
+2. **Unified Memory**: MPS uses unified memory (shared with system RAM) rather than dedicated VRAM. This can affect memory reporting and allocation patterns.
+3. **Optimal Performance**: For best performance on Apple Silicon, use the 7B model variant which is more stable and optimized.
+
+### Quick Start Commands
+
+Here are common usage patterns for Apple Silicon Macs:
+
+```bash
+# Basic inference with automatic MPS detection
+python demo/inference_from_file.py \
+  --model_path WestZhang/VibeVoice-Large-pt \
+  --txt_path demo/text_examples/1p_abs.txt \
+  --speaker_names Alice
+
+# Explicitly specify MPS device
+python demo/inference_from_file.py \
+  --model_path WestZhang/VibeVoice-Large-pt \
+  --txt_path demo/text_examples/2p_music.txt \
+  --speaker_names Alice Yunfan \
+  --device mps
+
+# Specify BFloat16 precision (automatically selected on MPS when supported)
+python demo/inference_from_file.py \
+  --model_path WestZhang/VibeVoice-Large-pt \
+  --txt_path demo/text_examples/1p_abs.txt \
+  --speaker_names Alice \
+  --dtype bf16
+
+# Launch Gradio demo with MPS
+python demo/gradio_demo.py \
+  --model_path WestZhang/VibeVoice-Large-pt \
+  --device mps \
+  --share
+```
+
+### Diagnostic and Benchmark Tools
+
+VibeVoice includes utilities to help diagnose and benchmark your MPS setup:
+
+1. **MPS Diagnostic Tool**: Check your MPS setup and compatibility
+   ```bash
+   python -m vibevoice.utils.mps_diagnose
+   ```
+
+2. **Performance Benchmark**: Measure inference performance on your device
+   ```bash
+   python -m vibevoice.scripts.benchmark_mps
+   ```
+
+### CLI Flags
+
+The demo scripts support these device-specific flags:
+
+- `--device`: Specify the computation device (`auto`, `cuda`, `mps`, `cpu`) - defaults to `auto`
+- `--dtype`: Specify the data type (`auto`, `bf16`, `fp16`, `fp32`) - defaults to `auto`
+- `--attn-impl`: Specify attention implementation (`auto`, `flash_attention_2`, `sdpa`) - defaults to `auto`
+
+Note: Flash Attention is only available on CUDA devices. On MPS, SDPA is automatically used.
+
 ## Usages
+
 
 ### 🚨 Tips
 We observed users may encounter occasional instability when synthesizing Chinese speech. We recommend:
