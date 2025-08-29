@@ -159,6 +159,29 @@ def unpad1d(x: torch.Tensor, paddings: tp.Tuple[int, int]):
     end = x.shape[-1] - padding_right
     return x[..., padding_left: end]
 
+# -------- DirectML-safe concat helper -----------------------------------------
+def _safe_cat(a: torch.Tensor, b: torch.Tensor, dim: int) -> torch.Tensor:
+    if a is None or (isinstance(a, torch.Tensor) and a.numel() == 0):
+        return b
+    if b is None or (isinstance(b, torch.Tensor) and b.numel() == 0):
+        return a
+    if a.device != b.device:
+        b = b.to(a.device)
+    if a.dtype != b.dtype:
+        b = b.to(a.dtype)
+    a_c = a.contiguous()
+    b_c = b.contiguous()
+    try:
+        return torch.cat((a_c, b_c), dim=dim)
+    except RuntimeError as e:
+        if ("parameter is incorrect" in str(e).lower()
+                and a.device.type in ("dml", "privateuseone")):
+            cpu_cat = torch.cat((a_c.cpu(), b_c.cpu()), dim=dim)
+            return cpu_cat.to(a.device)
+        raise
+# ------------------------------------------------------------------------------
+
+
 
 class NormConv1d(nn.Module):
     """Wrapper around Conv1d and normalization applied to this conv"""
@@ -347,7 +370,7 @@ class SConv1d(nn.Module):
         
         # Concatenate cached states with input
         if cached_states.shape[2] > 0:
-            input_with_context = torch.cat([cached_states, x], dim=2)
+            input_with_context = _safe_cat(cached_states, x, dim=2)
         else:
             input_with_context = x
             
@@ -492,7 +515,7 @@ class SConvTranspose1d(nn.Module):
                 print(f"[DEBUG] Initialized empty cache for transposed conv")
         
         # Concatenate cached input with new input
-        full_input = torch.cat([cached_input, x], dim=2)
+        full_input = _safe_cat(cached_input, x, dim=2)
         
         if debug:
             print(f"[DEBUG] Input shape: {x.shape}, Cache shape: {cached_input.shape}, Combined: {full_input.shape}")
