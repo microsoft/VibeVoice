@@ -145,31 +145,23 @@ python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --t
 python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --txt_path demo/text_examples/2p_music.txt --speaker_names Alice Frank
 ```
 
-### Usage 3: CPU Inference
+### Usage 3: CPU/Non-CUDA Inference
 
-For users without NVIDIA GPUs, we provide CPU-based inference:
+The standard inference scripts automatically detect and support CPU execution:
 
 ```bash
-# Install additional dependencies
-pip install librosa soundfile
+# The scripts automatically detect if CUDA is unavailable and use CPU
+python demo/inference_from_file.py --script script.txt --voice demo/voices/en-Alice_woman.wav --output output.wav
 
-# Basic usage
-python demo/inference_cpu.py --text "Your text here" --output output.wav
-
-# With voice cloning (provide a voice sample)
-python demo/inference_cpu.py --text "Your text here" --voice demo/voices/en-Alice_woman.wav
-
-# Play the output
-afplay output.wav  # Mac
-# or
-aplay output.wav   # Linux
+# Or use the Gradio interface (also supports CPU automatically)
+python demo/gradio_demo.py
 ```
 
-**Note for CPU inference:**
-- Inference will be slower than GPU
+**Important Note for CPU/Non-CUDA inference:**
+- CPU uses "eager" attention mechanism which may produce lower quality audio compared to GPU with SDPA
+- Inference will be significantly slower than GPU
 - Ensure sufficient RAM (16GB+ recommended for 1.5B model)
-- The model uses eager attention instead of Flash Attention
-- Generation quality is identical to GPU inference
+- For best quality, CUDA-capable GPUs with SDPA attention are recommended
 
 ## FAQ
 #### Q1: Is this a pretrained model?

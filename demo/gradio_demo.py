@@ -53,34 +53,24 @@ class VibeVoiceDemo:
             self.model_path,
         )
         
-        # Load model - use CPU first then move to MPS if available
-        # MPS doesn't work well with device_map, so we'll load on CPU first
+        # Load model - detect device and set appropriate configuration
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        dtype = torch.bfloat16 if device == 'cuda' else torch.float32
         
-        print("Loading model on CPU first...")
-        try:
-            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.float32,  # Use float32 for better compatibility
-                attn_implementation="sdpa",  # Use SDPA which works on Mac
-            )
-        except Exception as e:
-            print(f"Failed to load with SDPA, trying eager attention: {e}")
-            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.float32,
-                attn_implementation="eager",  # Fallback to eager attention
-            )
+        # Use sdpa for CUDA (optimal), eager for CPU (compatibility)
+        # Note: eager attention may produce lower quality results
+        attn_implementation = 'sdpa' if device == 'cuda' else 'eager'
         
-        # Move to MPS if available
-        if torch.backends.mps.is_available():
-            print("Moving model to MPS device...")
-            try:
-                self.model = self.model.to('mps')
-                print("Successfully moved model to MPS")
-            except Exception as e:
-                print(f"Failed to move to MPS, keeping on CPU: {e}")
-        else:
-            print("MPS not available, keeping model on CPU")
+        print(f"Loading model on {device} with {attn_implementation} attention...")
+        self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+            self.model_path,
+            torch_dtype=dtype,
+            device_map=device if device == 'cuda' else None,
+            attn_implementation=attn_implementation
+        )
+        
+        if device == 'cpu':
+            print("Note: Using CPU with eager attention - may have reduced quality")
         self.model.eval()
         
         # Use SDE solver by default

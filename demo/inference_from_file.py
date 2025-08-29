@@ -245,45 +245,22 @@ def main():
     print(f"Loading processor & model from {args.model_path}")
     processor = VibeVoiceProcessor.from_pretrained(args.model_path)
 
-    # Load model - detect best device
-    if torch.cuda.is_available():
-        device = 'cuda'
-        dtype = torch.bfloat16
-    elif torch.backends.mps.is_available():
-        device = 'mps'
-        dtype = torch.bfloat16
-    else:
-        device = 'cpu'
-        dtype = torch.float32
-        
+    # Load model - detect device and set appropriate dtype
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    dtype = torch.bfloat16 if device == 'cuda' else torch.float32
+    
     print(f"Using device: {device}")
     
-    try:
-        # Try flash attention for CUDA
-        if device == 'cuda':
-            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                args.model_path,
-                torch_dtype=dtype,
-                device_map=device,
-                attn_implementation='flash_attention_2'
-            )
-        else:
-            # Use SDPA for MPS/CPU
-            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                args.model_path,
-                torch_dtype=dtype,
-                device_map=device,
-                attn_implementation='sdpa'
-            )
-    except Exception as e:
-        print(f"[ERROR] : {type(e).__name__}: {e}")
-        print("Trying eager attention as fallback...")
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            args.model_path,
-            torch_dtype=dtype,
-            device_map=device,
-            attn_implementation='eager'
-        )
+    # Use sdpa for CUDA (optimal performance), eager for CPU (compatibility)
+    # Note: eager attention may produce lower quality results but ensures CPU compatibility
+    attn_implementation = 'sdpa' if device == 'cuda' else 'eager'
+    
+    model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+        args.model_path,
+        torch_dtype=dtype,
+        device_map=device,
+        attn_implementation=attn_implementation
+    )
 
     model.eval()
     model.set_ddpm_inference_steps(num_steps=10)
