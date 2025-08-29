@@ -92,19 +92,42 @@ class PodcastAudioGenerator:
                     speaker = parts[0].strip()
                     text = parts[1].strip()
                     
+                    # Clean up speaker name - remove asterisk prefixes
+                    # Handle formats like "**Speaker 1:**" or "**Speaker 2:**"
+                    if speaker.startswith('**'):
+                        speaker = speaker[2:].strip()  # Remove ** prefix
+                        logger.debug(f"Cleaned speaker name from asterisk prefix: '{speaker}'")
+                    elif speaker.startswith('*'):
+                        speaker = speaker[1:].strip()  # Remove * prefix
+                        logger.debug(f"Cleaned speaker name from asterisk prefix: '{speaker}'")
+                    
+                    # Clean up text - remove asterisk prefixes from text as well
+                    if text.startswith('**'):
+                        text = text[2:].strip()  # Remove ** prefix from text
+                        logger.debug(f"Cleaned text from asterisk prefix")
+                    elif text.startswith('*'):
+                        text = text[1:].strip()  # Remove * prefix from text
+                        logger.debug(f"Cleaned text from asterisk prefix")
+                    
                     # Accept various speaker formats:
-                    # - "Speaker 1:", "Speaker 2:", etc. (VibeVoice format)
-                    # - "Host:", "Analyst:", "Reporter:", etc. (named speakers)
+                    # - "Speaker 1", "Speaker 2", etc. (VibeVoice format)
+                    # - "Host", "Analyst", "Reporter", etc. (named speakers)
                     # - Any text followed by colon
                     if text and speaker:  # Only add non-empty text and speaker
                         # Normalize speaker names for consistency
                         if speaker.startswith('Speaker '):
-                            # Keep VibeVoice format as-is
+                            # Keep VibeVoice format as-is, but ensure proper format
                             normalized_speaker = speaker
                         else:
                             # Convert other formats to Speaker format for voice assignment
-                            # But keep original for logging
-                            normalized_speaker = speaker
+                            # Map common speaker names to Speaker format
+                            speaker_mapping = {
+                                'Host': 'Speaker 1',
+                                'Analyst': 'Speaker 2', 
+                                'Reporter': 'Speaker 1',
+                                'Guest': 'Speaker 2'
+                            }
+                            normalized_speaker = speaker_mapping.get(speaker, speaker)
                         
                         parsed_dialogue.append((normalized_speaker, text))
                         logger.debug(f"Added dialogue pair: {normalized_speaker} -> {text[:50]}...")
