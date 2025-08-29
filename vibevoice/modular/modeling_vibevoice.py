@@ -23,6 +23,14 @@ from vibevoice.schedule.dpm_solver import DPMSolverMultistepScheduler
 
 from .configuration_vibevoice import VibeVoiceConfig
 
+# --- DirectML: ensure boolean attention mask (avoids uint8 overflow in masked_fill) ---
+def _ensure_bool_attn_mask(mask):
+    if mask is None:
+        return None
+    return mask if mask.dtype is torch.bool else (mask != 0)
+# --------------------------------------------------------------------------------------
+
+
 
 logger = logging.get_logger(__name__)
 
@@ -183,6 +191,8 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         
+        attention_mask = _ensure_bool_attn_mask(attention_mask)
+
         # Forward through language model
         outputs = self.language_model(
             input_ids=input_ids,
