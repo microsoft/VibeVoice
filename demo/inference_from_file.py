@@ -245,24 +245,22 @@ def main():
     print(f"Loading processor & model from {args.model_path}")
     processor = VibeVoiceProcessor.from_pretrained(args.model_path)
 
-    # Load model
-    try:
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='flash_attention_2' # flash_attention_2 is recommended
-        )
-    except Exception as e:
-        print(f"[ERROR] : {type(e).__name__}: {e}")
-        print(traceback.format_exc())
-        print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            args.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation='sdpa'
-        )
+    # Load model - detect device and set appropriate dtype
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    dtype = torch.bfloat16 if device == 'cuda' else torch.float32
+    
+    print(f"Using device: {device}")
+    
+    # Use sdpa for CUDA (optimal performance), eager for CPU (compatibility)
+    # Note: eager attention may produce lower quality results but ensures CPU compatibility
+    attn_implementation = 'sdpa' if device == 'cuda' else 'eager'
+    
+    model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+        args.model_path,
+        torch_dtype=dtype,
+        device_map=device,
+        attn_implementation=attn_implementation
+    )
 
     model.eval()
     model.set_ddpm_inference_steps(num_steps=10)

@@ -53,13 +53,24 @@ class VibeVoiceDemo:
             self.model_path,
         )
         
-        # Load model
+        # Load model - detect device and set appropriate configuration
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        dtype = torch.bfloat16 if device == 'cuda' else torch.float32
+        
+        # Use sdpa for CUDA (optimal), eager for CPU (compatibility)
+        # Note: eager attention may produce lower quality results
+        attn_implementation = 'sdpa' if device == 'cuda' else 'eager'
+        
+        print(f"Loading model on {device} with {attn_implementation} attention...")
         self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             self.model_path,
-            torch_dtype=torch.bfloat16,
-            device_map='cuda',
-            attn_implementation="flash_attention_2",
+            torch_dtype=dtype,
+            device_map=device if device == 'cuda' else None,
+            attn_implementation=attn_implementation
         )
+        
+        if device == 'cpu':
+            print("Note: Using CPU with eager attention - may have reduced quality")
         self.model.eval()
         
         # Use SDE solver by default

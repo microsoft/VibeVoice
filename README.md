@@ -154,6 +154,24 @@ python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --t
 python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --txt_path demo/text_examples/2p_music.txt --speaker_names Alice Frank
 ```
 
+### Usage 3: CPU/Non-CUDA Inference
+
+The standard inference scripts automatically detect and support CPU execution:
+
+```bash
+# The scripts automatically detect if CUDA is unavailable and use CPU
+python demo/inference_from_file.py --script script.txt --voice demo/voices/en-Alice_woman.wav --output output.wav
+
+# Or use the Gradio interface (also supports CPU automatically)
+python demo/gradio_demo.py
+```
+
+**Important Note for CPU/Non-CUDA inference:**
+- CPU uses "eager" attention mechanism which may produce lower quality audio compared to GPU with SDPA
+- Inference will be significantly slower than GPU
+- Ensure sufficient RAM (16GB+ recommended for 1.5B model)
+- For best quality, CUDA-capable GPUs with SDPA attention are recommended
+
 ## FAQ
 #### Q1: Is this a pretrained model?
 **A:** Yes, it's a pretrained model without any post-training or benchmark-specific optimizations. In a way, this makes VibeVoice very versatile and fun to use.
