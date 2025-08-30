@@ -154,6 +154,37 @@ python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --t
 python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --txt_path demo/text_examples/2p_music.txt --speaker_names Alice Frank
 ```
 
+
+### Usage 3: OpenAI-Compatible API
+
+```bash
+# Starts an OpenAI-compatible API server that allows you to interact with VibeVoice
+# models. 
+python demo/openai_api.py
+```
+
+By default, it will preload the following models (you can change these in the code):
+
+* `microsoft/VibeVoice-1.5B`
+
+
+The server will start at: [http://localhost:8000](http://localhost:8000)
+
+
+#### Supported Voices
+
+The API uses the filename from the `demo/voices/` directory as the voice name.
+
+**Fields:**
+
+| Field             | Type   | Required | Description                                 |
+| ----------------- | ------ | -------- | ------------------------------------------- |
+| `model`           | string | ✅        | The model ID (see models above)             |
+| `input`           | string | ✅        | Plain text input                            |
+| `voice`           | string | ✅        | Voice ID (filename)
+
+**Note:** SSML is not supported. Input must be plain text.
+
 ## FAQ
 #### Q1: Is this a pretrained model?
 **A:** Yes, it's a pretrained model without any post-training or benchmark-specific optimizations. In a way, this makes VibeVoice very versatile and fun to use.

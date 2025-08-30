@@ -31,7 +31,10 @@ dependencies = [
     "absl-py",
     "gradio",
     "av",
-    "aiortc"
+    "aiortc",
+    "soundfile",
+    "fastapi",
+    "uvicorn"
 ]
 
 
