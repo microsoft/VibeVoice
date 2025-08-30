@@ -91,6 +91,8 @@ For more examples, see the [Project Page](https://microsoft.github.io/VibeVoice)
 
 Try it on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/VibeVoice_colab.ipynb) or [Demo](https://aka.ms/VibeVoice-Demo).
 
+Try it in ComfyUI with [VibeVoice ComfyUI Wrapper](https://github.com/Enemyx-net/VibeVoice-ComfyUI)
+
 
 
 ## Models
