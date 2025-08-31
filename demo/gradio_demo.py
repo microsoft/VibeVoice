@@ -47,30 +47,63 @@ class VibeVoiceDemo:
     def load_model(self):
         """Load the VibeVoice model and processor."""
         print(f"Loading processor & model from {self.model_path}")
-        
+        # Normalize potential 'mpx'
+        if self.device.lower() == "mpx":
+            print("Note: device 'mpx' detected, treating it as 'mps'.")
+            self.device = "mps"
+        if self.device == "mps" and not torch.backends.mps.is_available():
+            print("Warning: MPS not available. Falling back to CPU.")
+            self.device = "cpu"
+        print(f"Using device: {self.device}")
         # Load processor
-        self.processor = VibeVoiceProcessor.from_pretrained(
-            self.model_path,
-        )
-        
+        self.processor = VibeVoiceProcessor.from_pretrained(self.model_path)
+        # Decide dtype & attention
+        if self.device == "mps":
+            load_dtype = torch.float32
+            attn_impl_primary = "sdpa"
+        elif self.device == "cuda":
+            load_dtype = torch.bfloat16
+            attn_impl_primary = "flash_attention_2"
+        else:
+            load_dtype = torch.float32
+            attn_impl_primary = "sdpa"
         # Load model
         try:
-            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.bfloat16,
-                device_map='cuda',
-                attn_implementation='flash_attention_2' # flash_attention_2 is recommended
-            )
+            if self.device == "mps":
+                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                    self.model_path,
+                    torch_dtype=load_dtype,
+                    attn_implementation=attn_impl_primary,
+                    device_map=None,
+                )
+                self.model.to("mps")
+            elif self.device == "cuda":
+                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                    self.model_path,
+                    torch_dtype=load_dtype,
+                    device_map="cuda",
+                    attn_implementation=attn_impl_primary,
+                )
+            else:
+                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                    self.model_path,
+                    torch_dtype=load_dtype,
+                    device_map="cpu",
+                    attn_implementation=attn_impl_primary,
+                )
         except Exception as e:
             print(f"[ERROR] : {type(e).__name__}: {e}")
             print(traceback.format_exc())
-            print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
+            fallback_attn = "sdpa"
+            print(f"Falling back to attention implementation: {fallback_attn}")
             self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
                 self.model_path,
-                torch_dtype=torch.bfloat16,
-                device_map='cuda',
-                attn_implementation='sdpa'
+                torch_dtype=load_dtype,
+                device_map=(self.device if self.device in ("cuda", "cpu") else None),
+                attn_implementation=fallback_attn,
             )
+            if self.device == "mps":
+                self.model.to("mps")
         self.model.eval()
         
         # Use SDE solver by default
@@ -145,7 +178,7 @@ class VibeVoiceDemo:
                                  speaker_2: str = None,
                                  speaker_3: str = None,
                                  speaker_4: str = None,
-                                 cfg_scale: float = 1.3) -> Iterator[tuple]:
+                                 cfg_scale: float = 1.3):
         try:
             
             # Reset stop flag and set generating state
@@ -238,6 +271,11 @@ class VibeVoiceDemo:
                 return_tensors="pt",
                 return_attention_mask=True,
             )
+            # Move tensors to device
+            target_device = self.device if self.device in ("cuda", "mps") else "cpu"
+            for k, v in inputs.items():
+                if torch.is_tensor(v):
+                    inputs[k] = v.to(target_device)
             
             # Create audio streamer
             audio_streamer = AudioStreamer(
@@ -1133,8 +1171,8 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        help="Device for inference",
+        default=("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")),
+        help="Device for inference: cuda | mps | cpu",
     )
     parser.add_argument(
         "--inference_steps",
