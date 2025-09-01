@@ -1,3 +1,5 @@
+import os
+import torch.nn.functional as F
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union, Callable
 from tqdm import tqdm
@@ -157,8 +159,11 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 # Apply scaling and bias
                 acoustic_features = (acoustic_latents + self.model.speech_bias_factor.to(acoustic_latents.device)) * self.model.speech_scaling_factor.to(acoustic_latents.device)
                 
-                # Connect to language model space
-                acoustic_connected = self.model.acoustic_connector(acoustic_features)[speech_masks.cpu()]
+                
+                # align mask to features' device + bool dtype
+                mask = speech_masks.to(device=acoustic_features.device, dtype=torch.bool)
+                acoustic_connected = self.model.acoustic_connector(acoustic_features)[mask]
+
                 
                 return acoustic_features, acoustic_connected
             elif speech_type == "pt":
@@ -169,7 +174,9 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
                 acoustic_features = (acoustic_latents + self.model.speech_bias_factor.to(acoustic_latents.device)) * self.model.speech_scaling_factor.to(acoustic_latents.device)
                 
                 # Connect to language model space
-                acoustic_connected = self.model.acoustic_connector(acoustic_features)[speech_masks.cpu()]
+                mask = speech_masks.to(device=acoustic_features.device, dtype=torch.bool)
+                acoustic_connected = self.model.acoustic_connector(acoustic_features)[mask]
+
                 
                 return acoustic_features, acoustic_connected
             else:
@@ -221,7 +228,9 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         if speech_tensors is not None and speech_masks is not None:
             acoustic_features, speech_embeds = self._process_speech_inputs(speech_tensors.to(self.dtype), speech_masks)
             if speech_input_mask is not None:
-                inputs_embeds[speech_input_mask] = speech_embeds
+                sim = speech_input_mask.to(device=inputs_embeds.device, dtype=torch.bool)
+                inputs_embeds[sim] = speech_embeds
+
 
         outputs = self.model(
             inputs_embeds=inputs_embeds,
@@ -237,10 +246,60 @@ class VibeVoiceForConditionalGenerationInference(VibeVoicePreTrainedModel, Gener
         )
 
         hidden_states = outputs[0] if not return_dict else outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-                
+
+        # --- begin: defensive hardening for CUDA path (#71) ---
+        if isinstance(logits_to_keep, int) and logits_to_keep == 0:
+            vocab = self.lm_head.out_features
+            bsz = hidden_states.size(0)
+            logits = hidden_states.new_zeros(bsz, 0, vocab)
+        else:
+            # Build slice
+            if isinstance(logits_to_keep, int):
+                k = max(1, logits_to_keep)
+                si = slice(-k, None)
+            else:
+                si = logits_to_keep
+
+            hs = hidden_states
+
+            # Validate slice
+            if isinstance(si, slice):
+                start = 0 if si.start is None else si.start
+                stop  = hs.size(1) if si.stop  is None else si.stop
+                step  = 1 if si.step  is None else si.step
+                if stop <= start:
+                    raise RuntimeError(
+                        f"Invalid slice_indices: slice({start}, {stop}, {step}) for hidden_states shape={tuple(hs.shape)}"
+                    )
+            elif isinstance(si, (list, tuple, torch.Tensor)) and len(si) == 0:
+                raise RuntimeError(
+                    f"Invalid slice_indices: empty indices for hidden_states shape={tuple(hs.shape)}"
+                )
+
+            # Extract & make contiguous (avoid CUDA view quirks)
+            hs = hs[:, si, :]
+            if not hs.is_contiguous():
+                hs = hs.contiguous()
+
+            # Optional override via config/env
+            force_f32 = getattr(self.config, "force_f32_lm_head", False) or bool(int(os.environ.get("VIBEVOICE_FORCE_F32_LM_HEAD", "0")))
+
+            # Key guard: do the lm_head GEMM in float32 on CUDA when bf16 (or forced)
+            if hs.is_cuda and (hs.dtype == torch.bfloat16 or force_f32):
+                w = self.lm_head.weight.float()
+                b = self.lm_head.bias.float() if getattr(self.lm_head, "bias", None) is not None else None
+                logits = F.linear(hs.float(), w, b)
+            else:
+                # Non-CUDA or non-bf16 path: keep dtypes aligned to avoid mixed-dtype kernels
+                w = self.lm_head.weight
+                b = self.lm_head.bias if getattr(self.lm_head, "bias", None) is not None else None
+                if w.dtype != hs.dtype:
+                    w = w.to(hs.dtype)
+                    b = b.to(hs.dtype) if b is not None else None
+                logits = F.linear(hs, w, b)
+        # --- end: defensive hardening for CUDA path (#71) ---
+
+       
         if labels is not None:
             raise NotImplementedError("Loss computation is not implemented in this version.")
 
