@@ -161,27 +161,16 @@ python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --t
 # Starts an OpenAI-compatible API server that allows you to interact with VibeVoice
 # models. 
 python demo/openai_api.py
+# The server will start at: http://localhost:8000
+curl -X POST http://localhost:8000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -o output.wav \
+  -d '{
+    "model": "microsoft/VibeVoice-1.5B",
+    "input": "This is a test of the OpenAI API compatible VibeVoice speech generation system.",
+    "voice": "alice"
+}'
 ```
-
-By default, it will preload the following models (you can change these in the code):
-
-* `microsoft/VibeVoice-1.5B`
-
-
-The server will start at: [http://localhost:8000](http://localhost:8000)
-
-
-#### Supported Voices
-
-The API uses the filename from the `demo/voices/` directory as the voice name.
-
-**Fields:**
-
-| Field             | Type   | Required | Description                                 |
-| ----------------- | ------ | -------- | ------------------------------------------- |
-| `model`           | string | ✅        | The model ID (see models above)             |
-| `input`           | string | ✅        | Plain text input                            |
-| `voice`           | string | ✅        | Voice ID (filename)
 
 **Note:** SSML is not supported. Input must be plain text.
 

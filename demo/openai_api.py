@@ -4,7 +4,6 @@ import time
 import torch
 import soundfile as sf
 import traceback
-from transformers import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -13,9 +12,6 @@ from pydantic import BaseModel
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
 from inference_from_file import VoiceMapper
-
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
 
 app = FastAPI()
 
@@ -29,38 +25,32 @@ MODEL_CONFIG = {
         "id": "microsoft/VibeVoice-1.5B",
         "object": "model",
         "owned_by": "microsoft"
-    }
-    # ,"WestZhang/VibeVoice-Large-pt": {
-    #     "id": "WestZhang/VibeVoice-Large-pt",
-    #     "object": "model",
-    #     "owned_by": "WestZhang"
-    # }
+    } # Add more models as needed
 }
 
-
-print("Loading all models and processors...")
-
+print("Loading models...")
 loaded_models = {}
-for model_id in MODEL_CONFIG.keys():
-    print(f" - Loading: {model_id}")
+for model_id in MODEL_CONFIG:
+    print(f" - {model_id}")
     processor = VibeVoiceProcessor.from_pretrained(model_id)
+    
     try:
         model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             model_id,
             torch_dtype=torch.bfloat16,
             device_map='cuda',
-            attn_implementation='flash_attention_2' # flash_attention_2 is recommended
+            attn_implementation='flash_attention_2'
         )
-    except Exception as e:
-        print(f"[ERROR] : {type(e).__name__}: {e}")
-        print(traceback.format_exc())
-        print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
+    except Exception:
+        print(f"[WARNING] Failed to load with flash_attention_2. Falling back to sdpa.")
+        traceback.print_exc()
         model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             model_id,
             torch_dtype=torch.bfloat16,
             device_map='cuda',
             attn_implementation='sdpa'
         )
+    
     model.eval()
     model.set_ddpm_inference_steps(num_steps=10)
     loaded_models[model_id] = {
@@ -72,15 +62,10 @@ print("Models ready:", list(loaded_models.keys()))
 
 voice_mapper = VoiceMapper()
 
-def ensure_speaker_lines(text: str) -> str:
-    """Wrap plain text with 'Speaker 1:' if no speaker lines found"""
-    speaker_line_pattern = re.compile(r'^Speaker\s+\d+:', re.IGNORECASE)
-    lines = text.strip().splitlines()
-    has_speaker_lines = any(speaker_line_pattern.match(line.strip()) for line in lines)
-
-    if not has_speaker_lines:
+def format_text(text: str) -> str:
+    if not re.search(r'^Speaker\s+\d+:', text.strip(), re.IGNORECASE | re.MULTILINE):
         return f"Speaker 1: {text.strip()}"
-    return text
+    return text.strip()
 
 @app.get("/v1/models")
 async def list_models():
@@ -88,7 +73,6 @@ async def list_models():
         "object": "list",
         "data": list(MODEL_CONFIG.values())
     }
-
 
 @app.post("/v1/audio/speech")
 async def generate_speech(request: SpeechRequest):
@@ -101,10 +85,9 @@ async def generate_speech(request: SpeechRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
     model_entry = loaded_models[request.model]
-    processor = model_entry["processor"]
-    model = model_entry["model"]
+    processor, model = model_entry["processor"], model_entry["model"]
 
-    text = ensure_speaker_lines(request.input.strip())
+    text = format_text(request.input)
     voice_samples = [voice_path]
 
     inputs = processor(
@@ -115,27 +98,23 @@ async def generate_speech(request: SpeechRequest):
         return_attention_mask=True,
     )
 
-    start = time.time()
+    start_time = time.time()
     outputs = model.generate(
         **inputs,
-        max_new_tokens=None,
         cfg_scale=1.3,
         tokenizer=processor.tokenizer,
         generation_config={"do_sample": False},
         verbose=False,
     )
-    duration = time.time() - start
+    print(f"[{request.model}] Generated in {time.time() - start_time:.2f}s: '{text[:30]}...'")
 
-    audio = outputs.speech_outputs[0]
-    audio_np = audio.cpu().float().numpy()
+    audio_np = outputs.speech_outputs[0].cpu().float().numpy()
     buffer = io.BytesIO()
     sf.write(buffer, audio_np.T, samplerate=24000, format='WAV')
     buffer.seek(0)
 
-    print(f"[{request.model}] Generated speech in {duration:.2f}s: '{text[:30]}...'")
-
     return StreamingResponse(buffer, media_type="audio/wav")
 
-if __name__ == "__main__": 
-    import uvicorn 
+if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
