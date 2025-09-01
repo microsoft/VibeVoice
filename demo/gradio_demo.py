@@ -67,6 +67,7 @@ class VibeVoiceDemo:
         else:
             load_dtype = torch.float32
             attn_impl_primary = "sdpa"
+        print(f"Using device: {self.device}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
         # Load model
         try:
             if self.device == "mps":
@@ -92,18 +93,21 @@ class VibeVoiceDemo:
                     attn_implementation=attn_impl_primary,
                 )
         except Exception as e:
-            print(f"[ERROR] : {type(e).__name__}: {e}")
-            print(traceback.format_exc())
-            fallback_attn = "sdpa"
-            print(f"Falling back to attention implementation: {fallback_attn}")
-            self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                self.model_path,
-                torch_dtype=load_dtype,
-                device_map=(self.device if self.device in ("cuda", "cpu") else None),
-                attn_implementation=fallback_attn,
-            )
-            if self.device == "mps":
-                self.model.to("mps")
+            if attn_impl_primary == 'flash_attention_2':
+                print(f"[ERROR] : {type(e).__name__}: {e}")
+                print(traceback.format_exc())
+                fallback_attn = "sdpa"
+                print(f"Falling back to attention implementation: {fallback_attn}")
+                self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                    self.model_path,
+                    torch_dtype=load_dtype,
+                    device_map=(self.device if self.device in ("cuda", "cpu") else None),
+                    attn_implementation=fallback_attn,
+                )
+                if self.device == "mps":
+                    self.model.to("mps")
+            else:
+                raise e
         self.model.eval()
         
         # Use SDE solver by default
@@ -178,7 +182,7 @@ class VibeVoiceDemo:
                                  speaker_2: str = None,
                                  speaker_3: str = None,
                                  speaker_4: str = None,
-                                 cfg_scale: float = 1.3):
+                                 cfg_scale: float = 1.3) -> Iterator[tuple]:
         try:
             
             # Reset stop flag and set generating state

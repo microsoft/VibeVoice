@@ -266,7 +266,7 @@ def main():
     else:  # cpu
         load_dtype = torch.float32
         attn_impl_primary = "sdpa"
-
+    print(f"Using device: {args.device}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
     # Load model with device-specific logic
     try:
         if args.device == "mps":
@@ -292,18 +292,20 @@ def main():
                 attn_implementation=attn_impl_primary,
             )
     except Exception as e:
-        print(f"[ERROR] : {type(e).__name__}: {e}")
-        print(traceback.format_exc())
-        fallback_attn = "sdpa"
-        print(f"Falling back to attention implementation: {fallback_attn}")
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            args.model_path,
-            torch_dtype=load_dtype,
-            device_map=(args.device if args.device in ("cuda", "cpu") else None),
-            attn_implementation=fallback_attn,
-        )
-        if args.device == "mps":
-            model.to("mps")
+        if attn_impl_primary == 'flash_attention_2':
+            print(f"[ERROR] : {type(e).__name__}: {e}")
+            print(traceback.format_exc())
+            print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
+            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                args.model_path,
+                torch_dtype=load_dtype,
+                device_map=(args.device if args.device in ("cuda", "cpu") else None),
+                attn_implementation='sdpa'
+            )
+            if args.device == "mps":
+                model.to("mps")
+        else:
+            raise e
 
     model.eval()
     model.set_ddpm_inference_steps(num_steps=10)
@@ -313,8 +315,8 @@ def main():
        
     # Prepare inputs for the model
     inputs = processor(
-        text=[full_script],
-        voice_samples=[voice_samples],
+        text=[full_script], # Wrap in list for batch processing
+        voice_samples=[voice_samples], # Wrap in list for batch processing
         padding=True,
         return_tensors="pt",
         return_attention_mask=True,
@@ -369,7 +371,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     
     processor.save_audio(
-        outputs.speech_outputs[0],
+        outputs.speech_outputs[0], # First (and only) batch item
         output_path=output_path,
     )
     print(f"Saved output to {output_path}")
