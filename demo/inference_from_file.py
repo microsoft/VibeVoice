@@ -263,7 +263,19 @@ def main():
         attn_impl_primary = "sdpa"  # flash_attention_2 not supported on MPS
     elif args.device == "cuda":
         load_dtype = torch.bfloat16
-        attn_impl_primary = "flash_attention_2"
+        # Check GPU architecture for flash attention compatibility
+        if torch.cuda.is_available():
+            gpu_arch = torch.cuda.get_device_capability(0)
+            # Ampere (8.0+) and newer support flash_attention_2
+            # Turing (7.5) and older should use flash_attention
+            if gpu_arch[0] >= 8:  # Ampere and newer
+                attn_impl_primary = "flash_attention_2"
+                print(f"GPU architecture {gpu_arch} detected: using flash_attention_2")
+            else:  # Turing and older
+                attn_impl_primary = "flash_attention"
+                print(f"GPU architecture {gpu_arch} detected: using flash_attention (older GPU)")
+        else:
+            attn_impl_primary = "flash_attention_2"  # fallback default
     else:  # cpu
         load_dtype = torch.float32
         attn_impl_primary = "sdpa"
@@ -293,10 +305,10 @@ def main():
                 attn_implementation=attn_impl_primary,
             )
     except Exception as e:
-        if attn_impl_primary == 'flash_attention_2':
+        if attn_impl_primary in ['flash_attention_2', 'flash_attention']:
             print(f"[ERROR] : {type(e).__name__}: {e}")
             print(traceback.format_exc())
-            print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
+            print("Error loading the model. Trying to use SDPA. However, note that flash attention has been fully tested, and using SDPA may result in lower audio quality.")
             model = VibeVoiceForConditionalGenerationInference.from_pretrained(
                 args.model_path,
                 torch_dtype=load_dtype,
