@@ -256,6 +256,7 @@ def main():
     print(f"Loading processor & model from {args.model_path}")
     processor = VibeVoiceProcessor.from_pretrained(args.model_path)
 
+
     # Decide dtype & attention implementation
     if args.device == "mps":
         load_dtype = torch.float32  # MPS requires float32
@@ -306,6 +307,7 @@ def main():
                 model.to("mps")
         else:
             raise e
+
 
     model.eval()
     model.set_ddpm_inference_steps(num_steps=10)

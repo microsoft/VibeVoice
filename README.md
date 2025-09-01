@@ -34,12 +34,12 @@ The model can synthesize speech up to **90 minutes** long with up to **4 distinc
 
 ### 🔥 News
 
-- **[2025-08-26] 🎉 We Open Source the [VibeVoice-7B-Preview](https://huggingface.co/WestZhang/VibeVoice-Large-pt) model weights!**
+- **[2025-08-26] 🎉 We Open Source the [VibeVoice-Large](https://huggingface.co/microsoft/VibeVoice-Large) model weights!**
 - **[2025-08-28] 🎉 We provide a [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/VibeVoice_colab.ipynb) script for easy access to our model. Due to GPU memory limitations, only VibeVoice-1.5B is supported.**
 
 ### 📋 TODO
 
-- [ ] Merge models into official Hugging Face repository
+- [ ] Merge models into official Hugging Face repository ([PR](https://github.com/huggingface/transformers/pull/40546))
 - [ ] Release example training code and documentation
 - [ ] VibePod:  End-to-end solution that creates podcasts from documents, webpages, or even a simple topic.
 
@@ -98,7 +98,7 @@ Try it on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/b
 |-------|----------------|----------|----------|
 | VibeVoice-0.5B-Streaming | - | - | On the way |
 | VibeVoice-1.5B | 64K | ~90 min | [HF link](https://huggingface.co/microsoft/VibeVoice-1.5B) |
-| VibeVoice-7B-Preview| 32K | ~45 min | [HF link](https://huggingface.co/WestZhang/VibeVoice-Large-pt) |
+| VibeVoice-Large| 32K | ~45 min | [HF link](https://huggingface.co/microsoft/VibeVoice-Large) |
 
 ## Installation
 We recommend to use NVIDIA Deep Learning Container to manage the CUDA environment. 
@@ -128,7 +128,7 @@ pip install -e .
 We observed users may encounter occasional instability when synthesizing Chinese speech. We recommend:
 
 - Using English punctuation even for Chinese text, preferably only commas and periods.
-- Using the 7B model variant, which is considerably more stable.
+- Using the Large model variant, which is considerably more stable.
 - If you found the generated voice speak too fast. Please try to chunk your text with multiple speaker turns with same speaker label.
 
 We'd like to thank [PsiPi](https://huggingface.co/PsiPi) for sharing an interesting way for emotion control. Detials can be found via [discussion12](https://huggingface.co/microsoft/VibeVoice-1.5B/discussions/12).
@@ -140,18 +140,18 @@ apt update && apt install ffmpeg -y # for demo
 # For 1.5B model
 python demo/gradio_demo.py --model_path microsoft/VibeVoice-1.5B --share
 
-# For 7B model
-python demo/gradio_demo.py --model_path WestZhang/VibeVoice-Large-pt --share
+# For Large model
+python demo/gradio_demo.py --model_path microsoft/VibeVoice-Large --share
 ```
 
 ### Usage 2: Inference from files directly
 ```bash
 # We provide some LLM generated example scripts under demo/text_examples/ for demo
 # 1 speaker
-python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --txt_path demo/text_examples/1p_abs.txt --speaker_names Alice
+python demo/inference_from_file.py --model_path microsoft/VibeVoice-Large --txt_path demo/text_examples/1p_abs.txt --speaker_names Alice
 
 # or more speakers
-python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --txt_path demo/text_examples/2p_music.txt --speaker_names Alice Frank
+python demo/inference_from_file.py --model_path microsoft/VibeVoice-Large --txt_path demo/text_examples/2p_music.txt --speaker_names Alice Frank
 ```
 
 ## FAQ
@@ -162,10 +162,10 @@ python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --t
 **A:** As you can see from our demo page, the background music or sounds are spontaneous. This means we can't directly control whether they are generated or not. The model is content-aware, and these sounds are triggered based on the input text and the chosen voice prompt.
 
 Here are a few things we've noticed:
-*   If the voice prompt you use contains background music, the generated speech is more likely to have it as well. (The 7B model is quite stable and effective at this—give it a try on the demo!)
+*   If the voice prompt you use contains background music, the generated speech is more likely to have it as well. (The Large model is quite stable and effective at this—give it a try on the demo!)
 *   If the voice prompt is clean (no BGM), but the input text includes introductory words or phrases like "Welcome to," "Hello," or "However," background music might still appear.
-*   Speaker voice related, using "Alice" results in random BGM than others.
-*   In other scenarios, the 7B model is more stable and has a lower probability of generating unexpected background music.
+*   Speaker voice related, using "Alice" results in random BGM than others (fixed).
+*   In other scenarios, the Large model is more stable and has a lower probability of generating unexpected background music.
 
 In fact, we intentionally decided not to denoise our training data because we think it's an interesting feature for BGM to show up at just the right moment. You can think of it as a little easter egg we left for you.
 
@@ -173,7 +173,7 @@ In fact, we intentionally decided not to denoise our training data because we th
 **A:** We don't perform any text normalization during training or inference. Our philosophy is that a large language model should be able to handle complex user inputs on its own. However, due to the nature of the training data, you might still run into some corner cases.
 
 #### Q4: Singing Capability.
-**A:** Our training data **doesn't contain any music data**. The ability to sing is an emergent capability of the model (which is why it might sound off-key, even on a famous song like 'See You Again'). (The 7B model is more likely to exhibit this than the 1.5B).
+**A:** Our training data **doesn't contain any music data**. The ability to sing is an emergent capability of the model (which is why it might sound off-key, even on a famous song like 'See You Again'). (The Large model is more likely to exhibit this than the 1.5B).
 
 #### Q5: Some Chinese pronunciation errors.
 **A:** The volume of Chinese data in our training set is significantly smaller than the English data. Additionally, certain special characters (e.g., Chinese quotation marks) may occasionally cause pronunciation issues.
