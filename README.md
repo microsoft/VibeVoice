@@ -161,7 +161,9 @@ python demo/inference_from_file.py --model_path WestZhang/VibeVoice-Large-pt --t
 # Starts an OpenAI-compatible API server that allows you to interact with VibeVoice
 # models. 
 python demo/openai_api.py
-# The server will start at: http://localhost:8000
+
+# Ex. Save the output to a .wav file
+# SSML is not supported. Input must be plain text
 curl -X POST http://localhost:8000/v1/audio/speech \
   -H "Content-Type: application/json" \
   -o output.wav \
@@ -171,8 +173,6 @@ curl -X POST http://localhost:8000/v1/audio/speech \
     "voice": "alice"
 }'
 ```
-
-**Note:** SSML is not supported. Input must be plain text.
 
 ## FAQ
 #### Q1: Is this a pretrained model?
