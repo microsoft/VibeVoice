@@ -7,6 +7,7 @@
 [![Colab](https://img.shields.io/badge/Run-Colab-orange?logo=googlecolab)](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/VibeVoice_colab.ipynb)
 [![Live Playground](https://img.shields.io/badge/Live-Playground-green?logo=gradio)](https://aka.ms/VibeVoice-Demo)
 
+
 </div>
 <!-- <div align="center">
 <img src="Figures/log.png" alt="VibeVoice Logo" width="200">
@@ -88,7 +89,7 @@ https://github.com/user-attachments/assets/a357c4b6-9768-495c-a576-1618f6275727
 
 For more examples, see the [Project Page](https://microsoft.github.io/VibeVoice).
 
-Try it on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/VibeVoice_colab.ipynb) or [Demo](https://aka.ms/VibeVoice-Demo).
+Try it on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/VibeVoice_colab.ipynb) or [Demo](https://aka.ms/VibeVoice-Demo) or [Kaggle](https://www.kaggle.com/code/twobob/vibevoice-inference)
 
 
 
@@ -130,7 +131,7 @@ We observed users may encounter occasional instability when synthesizing Chinese
 - Using the Large model variant, which is considerably more stable.
 - If you found the generated voice speak too fast. Please try to chunk your text with multiple speaker turns with same speaker label.
 
-We'd like to thank [PsiPi](https://huggingface.co/PsiPi) for sharing an interesting way for emotion control. Detials can be found via [discussion12](https://huggingface.co/microsoft/VibeVoice-1.5B/discussions/12).
+We'd like to thank [PsiPi](https://huggingface.co/PsiPi) for sharing an interesting way for emotion control. Details can be found via [discussion12](https://huggingface.co/microsoft/VibeVoice-1.5B/discussions/12).
 
 ### Usage 1: Launch Gradio demo
 ```bash
