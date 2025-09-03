@@ -2,7 +2,7 @@ import argparse
 import os
 import re
 import traceback
-from typing import List, Tuple, Union, Dict, Any
+from typing import List, Tuple, Dict
 import time
 import torch
 
@@ -176,7 +176,12 @@ def parse_args():
         default=1.3,
         help="CFG (Classifier-Free Guidance) scale for generation (default: 1.3)",
     )
-    
+    parser.add_argument(
+        "--split_tracks",
+        action="store_true",
+        help="Generate separate audio tracks per speaker",
+    )
+
     return parser.parse_args()
 
 def main():
@@ -233,7 +238,8 @@ def main():
     # Map speakers to voice files using the provided speaker names
     voice_samples = []
     actual_speakers = []
-    
+    speaker_voice_map: Dict[str, str] = {}
+
     # Get unique speaker numbers in order of first appearance
     unique_speaker_numbers = []
     seen = set()
@@ -247,6 +253,7 @@ def main():
         voice_path = voice_mapper.get_voice_path(speaker_name)
         voice_samples.append(voice_path)
         actual_speakers.append(speaker_name)
+        speaker_voice_map[speaker_num] = voice_path
         print(f"Speaker {speaker_num} ('{speaker_name}') -> Voice: {os.path.basename(voice_path)}")
     
     # Prepare data for model
@@ -314,87 +321,158 @@ def main():
 
     if hasattr(model.model, 'language_model'):
        print(f"Language model attention: {model.model.language_model.config._attn_implementation}")
-       
-    # Prepare inputs for the model
-    inputs = processor(
-        text=[full_script], # Wrap in list for batch processing
-        voice_samples=[voice_samples], # Wrap in list for batch processing
-        padding=True,
-        return_tensors="pt",
-        return_attention_mask=True,
-    )
-
     # Move tensors to target device
     target_device = args.device if args.device != "cpu" else "cpu"
-    for k, v in inputs.items():
-        if torch.is_tensor(v):
-            inputs[k] = v.to(target_device)
 
-    print(f"Starting generation with cfg_scale: {args.cfg_scale}")
-
-    # Generate audio
-    start_time = time.time()
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=None,
-        cfg_scale=args.cfg_scale,
-        tokenizer=processor.tokenizer,
-        generation_config={'do_sample': False},
-        verbose=True,
-    )
-    generation_time = time.time() - start_time
-    print(f"Generation time: {generation_time:.2f} seconds")
-    
-    # Calculate audio duration and additional metrics
-    if outputs.speech_outputs and outputs.speech_outputs[0] is not None:
+    if args.split_tracks:
         # Assuming 24kHz sample rate (common for speech synthesis)
         sample_rate = 24000
-        audio_samples = outputs.speech_outputs[0].shape[-1] if len(outputs.speech_outputs[0].shape) > 0 else len(outputs.speech_outputs[0])
-        audio_duration = audio_samples / sample_rate
-        rtf = generation_time / audio_duration if audio_duration > 0 else float('inf')
-        
-        print(f"Generated audio duration: {audio_duration:.2f} seconds")
-        print(f"RTF (Real Time Factor): {rtf:.2f}x")
-    else:
-        print("No audio output generated")
-    
-    # Calculate token metrics
-    input_tokens = inputs['input_ids'].shape[1]  # Number of input tokens
-    output_tokens = outputs.sequences.shape[1]  # Total tokens (input + generated)
-    generated_tokens = output_tokens - input_tokens
-    
-    print(f"Prefilling tokens: {input_tokens}")
-    print(f"Generated tokens: {generated_tokens}")
-    print(f"Total tokens: {output_tokens}")
+        segment_data = []
 
-    # Save output (processor handles device internally)
-    txt_filename = os.path.splitext(os.path.basename(args.txt_path))[0]
-    output_path = os.path.join(args.output_dir, f"{txt_filename}_generated.wav")
-    os.makedirs(args.output_dir, exist_ok=True)
-    
-    processor.save_audio(
-        outputs.speech_outputs[0], # First (and only) batch item
-        output_path=output_path,
-    )
-    print(f"Saved output to {output_path}")
-    
-    # Print summary
-    print("\n" + "="*50)
-    print("GENERATION SUMMARY")
-    print("="*50)
-    print(f"Input file: {args.txt_path}")
-    print(f"Output file: {output_path}")
-    print(f"Speaker names: {args.speaker_names}")
-    print(f"Number of unique speakers: {len(set(speaker_numbers))}")
-    print(f"Number of segments: {len(scripts)}")
-    print(f"Prefilling tokens: {input_tokens}")
-    print(f"Generated tokens: {generated_tokens}")
-    print(f"Total tokens: {output_tokens}")
-    print(f"Generation time: {generation_time:.2f} seconds")
-    print(f"Audio duration: {audio_duration:.2f} seconds")
-    print(f"RTF (Real Time Factor): {rtf:.2f}x")
-    
-    print("="*50)
+        for script, speaker_num in zip(scripts, speaker_numbers):
+            speaker_name = speaker_name_mapping.get(speaker_num, f"Speaker {speaker_num}")
+            voice_path = speaker_voice_map[speaker_num]
+            seg_inputs = processor(
+                text=[script],
+                voice_samples=[[voice_path]],
+                padding=True,
+                return_tensors="pt",
+                return_attention_mask=True,
+            )
+            for k, v in seg_inputs.items():
+                if torch.is_tensor(v):
+                    seg_inputs[k] = v.to(target_device)
+
+            print(f"Generating audio for Speaker {speaker_num} ('{speaker_name}')")
+            seg_outputs = model.generate(
+                **seg_inputs,
+                max_new_tokens=None,
+                cfg_scale=args.cfg_scale,
+                tokenizer=processor.tokenizer,
+                generation_config={'do_sample': False},
+                verbose=True,
+            )
+            seg_waveform = seg_outputs.speech_outputs[0].cpu()
+            seg_waveform = seg_waveform.squeeze()
+            segment_data.append({
+                'speaker_num': speaker_num,
+                'speaker_name': speaker_name,
+                'waveform': seg_waveform,
+                'samples': seg_waveform.shape[-1],
+            })
+
+        # Build per-speaker tracks inserting silence for others
+        tracks: Dict[str, torch.Tensor] = {
+            sn: torch.zeros(0, dtype=segment_data[0]['waveform'].dtype) for sn in unique_speaker_numbers
+        }
+        for seg in segment_data:
+            seg_wave = seg['waveform']
+            seg_samples = seg['samples']
+            for sn in unique_speaker_numbers:
+                if sn == seg['speaker_num']:
+                    tracks[sn] = torch.cat([tracks[sn], seg_wave], dim=-1)
+                else:
+                    tracks[sn] = torch.cat([
+                        tracks[sn],
+                        torch.zeros(seg_samples, dtype=seg_wave.dtype)
+                    ], dim=-1)
+
+        os.makedirs(args.output_dir, exist_ok=True)
+        for sn, track in tracks.items():
+            speaker_name = speaker_name_mapping.get(sn, f"Speaker {sn}")
+            sanitized_name = re.sub(r"\W+", "_", speaker_name)
+            output_path = os.path.join(args.output_dir, f"{sanitized_name}_track.wav")
+            processor.save_audio(track, output_path=output_path)
+            print(f"Saved track for {speaker_name} to {output_path}")
+
+        print("\n" + "="*50)
+        print("GENERATION SUMMARY")
+        print("="*50)
+        print(f"Input file: {args.txt_path}")
+        print(f"Speaker names: {args.speaker_names}")
+        print(f"Number of unique speakers: {len(unique_speaker_numbers)}")
+        print(f"Number of segments: {len(scripts)}")
+        print("="*50)
+
+    else:
+        # Prepare inputs for the model (single track)
+        inputs = processor(
+            text=[full_script], # Wrap in list for batch processing
+            voice_samples=[voice_samples], # Wrap in list for batch processing
+            padding=True,
+            return_tensors="pt",
+            return_attention_mask=True,
+        )
+
+        # Move tensors to target device
+        for k, v in inputs.items():
+            if torch.is_tensor(v):
+                inputs[k] = v.to(target_device)
+
+        print(f"Starting generation with cfg_scale: {args.cfg_scale}")
+
+        # Generate audio
+        start_time = time.time()
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=None,
+            cfg_scale=args.cfg_scale,
+            tokenizer=processor.tokenizer,
+            generation_config={'do_sample': False},
+            verbose=True,
+        )
+        generation_time = time.time() - start_time
+        print(f"Generation time: {generation_time:.2f} seconds")
+
+        # Calculate audio duration and additional metrics
+        if outputs.speech_outputs and outputs.speech_outputs[0] is not None:
+            outputs.speech_outputs[0] = outputs.speech_outputs[0].cpu().squeeze()  # Ensure 1D tensor
+            sample_rate = 24000
+            audio_samples = outputs.speech_outputs[0].shape[-1] if len(outputs.speech_outputs[0].shape) > 0 else len(outputs.speech_outputs[0])
+            audio_duration = audio_samples / sample_rate
+            rtf = generation_time / audio_duration if audio_duration > 0 else float('inf')
+
+            print(f"Generated audio duration: {audio_duration:.2f} seconds")
+            print(f"RTF (Real Time Factor): {rtf:.2f}x")
+        else:
+            print("No audio output generated")
+
+        # Calculate token metrics
+        input_tokens = inputs['input_ids'].shape[1]
+        output_tokens = outputs.sequences.shape[1]
+        generated_tokens = output_tokens - input_tokens
+
+        print(f"Prefilling tokens: {input_tokens}")
+        print(f"Generated tokens: {generated_tokens}")
+        print(f"Total tokens: {output_tokens}")
+
+        # Save output
+        txt_filename = os.path.splitext(os.path.basename(args.txt_path))[0]
+        output_path = os.path.join(args.output_dir, f"{txt_filename}_generated.wav")
+        os.makedirs(args.output_dir, exist_ok=True)
+
+        processor.save_audio(
+            outputs.speech_outputs[0],
+            output_path=output_path,
+        )
+        print(f"Saved output to {output_path}")
+
+        print("\n" + "="*50)
+        print("GENERATION SUMMARY")
+        print("="*50)
+        print(f"Input file: {args.txt_path}")
+        print(f"Output file: {output_path}")
+        print(f"Speaker names: {args.speaker_names}")
+        print(f"Number of unique speakers: {len(set(speaker_numbers))}")
+        print(f"Number of segments: {len(scripts)}")
+        print(f"Prefilling tokens: {input_tokens}")
+        print(f"Generated tokens: {generated_tokens}")
+        print(f"Total tokens: {output_tokens}")
+        print(f"Generation time: {generation_time:.2f} seconds")
+        print(f"Audio duration: {audio_duration:.2f} seconds")
+        print(f"RTF (Real Time Factor): {rtf:.2f}x")
+
+        print("="*50)
 
 if __name__ == "__main__":
     main()
