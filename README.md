@@ -130,7 +130,7 @@ We observed users may encounter occasional instability when synthesizing Chinese
 - Using the Large model variant, which is considerably more stable.
 - If you found the generated voice speak too fast. Please try to chunk your text with multiple speaker turns with same speaker label.
 
-We'd like to thank [PsiPi](https://huggingface.co/PsiPi) for sharing an interesting way for emotion control. Detials can be found via [discussion12](https://huggingface.co/microsoft/VibeVoice-1.5B/discussions/12).
+We'd like to thank [PsiPi](https://huggingface.co/PsiPi) for sharing an interesting way for emotion control. Details can be found via [discussion12](https://huggingface.co/microsoft/VibeVoice-1.5B/discussions/12).
 
 ### Usage 1: Launch Gradio demo
 ```bash
