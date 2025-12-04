@@ -813,6 +813,8 @@ class TokenizerEncoder(nn.Module):
         return x
 
 
+=======
+>>>>>>> upstream/main
 class TokenizerDecoder(nn.Module):
     """
     Decoder component for the VibeVoice tokenizer that converts latent representations back to audio.
@@ -949,7 +951,7 @@ class TokenizerDecoder(nn.Module):
         x = self.forward_features(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
         x = self.head(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
         return x
-    
+
 
 @dataclass
 class VibeVoiceTokenizerEncoderOutput:
@@ -998,7 +1000,8 @@ class VibeVoiceTokenizerEncoderOutput:
     def mode(self):
         """Return the distribution mode (which is the mean for Gaussian)."""
         return self.mean
-    
+
+
 class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
     """VibeVoice speech tokenizer model combining encoder and decoder for acoustic tokens"""
     

@@ -32,7 +32,9 @@ dependencies = [
     "gradio",
     "av",
     "aiortc",
-    "python-dotenv"
+    "python-dotenv",
+    "uvicorn[standard]",
+    "fastapi"
 ]
 
 
