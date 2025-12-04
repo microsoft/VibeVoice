@@ -19,6 +19,12 @@ import soundfile as sf
 import torch
 import os
 import traceback
+import re
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 
 from vibevoice.modular.configuration_vibevoice import VibeVoiceConfig
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
@@ -29,6 +35,26 @@ from transformers import set_seed
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
+
+# Precompiled regex for stripping labels/stage directions from spoken text
+LABEL_RE = re.compile(r"^\s*(?:speaker|host|guest|narrator|spk|voice)\s*\d*\s*[:\-]\s*", re.IGNORECASE)
+STAGE_RE = re.compile(r"(\[[^\]]+\]|\([^)]+\)|\{[^}]+\})")
+
+
+def sanitize_line_for_spoken_text(text: str) -> str:
+    """Remove role labels and stage directions from a single line of text.
+
+    This helps avoid the model literally saying things like "Speaker:" or "[laughs]".
+    """
+    t = text.strip()
+    t = LABEL_RE.sub("", t)
+    t = STAGE_RE.sub("", t)
+    # Drop any <voice> style tags if present
+    t = re.sub(r"</?voice[^>]*>", "", t, flags=re.IGNORECASE)
+    # Collapse whitespace and strip outer quotes
+    t = re.sub(r"\s+", " ", t).strip().strip('"').strip("'")
+    return t
 
 
 class VibeVoiceDemo:
@@ -249,12 +275,21 @@ class VibeVoiceDemo:
                     continue
                     
                 # Check if line already has speaker format
-                if line.startswith('Speaker ') and ':' in line:
-                    formatted_script_lines.append(line)
+                m = re.match(r'^\s*Speaker\s+(\d+)\s*:\s*(.*)$', line, re.IGNORECASE)
+                if m:
+                    existing_id = int(m.group(1))
+                    content = m.group(2)
+                    cleaned = sanitize_line_for_spoken_text(content)
+                    if not cleaned:
+                        continue
+                    formatted_script_lines.append(f"Speaker {existing_id}: {cleaned}")
                 else:
                     # Auto-assign to speakers in rotation
                     speaker_id = len(formatted_script_lines) % num_speakers
-                    formatted_script_lines.append(f"Speaker {speaker_id}: {line}")
+                    cleaned = sanitize_line_for_spoken_text(line)
+                    if not cleaned:
+                        continue
+                    formatted_script_lines.append(f"Speaker {speaker_id}: {cleaned}")
             
             formatted_script = '\n'.join(formatted_script_lines)
             log += f"📝 Formatted script with {len(formatted_script_lines)} turns\n\n"
@@ -1054,7 +1089,8 @@ Or paste text directly and it will auto-assign speakers.""",
             fn=generate_podcast_wrapper,
             inputs=[num_speakers, script_input] + speaker_selections + [cfg_scale],
             outputs=[audio_output, complete_audio_output, log_output, streaming_status, generate_btn, stop_btn],
-            queue=True  # Enable Gradio's built-in queue
+            queue=True,  # Enable Gradio's built-in queue
+            api_name="generate"
         )
         
         # Connect stop button
@@ -1166,36 +1202,52 @@ def convert_to_16_bit_wav(data):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="VibeVoice Gradio Demo")
+    # Defaults from environment variables (loaded via .env if python-dotenv is installed)
+    model_path_default = os.environ.get("VIBEVOICE_MODEL_PATH", "/tmp/vibevoice-model")
+    computed_device_default = ("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+    device_default = os.environ.get("VIBEVOICE_DEVICE", computed_device_default)
+    inference_steps_default = int(os.environ.get("VIBEVOICE_INFERENCE_STEPS", "10"))
+    share_default = os.environ.get("VIBEVOICE_SHARE", "").lower() in ("1", "true", "yes", "y", "on")
+    port_default = int(os.environ.get("VIBEVOICE_PORT", "7860"))
+    show_api_default = os.environ.get("VIBEVOICE_SHOW_API", "").lower() in ("1", "true", "yes", "y", "on")
+
     parser.add_argument(
         "--model_path",
         type=str,
-        default="/tmp/vibevoice-model",
-        help="Path to the VibeVoice model directory",
+        default=model_path_default,
+        help="Path to the VibeVoice model directory (env: VIBEVOICE_MODEL_PATH)",
     )
     parser.add_argument(
         "--device",
         type=str,
-        default=("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")),
-        help="Device for inference: cuda | mps | cpu",
+        default=device_default,
+        help="Device for inference: cuda | mps | cpu (env: VIBEVOICE_DEVICE)",
     )
     parser.add_argument(
         "--inference_steps",
         type=int,
-        default=10,
-        help="Number of inference steps for DDPM (not exposed to users)",
+        default=inference_steps_default,
+        help="Number of inference steps for DDPM (env: VIBEVOICE_INFERENCE_STEPS)",
     )
     parser.add_argument(
         "--share",
         action="store_true",
-        help="Share the demo publicly via Gradio",
+        default=share_default,
+        help="Share the demo publicly via Gradio (env: VIBEVOICE_SHARE)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=7860,
-        help="Port to run the demo on",
+        default=port_default,
+        help="Port to run the demo on (env: VIBEVOICE_PORT)",
     )
-    
+    parser.add_argument(
+        "--show_api",
+        action="store_true",
+        default=show_api_default,
+        help="Show the Gradio API docs page (env: VIBEVOICE_SHOW_API)",
+    )
+
     return parser.parse_args()
 
 
@@ -1230,10 +1282,10 @@ def main():
             default_concurrency_limit=1  # Process one request at a time
         ).launch(
             share=args.share,
-            # server_port=args.port,
+            server_port=args.port,
             server_name="0.0.0.0" if args.share else "127.0.0.1",
             show_error=True,
-            show_api=False  # Hide API docs for cleaner interface
+            show_api=args.show_api  # Toggle API docs page
         )
     except KeyboardInterrupt:
         print("\n🛑 Shutting down gracefully...")
