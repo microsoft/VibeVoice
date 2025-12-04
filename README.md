@@ -1,6 +1,6 @@
 <div align="center">
 
-## 🎙️ VibeVoice: A Frontier Long Conversational Text-to-Speech Model
+## 🎙️ VibeVoice: A Frontier Open-Source Voice AI
 [![Project Page](https://img.shields.io/badge/Project-Page-blue?logo=microsoft)](https://microsoft.github.io/VibeVoice)
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Collection-orange?logo=huggingface)](https://huggingface.co/collections/microsoft/vibevoice-68a2ef24a875c44be47b034f)
 [![Technical Report](https://img.shields.io/badge/Technical-Report-red?logo=adobeacrobatreader)](https://arxiv.org/pdf/2508.19205)
@@ -16,16 +16,34 @@
 </picture>
 </div>
 
+<div align="left">
 
-**2025-09-05: VibeVoice is an open-source research framework intended to advance collaboration in the speech synthesis community. After release, we discovered instances where the tool was used in ways inconsistent with the stated intent. Since responsible use of AI is one of Microsoft’s guiding principles, we have disabled this repo until we are confident that out-of-scope use is no longer possible.**
+<h3>📰 News</h3>
 
+<img src="https://img.shields.io/badge/Status-New-brightgreen?style=flat" alt="New" />
+<img src="https://img.shields.io/badge/Feature-Realtime_TTS-blue?style=flat&logo=soundcharts" alt="Realtime TTS" />
+
+<strong>2025-12-03: 📣 We open-sourced <strong>VibeVoice‑Realtime‑0.5B</strong>, a real‑time text‑to‑speech model that supports streaming text input.</strong>
 <br>
+<a href="https://github.com/user-attachments/assets/c4fb9be1-e721-41c7-9260-5890b49c1a19" target="_blank">▶️ Watch demo video</a>
+&nbsp;•&nbsp;
+<a href="https://github.com/user-attachments/assets/9aa8ab3c-681d-4a02-b9ea-3f54ffd180b2" target="_blank">🎧 Listen to generated example</a>
+
+</div>
+
+2025-09-05: VibeVoice is an open-source research framework intended to advance collaboration in the speech synthesis community. After release, we discovered instances where the tool was used in ways inconsistent with the stated intent. Since responsible use of AI is one of Microsoft’s guiding principles, we have disabled this repo until we are confident that out-of-scope use is no longer possible.
+
+
+### Overview
 
 VibeVoice is a novel framework designed for generating **expressive**, **long-form**, **multi-speaker** conversational audio, such as podcasts, from text. It addresses significant challenges in traditional Text-to-Speech (TTS) systems, particularly in scalability, speaker consistency, and natural turn-taking.
 
-A core innovation of VibeVoice is its use of continuous speech tokenizers (Acoustic and Semantic) operating at an ultra-low frame rate of 7.5 Hz. These tokenizers efficiently preserve audio fidelity while significantly boosting computational efficiency for processing long sequences. VibeVoice employs a [next-token diffusion](https://arxiv.org/abs/2412.08635) framework, leveraging a Large Language Model (LLM) to understand textual context and dialogue flow, and a diffusion head to generate high-fidelity acoustic details.
+VibeVoice currently includes two model variants:
 
-The model can synthesize speech up to **90 minutes** long with up to **4 distinct speakers**, surpassing the typical 1-2 speaker limits of many prior models. 
+- **Long-form multi-speaker model**: Synthesizes conversational/single-speaker speech up to **90 minutes** with up to **4 distinct speakers**, surpassing the typical 1–2 speaker limits of many prior models.
+- **Realtime streaming TTS model**: Produces initial audible speech in ~**300 ms** and supports **streaming text input** for single-speaker **realtime** speech generation; designed for low-latency generation.
+
+A core innovation of VibeVoice is its use of continuous speech tokenizers (Acoustic and Semantic) operating at an ultra-low frame rate of 7.5 Hz. These tokenizers efficiently preserve audio fidelity while significantly boosting computational efficiency for processing long sequences. VibeVoice employs a [next-token diffusion](https://arxiv.org/abs/2412.08635) framework, leveraging a Large Language Model (LLM) to understand textual context and dialogue flow, and a diffusion head to generate high-fidelity acoustic details.
 
 
 <p align="left">
