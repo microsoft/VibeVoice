@@ -1,6 +1,6 @@
 <div align="center">
 
-## 🎙️ VibeVoice: A Frontier Open-Source Voice AI
+## 🎙️ VibeVoice: Frontier Open-Source Voice AI
 [![Project Page](https://img.shields.io/badge/Project-Page-blue?logo=microsoft)](https://microsoft.github.io/VibeVoice)
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Collection-orange?logo=huggingface)](https://huggingface.co/collections/microsoft/vibevoice-68a2ef24a875c44be47b034f)
 [![Technical Report](https://img.shields.io/badge/Technical-Report-red?logo=adobeacrobatreader)](https://arxiv.org/pdf/2508.19205)
@@ -23,11 +23,12 @@
 <img src="https://img.shields.io/badge/Status-New-brightgreen?style=flat" alt="New" />
 <img src="https://img.shields.io/badge/Feature-Realtime_TTS-blue?style=flat&logo=soundcharts" alt="Realtime TTS" />
 
-<strong>2025-12-03: 📣 We open-sourced <strong>VibeVoice‑Realtime‑0.5B</strong>, a real‑time text‑to‑speech model that supports streaming text input.</strong>
+<strong>2025-12-03: 📣 We open-sourced <a href="docs/vibevoice-realtime-0.5b.md"><strong>VibeVoice‑Realtime‑0.5B</strong></a>, a real‑time text‑to‑speech model that supports streaming text input and robust long-form speech generation.</strong>
 <br>
-<a href="https://github.com/user-attachments/assets/c4fb9be1-e721-41c7-9260-5890b49c1a19" target="_blank">▶️ Watch demo video</a>
-&nbsp;•&nbsp;
-<a href="https://github.com/user-attachments/assets/9aa8ab3c-681d-4a02-b9ea-3f54ffd180b2" target="_blank">🎧 Listen to generated example</a>
+
+https://github.com/user-attachments/assets/0901d274-f6ae-46ef-a0fd-3c4fba4f76dc
+
+> (Launch your own realtime demo via the websocket example in [Usage](docs/vibevoice-realtime-0.5b.md#usage-1-launch-real-time-websocket-demo)).
 
 </div>
 
@@ -41,7 +42,7 @@ VibeVoice is a novel framework designed for generating **expressive**, **long-fo
 VibeVoice currently includes two model variants:
 
 - **Long-form multi-speaker model**: Synthesizes conversational/single-speaker speech up to **90 minutes** with up to **4 distinct speakers**, surpassing the typical 1–2 speaker limits of many prior models.
-- **Realtime streaming TTS model**: Produces initial audible speech in ~**300 ms** and supports **streaming text input** for single-speaker **realtime** speech generation; designed for low-latency generation.
+- **[Realtime streaming TTS model](docs/vibevoice-realtime-0.5b.md)**: Produces initial audible speech in ~**300 ms** and supports **streaming text input** for single-speaker **real-time** speech generation; designed for low-latency generation.
 
 A core innovation of VibeVoice is its use of continuous speech tokenizers (Acoustic and Semantic) operating at an ultra-low frame rate of 7.5 Hz. These tokenizers efficiently preserve audio fidelity while significantly boosting computational efficiency for processing long sequences. VibeVoice employs a [next-token diffusion](https://arxiv.org/abs/2412.08635) framework, leveraging a Large Language Model (LLM) to understand textual context and dialogue flow, and a diffusion head to generate high-fidelity acoustic details.
 
