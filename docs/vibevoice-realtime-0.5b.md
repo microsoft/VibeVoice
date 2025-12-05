@@ -111,11 +111,11 @@ Due to network latency, the time when audio playback is heard may exceed the ~30
 python demo/vibevoice_realtime_demo.py --model_path microsoft/VibeVoice-Realtime-0.5B
 ```
 
-Tip: You can also deploy and run the real-time demo on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb).
+Tip: Just try it on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb).
 
 ### Usage 2: Inference from files directly
 ```bash
-# We provide some LLM generated example scripts under demo/text_examples/ for demo
+# We provide some example scripts under demo/text_examples/ for demo
 python demo/realtime_model_inference_from_file.py --model_path microsoft/VibeVoice-Realtime-0.5B --txt_path demo/text_examples/1p_vibevoice.txt --speaker_name Carter
 ```
 
