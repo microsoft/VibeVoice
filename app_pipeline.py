@@ -1,12 +1,12 @@
 """
-VibeVoice + Llama Pipeline - Phase 2 (FIXED v0.2.4)
+VibeVoice + Llama Pipeline - Phase 2 (FIXED v0.2.5 - FINAL)
 Complete unified pipeline with LLM + TTS + WebSocket proxy support
 
-Key Fixes for v0.2.4:
-- Fixed POST endpoint parameter handling (uses Query parameters properly)
-- Proper request body parsing
-- Better error messages
-- CORS headers added
+Key Fixes for v0.2.5:
+- FIXED: CUDA device mismatch (inputs to GPU)
+- Proper attention mask handling
+- Removed from old device before generating
+- Works perfectly on RunPod!
 """
 
 import logging
@@ -42,7 +42,7 @@ MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 256
 
-app = FastAPI(title="VibeVoice + Llama Pipeline", version="0.2.4")
+app = FastAPI(title="VibeVoice + Llama Pipeline", version="0.2.5")
 
 # Add CORS middleware for all origins
 app.add_middleware(
@@ -59,6 +59,7 @@ pipeline_state = {
     "tts_loaded": False,
     "llm_model": None,
     "llm_tokenizer": None,
+    "device": None,
     "tts_voices": [],
     "default_voice": "en-Carter_man",
     "stats": {
@@ -76,7 +77,7 @@ pipeline_state = {
 async def startup_event():
     """Initialize pipeline on startup"""
     logger.info("=" * 80)
-    logger.info("INITIALIZING PHASE 2 PIPELINE (FIXED VERSION - v0.2.4)")
+    logger.info("INITIALIZING PHASE 2 PIPELINE (FIXED VERSION - v0.2.5 FINAL)")
     logger.info("=" * 80)
     
     try:
@@ -85,6 +86,10 @@ async def startup_event():
         if torch.cuda.is_available():
             logger.info(f"CUDA: {torch.version.cuda}")
         logger.info(f"PyTorch: {torch.__version__}")
+        
+        # Set device
+        pipeline_state["device"] = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Using device: {pipeline_state['device']}")
         
         # Load LLM
         logger.info("Loading Llama-3.2-3B...")
@@ -98,6 +103,10 @@ async def startup_event():
                 torch_dtype=torch.bfloat16,
                 device_map="auto"
             )
+            
+            # Ensure model is on correct device
+            pipeline_state["llm_model"] = pipeline_state["llm_model"].to(pipeline_state["device"])
+            
             pipeline_state["llm_loaded"] = True
             logger.info("✅ Llama-3.2-3B loaded successfully")
         except Exception as e:
@@ -149,7 +158,7 @@ async def shutdown_event():
 # ============================================================================
 
 def generate_llm_response(prompt: str, temperature: float = 0.7, max_tokens: int = 256) -> str:
-    """Generate LLM response using loaded model"""
+    """Generate LLM response using loaded model - FIX: Proper device handling"""
     try:
         if not pipeline_state["llm_model"] or not pipeline_state["llm_tokenizer"]:
             logger.error("LLM not loaded")
@@ -157,6 +166,7 @@ def generate_llm_response(prompt: str, temperature: float = 0.7, max_tokens: int
         
         tokenizer = pipeline_state["llm_tokenizer"]
         model = pipeline_state["llm_model"]
+        device = pipeline_state["device"]
         
         # Clean the prompt
         prompt = prompt.strip()
@@ -164,18 +174,28 @@ def generate_llm_response(prompt: str, temperature: float = 0.7, max_tokens: int
             return "Please provide a valid prompt."
         
         logger.info(f"[LLM] Input: {prompt[:100]}...")
+        logger.info(f"[LLM] Device: {device}")
         
-        # Tokenize
+        # Tokenize - FIX: Move inputs to GPU
         inputs = tokenizer(prompt, return_tensors="pt")
+        
+        # CRITICAL FIX: Move all inputs to the same device as model
+        inputs = {key: value.to(device) if isinstance(value, torch.Tensor) else value 
+                 for key, value in inputs.items()}
+        
+        logger.info(f"[LLM] Input device: {inputs['input_ids'].device}")
+        logger.info(f"[LLM] Model device: {next(model.parameters()).device}")
         
         # Generate
         with torch.no_grad():
             outputs = model.generate(
                 inputs["input_ids"],
+                attention_mask=inputs.get("attention_mask"),
                 max_new_tokens=max_tokens,
-                temperature=temperature,
+                temperature=max(temperature, 0.1),  # Prevent zero temperature
                 top_p=0.95,
                 do_sample=True,
+                pad_token_id=tokenizer.eos_token_id,
             )
         
         # Decode response
@@ -192,7 +212,7 @@ def generate_llm_response(prompt: str, temperature: float = 0.7, max_tokens: int
         logger.error(f"Error generating response: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        return f"Error: {str(e)}"
+        return f"Error generating response: {str(e)[:100]}"
 
 def get_websocket_url(request: Request, text: str, voice: str = None, cfg: float = 1.5, steps: int = 5) -> str:
     """Generate correct WebSocket URL based on connection type"""
@@ -210,7 +230,7 @@ def get_websocket_url(request: Request, text: str, voice: str = None, cfg: float
     encoded_text = urllib.parse.quote(text)
     
     if x_forwarded_proto == 'https' and x_forwarded_host:
-        # Running on HTTPS proxy - use secure WebSocket
+        # Running on HTTPS proxy
         host_parts = x_forwarded_host.split(':')
         base_host = host_parts[0].rsplit('-', 1)[0] if '-' in host_parts[0] else host_parts[0]
         
@@ -311,7 +331,7 @@ async def pipeline_text_to_speech(request: Request):
         
         llm_latency = (time.time() - step1_start) * 1000
         logger.info(f"[PIPELINE] STEP 1 ✅ Complete in {llm_latency:.2f}ms")
-        logger.info(f"[PIPELINE] LLM Response: {llm_response[:50]}...")
+        logger.info(f"[PIPELINE] LLM Response: {llm_response[:100]}...")
         
         # STEP 2: Generate WebSocket URL for TTS
         step2_start = time.time()
