@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VibeVoice + Llama Pipeline - AI Voice Assistant</title>
+    <title>VibeVoice + Llama - Real-time Speech-to-Speech</title>
     <style>
         * {
             margin: 0;
@@ -12,91 +12,60 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             padding: 20px;
         }
 
         .container {
             background: white;
-            border-radius: 20px;
+            border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 800px;
+            max-width: 700px;
             width: 100%;
             padding: 40px;
-            animation: slideIn 0.5s ease-out;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
         }
 
         .header {
             text-align: center;
-            margin-bottom: 40px;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 20px;
+            margin-bottom: 30px;
         }
 
         .header h1 {
-            color: #667eea;
-            font-size: 2.5em;
+            font-size: 28px;
+            color: #333;
             margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .header p {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .status-bar {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 30px;
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 10px;
-        }
-
-        .status-item {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px;
-            background: white;
-            border-radius: 8px;
         }
 
         .status-indicator {
-            width: 12px;
-            height: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
+            background: #999;
             animation: pulse 2s infinite;
         }
 
-        .status-indicator.online {
-            background: #4caf50;
+        .status-dot.connected {
+            background: #4CAF50;
         }
 
-        .status-indicator.offline {
+        .status-dot.error {
             background: #f44336;
-            animation: none;
         }
 
         @keyframes pulse {
@@ -104,169 +73,137 @@
             50% { opacity: 0.5; }
         }
 
+        .connection-info {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
 
-        .form-group label {
+        label {
             display: block;
             margin-bottom: 8px;
+            font-weight: 500;
             color: #333;
-            font-weight: 600;
-            font-size: 1em;
+            font-size: 14px;
         }
 
-        textarea, input[type="range"] {
+        input[type="text"],
+        textarea {
             width: 100%;
             padding: 12px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid #ddd;
             border-radius: 8px;
-            font-size: 1em;
+            font-size: 14px;
             font-family: inherit;
-            transition: all 0.3s ease;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            background-color: #fafafa;
         }
 
         textarea {
             resize: vertical;
-            min-height: 100px;
-            font-family: 'Segoe UI', sans-serif;
+            min-height: 80px;
         }
 
-        textarea:focus, input[type="range"]:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        input[type="range"] {
-            padding: 0;
-            height: 6px;
-            border: none;
-            -webkit-appearance: none;
-            appearance: none;
-            background: linear-gradient(to right, #667eea, #764ba2);
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            background: #667eea;
-            cursor: pointer;
-            border-radius: 50%;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-
-        input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            background: #667eea;
-            cursor: pointer;
-            border-radius: 50%;
-            border: none;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-
-        .slider-values {
-            display: flex;
-            gap: 30px;
-            margin-top: 10px;
-            font-size: 0.9em;
-            color: #666;
-        }
-
-        .control-buttons {
+        .button-group {
             display: flex;
             gap: 10px;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
         button {
             flex: 1;
-            padding: 14px;
+            padding: 12px 20px;
             border: none;
             border-radius: 8px;
-            font-size: 1.1em;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            transition: all 0.3s;
         }
 
-        .btn-submit {
+        .btn-primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            flex: 2;
         }
 
-        .btn-submit:hover:not(:disabled) {
+        .btn-primary:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
 
-        .btn-submit:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
+        .btn-primary:active {
+            transform: translateY(0);
         }
 
-        .btn-clear {
-            background: #f5f5f5;
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
             color: #333;
         }
 
-        .btn-clear:hover {
+        .btn-secondary:hover {
             background: #e0e0e0;
         }
 
         .response-section {
             background: #f9f9f9;
             padding: 20px;
-            border-radius: 10px;
-            margin-top: 30px;
-            border-left: 4px solid #667eea;
-        }
-
-        .response-title {
-            color: #667eea;
-            font-weight: 600;
-            margin-bottom: 10px;
-            font-size: 1.1em;
-        }
-
-        .response-content {
-            background: white;
-            padding: 15px;
             border-radius: 8px;
-            margin-bottom: 15px;
-            min-height: 60px;
-            color: #333;
-            line-height: 1.6;
-            word-wrap: break-word;
-            max-height: 200px;
-            overflow-y: auto;
+            margin-bottom: 20px;
         }
 
-        .response-empty {
+        .response-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .response-text {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            color: #333;
+            font-size: 14px;
+            line-height: 1.6;
+            min-height: 40px;
+        }
+
+        .response-text.empty {
             color: #999;
             font-style: italic;
-            text-align: center;
-        }
-
-        .audio-controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            flex-wrap: wrap;
         }
 
         .audio-player {
-            flex: 1;
-            min-width: 200px;
+            margin-top: 15px;
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .audio-player.active {
+            display: block;
         }
 
         audio {
@@ -274,571 +211,419 @@
             height: 40px;
         }
 
-        .websocket-status {
-            display: inline-block;
-            padding: 8px 12px;
-            background: #e3f2fd;
-            color: #1976d2;
-            border-radius: 6px;
-            font-size: 0.9em;
-            word-break: break-all;
-            max-height: 100px;
-            overflow-y: auto;
-            font-family: monospace;
-        }
-
-        .latency-info {
+        .stats {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             margin-top: 15px;
         }
 
-        .latency-box {
+        .stat-box {
             background: white;
-            padding: 12px;
-            border-radius: 8px;
+            padding: 10px;
+            border-radius: 6px;
             text-align: center;
-            border-top: 3px solid #667eea;
+            font-size: 12px;
         }
 
-        .latency-box .label {
-            font-size: 0.85em;
-            color: #666;
-            margin-bottom: 5px;
+        .stat-label {
+            color: #999;
+            margin-bottom: 4px;
         }
 
-        .latency-box .value {
-            font-size: 1.4em;
-            font-weight: bold;
+        .stat-value {
+            font-weight: 600;
             color: #667eea;
+            font-size: 14px;
         }
 
-        .error-message {
-            background: #ffebee;
-            color: #c62828;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 15px;
-            display: none;
-        }
-
-        .success-message {
-            background: #e8f5e9;
-            color: #2e7d32;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 15px;
-            display: none;
-        }
-
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e0e0e0;
-            text-align: center;
-            color: #666;
-            font-size: 0.9em;
-        }
-
-        .pipeline-info {
-            background: #e8eaf6;
+        .logs {
+            background: #1e1e1e;
+            color: #00ff00;
             padding: 15px;
             border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #667eea;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
         }
 
-        .pipeline-info p {
-            margin: 5px 0;
-            color: #333;
-            font-size: 0.95em;
+        .log-entry {
+            margin-bottom: 4px;
         }
 
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            vertical-align: middle;
-            margin-right: 8px;
+        .log-info {
+            color: #00ff00;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .log-success {
+            color: #00ff00;
         }
 
-        .connection-mode {
-            background: #fff3e0;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 0.9em;
-            color: #e65100;
+        .log-error {
+            color: #ff6b6b;
         }
 
-        @media (max-width: 600px) {
-            .container {
-                padding: 20px;
-            }
-
-            .header h1 {
-                font-size: 1.8em;
-            }
-
-            .status-bar {
-                flex-direction: column;
-            }
-
-            .control-buttons {
-                flex-direction: column;
-            }
-
-            .btn-submit {
-                flex: 1;
-            }
-
-            .latency-info {
-                grid-template-columns: 1fr;
-            }
+        .log-warning {
+            color: #ffd700;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎤 VibeVoice + Llama Pipeline</h1>
-            <p>AI Voice Assistant - Text to Speech with LLM Response</p>
-        </div>
-
-        <div class="connection-mode">
-            📍 <strong>Connection Mode:</strong> <span id="connectionMode">Detecting...</span>
-        </div>
-
-        <div class="status-bar">
-            <div class="status-item">
-                <div class="status-indicator" id="llmStatus"></div>
-                <span>LLM (Port 8005)</span>
-            </div>
-            <div class="status-item">
-                <div class="status-indicator" id="ttsStatus"></div>
-                <span>TTS (Port 8000)</span>
-            </div>
-            <div class="status-item">
-                <div class="status-indicator" id="wsStatus"></div>
-                <span>WebSocket</span>
+            <h1>🎤 VibeVoice + Llama</h1>
+            <p style="color: #666; margin-bottom: 15px;">Real-time AI Voice Agent</p>
+            <div class="status-indicator">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Initializing...</span>
             </div>
         </div>
 
-        <div class="pipeline-info">
-            <p>📝 <strong>How it works:</strong></p>
-            <p>Type your message → AI generates response → Audio streams in real-time</p>
+        <div class="connection-info" id="connectionInfo">
+            Loading connection info...
         </div>
 
-        <form id="pipelineForm">
+        <form id="mainForm">
             <div class="form-group">
-                <label for="prompt">📝 Your Message</label>
-                <textarea id="prompt" placeholder="Ask me anything..." required></textarea>
+                <label for="userInput">Your Message</label>
+                <textarea id="userInput" placeholder="Type your message here..." required></textarea>
             </div>
 
-            <div class="form-group">
-                <label for="temperature">🌡️ Temperature (Creativity)</label>
-                <input type="range" id="temperature" min="0.1" max="1.0" step="0.1" value="0.7">
-                <div class="slider-values">
-                    <span>More Focused <span id="tempValue">0.7</span> More Creative</span>
-                </div>
+            <div class="button-group">
+                <button type="submit" class="btn-primary" id="sendBtn">
+                    🚀 Send & Generate Audio
+                </button>
+                <button type="button" class="btn-secondary" id="clearBtn">
+                    🔄 Clear
+                </button>
             </div>
-
-            <div class="form-group">
-                <label for="maxTokens">📊 Response Length</label>
-                <input type="range" id="maxTokens" min="50" max="512" step="50" value="256">
-                <div class="slider-values">
-                    <span>Short <span id="tokensValue">256</span> tokens Long</span>
-                </div>
-            </div>
-
-            <div class="control-buttons">
-                <button type="submit" class="btn-submit" id="submitBtn">🚀 Send & Generate Audio</button>
-                <button type="button" class="btn-clear" id="clearBtn">Clear</button>
-            </div>
-
-            <div class="error-message" id="errorMessage"></div>
-            <div class="success-message" id="successMessage"></div>
         </form>
 
         <div class="response-section" id="responseSection" style="display: none;">
-            <div class="response-title">🤖 AI Response</div>
-            <div class="response-content" id="responseContent" class="response-empty">
-                Waiting for response...
+            <div class="response-label">📝 AI Response</div>
+            <div class="response-text" id="responseText">No response yet</div>
+
+            <div class="audio-player" id="audioPlayer">
+                <div class="response-label">🔊 Generated Audio</div>
+                <audio id="audioElement" controls></audio>
             </div>
 
-            <div class="response-title">🔊 Audio Stream</div>
-            <div class="audio-controls">
-                <div class="audio-player">
-                    <audio id="audioPlayer" controls></audio>
-                </div>
-            </div>
-
-            <div id="websocketInfo" style="margin-top: 15px; display: none;">
-                <div class="response-title">🌐 WebSocket Connection</div>
-                <div class="websocket-status" id="wsUrl"></div>
-            </div>
-
-            <div class="latency-info">
-                <div class="latency-box">
-                    <div class="label">LLM Latency</div>
-                    <div class="value" id="llmLatency">-</div>
-                </div>
-                <div class="latency-box">
-                    <div class="label">TTS Latency</div>
-                    <div class="value" id="ttsLatency">-</div>
-                </div>
-                <div class="latency-box">
-                    <div class="label">Total Latency</div>
-                    <div class="value" id="totalLatency">-</div>
-                </div>
-            </div>
+            <div class="stats" id="statsDisplay"></div>
         </div>
 
-        <div class="footer">
-            <p>🚀 Phase 2: LLM + TTS Connected | Version 0.3.1 (WebSocket Proxy Fixed)</p>
-            <p>Backend: Port 8005 | Audio Stream: Port 8000</p>
+        <div class="logs" id="logsContainer">
+            <div class="log-entry log-info">📍 Logs will appear here...</div>
         </div>
     </div>
 
     <script>
-        // ==========================================
-        // AUTO-DETECT CONNECTION MODE & BUILD URLs
-        // ==========================================
-        
-        let API_URL;
-        let WS_BASE;
-        let CONNECTION_MODE;
-        let IS_PROXY = false;
+        // ============================================================
+        // CONFIGURATION
+        // ============================================================
+        const CONFIG = {
+            API_PORT: 8005,
+            TTS_PORT: 8000,
+            WEB_PORT: 8010,
+            PROD_API_PREFIX: '',
+            PROD_WS_PREFIX: '',
+        };
 
-        function detectConnectionMode() {
-            const currentUrl = window.location.href;
-            IS_PROXY = currentUrl.includes('proxy.runpod.net');
-            
-            if (IS_PROXY) {
-                // RunPod HTTPS Proxy Mode
-                CONNECTION_MODE = '🔒 RunPod HTTPS Proxy (Secure)';
-                
-                // Extract the proxy prefix (e.g., "17wlelvk973qxz-8005")
-                const proxyMatch = currentUrl.match(/https?:\/\/([a-z0-9]+-)(8005|8010|8001)/);
-                if (proxyMatch) {
-                    const proxyPrefix = proxyMatch[1].replace('-8005', '').replace('-8010', '').replace('-8001', '');
-                    
-                    // Use HTTPS for API and WSS for WebSocket (required for secure proxy)
-                    API_URL = `https://${proxyPrefix}8005.proxy.runpod.net`;
-                    WS_BASE = `wss://${proxyPrefix}8000.proxy.runpod.net/stream`;
-                } else {
-                    // Fallback
-                    API_URL = `https://${window.location.hostname}`;
-                    WS_BASE = `wss://${window.location.hostname}/stream`;
-                }
-            } else if (window.location.protocol === 'https:') {
-                // Local HTTPS (if running on HTTPS)
-                CONNECTION_MODE = '🔒 Local HTTPS';
-                API_URL = `https://${window.location.hostname}:8005`;
-                WS_BASE = `wss://${window.location.hostname}:8000/stream`;
-            } else {
-                // Local HTTP (development)
-                CONNECTION_MODE = '🌐 Local HTTP (Development)';
-                API_URL = `http://${window.location.hostname}:8005`;
-                WS_BASE = `ws://${window.location.hostname}:8000/stream`;
+        // ============================================================
+        // STATE
+        // ============================================================
+        const state = {
+            isProxy: false,
+            proxyHost: '',
+            apiUrl: '',
+            wsBase: '',
+            isConnected: false,
+            currentAudioChunks: [],
+        };
+
+        // ============================================================
+        // LOGGER
+        // ============================================================
+        class Logger {
+            constructor(containerId) {
+                this.container = document.getElementById(containerId);
+                this.maxLogs = 50;
             }
 
-            console.log('Connection Mode:', CONNECTION_MODE);
-            console.log('API URL:', API_URL);
-            console.log('WebSocket Base:', WS_BASE);
-            console.log('Is Proxy:', IS_PROXY);
-            
-            document.getElementById('connectionMode').textContent = CONNECTION_MODE;
+            log(message, type = 'info') {
+                const entry = document.createElement('div');
+                entry.className = `log-entry log-${type}`;
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                this.container.appendChild(entry);
+                
+                const entries = this.container.querySelectorAll('.log-entry');
+                if (entries.length > this.maxLogs) {
+                    entries[0].remove();
+                }
+                
+                this.container.scrollTop = this.container.scrollHeight;
+            }
+
+            info(msg) { this.log(msg, 'info'); }
+            success(msg) { this.log(msg, 'success'); }
+            error(msg) { this.log(msg, 'error'); }
+            warning(msg) { this.log(msg, 'warning'); }
         }
 
-        // Initialize connection mode on load
-        detectConnectionMode();
+        const logger = new Logger('logsContainer');
 
-        // ==========================================
-        // DOM ELEMENTS
-        // ==========================================
-        
-        const form = document.getElementById('pipelineForm');
-        const promptInput = document.getElementById('prompt');
-        const temperatureInput = document.getElementById('temperature');
-        const maxTokensInput = document.getElementById('maxTokens');
-        const submitBtn = document.getElementById('submitBtn');
-        const clearBtn = document.getElementById('clearBtn');
-        const responseSection = document.getElementById('responseSection');
-        const responseContent = document.getElementById('responseContent');
-        const audioPlayer = document.getElementById('audioPlayer');
-        const llmStatus = document.getElementById('llmStatus');
-        const ttsStatus = document.getElementById('ttsStatus');
-        const wsStatus = document.getElementById('wsStatus');
-        const errorMessage = document.getElementById('errorMessage');
-        const successMessage = document.getElementById('successMessage');
-        const tempValue = document.getElementById('tempValue');
-        const tokensValue = document.getElementById('tokensValue');
-
-        // ==========================================
+        // ============================================================
         // INITIALIZATION
-        // ==========================================
-        
-        checkHealth();
-        setInterval(checkHealth, 5000);
+        // ============================================================
+        async function detectConnection() {
+            try {
+                const currentUrl = window.location.href;
+                const hostname = window.location.hostname;
+                const protocol = window.location.protocol;
 
-        // ==========================================
-        // EVENT LISTENERS
-        // ==========================================
-        
-        temperatureInput.addEventListener('change', (e) => {
-            tempValue.textContent = e.target.value;
-        });
+                logger.info(`Current URL: ${currentUrl}`);
+                logger.info(`Hostname: ${hostname}, Protocol: ${protocol}`);
 
-        maxTokensInput.addEventListener('change', (e) => {
-            tokensValue.textContent = e.target.value;
-        });
+                // Check if running on proxy
+                if (currentUrl.includes('proxy.runpod.net')) {
+                    state.isProxy = true;
+                    state.proxyHost = hostname.split('-')[0];
+                    state.apiUrl = `https://${state.proxyHost}-${CONFIG.API_PORT}.proxy.runpod.net`;
+                    state.wsBase = `wss://${state.proxyHost}-${CONFIG.TTS_PORT}.proxy.runpod.net/stream`;
+                    logger.success('✅ Detected: RunPod HTTPS Proxy (Secure)');
+                } else {
+                    state.isProxy = false;
+                    state.apiUrl = `http://localhost:${CONFIG.API_PORT}`;
+                    state.wsBase = `ws://localhost:${CONFIG.TTS_PORT}/stream`;
+                    logger.success('✅ Detected: Local HTTP (Development)');
+                }
 
-        form.addEventListener('submit', handleSubmit);
-        clearBtn.addEventListener('click', clearForm);
+                logger.info(`API URL: ${state.apiUrl}`);
+                logger.info(`WebSocket Base: ${state.wsBase}`);
 
-        // ==========================================
-        // FUNCTIONS
-        // ==========================================
-        
+                updateConnectionInfo();
+                await checkHealth();
+            } catch (error) {
+                logger.error(`Connection detection error: ${error.message}`);
+            }
+        }
+
+        function updateConnectionInfo() {
+            const connectionMode = state.isProxy ? '🔒 RunPod HTTPS Proxy (Secure)' : '🌐 Local HTTP (Development)';
+            const info = `
+                📍 Mode: ${connectionMode}
+                🔗 API: ${state.apiUrl}
+                📡 WS: ${state.wsBase}
+            `.trim();
+            document.getElementById('connectionInfo').textContent = info;
+        }
+
         async function checkHealth() {
             try {
-                const response = await fetch(`${API_URL}/health`);
-                const data = await response.json();
-
-                llmStatus.classList.toggle('online', data.llm_loaded);
-                llmStatus.classList.toggle('offline', !data.llm_loaded);
-
-                ttsStatus.classList.toggle('online', data.tts_loaded);
-                ttsStatus.classList.toggle('offline', !data.tts_loaded);
-
-                wsStatus.classList.toggle('online', true);
+                const response = await fetch(`${state.apiUrl}/health`);
+                if (response.ok) {
+                    const data = await response.json();
+                    logger.success(`✅ Backend healthy - LLM: ${data.llm_loaded}, TTS: ${data.tts_loaded}`);
+                    updateStatus(true);
+                } else {
+                    logger.error(`Backend returned ${response.status}`);
+                    updateStatus(false);
+                }
             } catch (error) {
-                console.error('Health check error:', error);
-                llmStatus.classList.add('offline');
-                ttsStatus.classList.add('offline');
-                wsStatus.classList.add('offline');
+                logger.error(`Health check failed: ${error.message}`);
+                updateStatus(false);
             }
         }
 
+        function updateStatus(connected) {
+            state.isConnected = connected;
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            
+            if (connected) {
+                dot.className = 'status-dot connected';
+                text.textContent = '🟢 Connected';
+            } else {
+                dot.className = 'status-dot error';
+                text.textContent = '🔴 Disconnected';
+            }
+
+            document.getElementById('sendBtn').disabled = !connected;
+        }
+
+        // ============================================================
+        // WEBSOCKET AUDIO STREAMING
+        // ============================================================
+        function connectWebSocket(wsUrl, onChunk, onComplete, onError) {
+            logger.info(`Connecting to WebSocket: ${wsUrl.substring(0, 80)}...`);
+
+            try {
+                const ws = new WebSocket(wsUrl);
+                let totalChunks = 0;
+
+                ws.onopen = function() {
+                    logger.success('✅ WebSocket connected');
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        totalChunks++;
+                        const data = event.data;
+                        if (data instanceof Blob) {
+                            state.currentAudioChunks.push(data);
+                            logger.info(`📦 Audio chunk ${totalChunks} received: ${(data.size / 1024).toFixed(1)}KB`);
+                            onChunk(data);
+                        }
+                    } catch (e) {
+                        logger.error(`Error processing audio chunk: ${e.message}`);
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    logger.error(`❌ WebSocket error: ${error}`);
+                    if (onError) onError(error);
+                };
+
+                ws.onclose = function() {
+                    logger.success(`✅ WebSocket closed. Total chunks: ${totalChunks}`);
+                    if (totalChunks > 0) {
+                        const audioBlob = new Blob(state.currentAudioChunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        logger.success('✅ Audio ready to play!');
+                        onComplete(audioUrl);
+                    } else {
+                        logger.warning('⚠️ No audio chunks received');
+                    }
+                };
+
+            } catch (error) {
+                logger.error(`WebSocket connection error: ${error.message}`);
+                if (onError) onError(error);
+            }
+        }
+
+        // ============================================================
+        // MAIN REQUEST HANDLER
+        // ============================================================
         async function handleSubmit(e) {
             e.preventDefault();
 
-            const prompt = promptInput.value.trim();
-            const temperature = parseFloat(temperatureInput.value);
-            const maxTokens = parseInt(maxTokensInput.value);
-
-            if (!prompt) {
-                showError('Please enter a message');
+            const userInput = document.getElementById('userInput').value.trim();
+            if (!userInput) {
+                logger.warning('⚠️ Please enter a message');
                 return;
             }
 
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<div class="spinner"></div>Generating...';
-            clearMessage();
+            if (!state.isConnected) {
+                logger.error('❌ Not connected to backend');
+                return;
+            }
+
+            // Reset state
+            state.currentAudioChunks = [];
+            document.getElementById('responseSection').style.display = 'none';
 
             try {
-                const response = await fetch(`${API_URL}/pipeline/text_to_speech`, {
+                logger.info(`📤 Sending request: "${userInput}"`);
+                document.getElementById('sendBtn').disabled = true;
+
+                const startTime = Date.now();
+
+                // Call pipeline endpoint
+                const response = await fetch(`${state.apiUrl}/pipeline/text_to_speech`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        prompt,
-                        temperature,
-                        max_tokens: maxTokens
-                    })
+                        prompt: userInput,
+                        temperature: 0.7,
+                        max_tokens: 256,
+                    }),
                 });
 
                 if (!response.ok) {
-                    throw new Error(`API Error: ${response.statusText}`);
+                    throw new Error(`HTTP ${response.status}`);
                 }
 
                 const data = await response.json();
+                logger.success(`✅ Response received in ${data.total_latency_ms}ms`);
 
-                if (data.status === 'success') {
-                    displayResponse(data);
-                    connectWebSocket(data.audio_url);
-                } else {
-                    showError(`Error: ${data.message || 'Unknown error'}`);
-                }
-            } catch (error) {
-                showError(`Failed to process request: ${error.message}`);
-                console.error('Request error:', error);
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '🚀 Send & Generate Audio';
-            }
-        }
+                // Display LLM response
+                document.getElementById('responseText').textContent = data.llm_response;
+                document.getElementById('responseSection').style.display = 'block';
 
-        function displayResponse(data) {
-            responseSection.style.display = 'block';
-            
-            // Clean response text
-            const cleanResponse = data.llm_response.replace(/<\|im_end\|>/g, '').trim();
-            responseContent.textContent = cleanResponse;
+                // Display stats
+                displayStats({
+                    llm_time: data.llm_latency_ms,
+                    tts_time: data.tts_latency_ms,
+                    total_time: data.total_latency_ms,
+                });
 
-            // Display latencies
-            document.getElementById('llmLatency').textContent = Math.round(data.llm_latency_ms) + 'ms';
-            document.getElementById('ttsLatency').textContent = Math.round(data.tts_latency_ms) + 'ms';
-            document.getElementById('totalLatency').textContent = Math.round(data.total_latency_ms) + 'ms';
-
-            // Show WebSocket URL
-            const wsInfo = document.getElementById('websocketInfo');
-            document.getElementById('wsUrl').textContent = data.audio_url;
-            wsInfo.style.display = 'block';
-
-            showSuccess('Response generated! Connecting to audio stream...');
-        }
-
-        function convertWebSocketUrl(wsUrl) {
-            """
-            KEY FIX: Convert WebSocket URL based on connection type
-            
-            If backend returns ws://localhost:8000/stream?...
-            But we're on HTTPS proxy, convert to: wss://proxy-host:8000/stream?...
-            """
-            if (!wsUrl) return null;
-
-            // Extract query params
-            let url = wsUrl;
-            let queryStart = url.indexOf('?');
-            let queryParams = '';
-            if (queryStart !== -1) {
-                queryParams = url.substring(queryStart);
-                url = url.substring(0, queryStart);
-            }
-
-            // Check if we're on proxy and need to convert localhost to proxy URL
-            if (IS_PROXY && wsUrl.includes('localhost')) {
-                // Extract proxy prefix from current window URL
-                const currentUrl = window.location.href;
-                const proxyMatch = currentUrl.match(/https?:\/\/([a-z0-9]+-)/);
-                if (proxyMatch) {
-                    const proxyPrefix = proxyMatch[1].slice(0, -1); // Remove trailing dash
-                    // Convert to proxy WebSocket URL
-                    const convertedUrl = `wss://${proxyPrefix}-8000.proxy.runpod.net/stream${queryParams}`;
-                    console.log('Converted WebSocket URL from:', wsUrl);
-                    console.log('Converted WebSocket URL to:', convertedUrl);
-                    return convertedUrl;
-                }
-            }
-
-            // If it's already correct or local, return as-is
-            console.log('Using WebSocket URL as-is:', wsUrl);
-            return wsUrl;
-        }
-
-        function connectWebSocket(wsUrl) {
-            try {
-                // Convert URL if needed
-                let finalWsUrl = convertWebSocketUrl(wsUrl);
-
-                if (!finalWsUrl) {
-                    showError('No audio URL received');
-                    return;
-                }
-
-                console.log('Final WebSocket URL:', finalWsUrl);
-
-                const ws = new WebSocket(finalWsUrl);
-
-                ws.binaryType = 'arraybuffer';
-
-                const audioChunks = [];
-
-                ws.onopen = () => {
-                    console.log('✅ WebSocket connected');
-                    wsStatus.classList.add('online');
-                    wsStatus.classList.remove('offline');
-                };
-
-                ws.onmessage = (event) => {
-                    try {
-                        const audioData = new Uint8Array(event.data);
-                        audioChunks.push(audioData);
-                        console.log(`📦 Audio chunk received: ${audioData.length} bytes`);
-                    } catch (error) {
-                        console.error('Error processing audio chunk:', error);
-                    }
-                };
-
-                ws.onerror = (error) => {
-                    console.error('❌ WebSocket error:', error);
-                    wsStatus.classList.add('offline');
-                    wsStatus.classList.remove('online');
-                    showError('Audio streaming error. You can still see the text response.');
-                };
-
-                ws.onclose = () => {
-                    console.log('WebSocket closed. Total chunks received:', audioChunks.length);
-                    if (audioChunks.length > 0) {
-                        const totalLength = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-                        const audioData = new Uint8Array(totalLength);
-                        let offset = 0;
-                        for (const chunk of audioChunks) {
-                            audioData.set(chunk, offset);
-                            offset += chunk.length;
+                // Start audio streaming if URL provided
+                if (data.audio_url) {
+                    logger.info('🔊 Starting audio stream...');
+                    connectWebSocket(
+                        data.audio_url,
+                        (chunk) => {},
+                        (audioUrl) => {
+                            const player = document.getElementById('audioPlayer');
+                            document.getElementById('audioElement').src = audioUrl;
+                            player.classList.add('active');
+                        },
+                        (error) => {
+                            logger.error(`Audio streaming failed: ${error}`);
                         }
+                    );
+                } else {
+                    logger.warning('⚠️ No audio URL provided');
+                }
 
-                        const blob = new Blob([audioData], { type: 'audio/wav' });
-                        const url = URL.createObjectURL(blob);
-                        audioPlayer.src = url;
-                        showSuccess('✅ Audio ready to play!');
-                    } else {
-                        showError('No audio data received from WebSocket');
-                    }
-                };
             } catch (error) {
-                console.error('WebSocket connection error:', error);
-                wsStatus.classList.add('offline');
-                showError('Could not connect to audio stream. Text response is available.');
+                logger.error(`❌ Request failed: ${error.message}`);
+            } finally {
+                document.getElementById('sendBtn').disabled = false;
             }
         }
 
-        function clearForm() {
-            promptInput.value = '';
-            temperatureInput.value = '0.7';
-            maxTokensInput.value = '256';
-            tempValue.textContent = '0.7';
-            tokensValue.textContent = '256';
-            responseSection.style.display = 'none';
-            audioPlayer.src = '';
-            clearMessage();
+        function displayStats(stats) {
+            const statsHtml = `
+                <div class="stat-box">
+                    <div class="stat-label">LLM Time</div>
+                    <div class="stat-value">${stats.llm_time.toFixed(0)}ms</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">TTS Time</div>
+                    <div class="stat-value">${stats.tts_time.toFixed(0)}ms</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Total Time</div>
+                    <div class="stat-value">${stats.total_time.toFixed(0)}ms</div>
+                </div>
+            `;
+            document.getElementById('statsDisplay').innerHTML = statsHtml;
         }
 
-        function showError(message) {
-            errorMessage.textContent = '❌ ' + message;
-            errorMessage.style.display = 'block';
-            successMessage.style.display = 'none';
-            setTimeout(() => {
-                errorMessage.style.display = 'none';
-            }, 5000);
-        }
+        // ============================================================
+        // EVENT LISTENERS
+        // ============================================================
+        document.getElementById('mainForm').addEventListener('submit', handleSubmit);
 
-        function showSuccess(message) {
-            successMessage.textContent = message;
-            successMessage.style.display = 'block';
-            errorMessage.style.display = 'none';
-            setTimeout(() => {
-                successMessage.style.display = 'none';
-            }, 5000);
-        }
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            document.getElementById('userInput').value = '';
+            document.getElementById('responseSection').style.display = 'none';
+            state.currentAudioChunks = [];
+            logger.info('🔄 Cleared');
+        });
 
-        function clearMessage() {
-            errorMessage.style.display = 'none';
-            successMessage.style.display = 'none';
-        }
+        // ============================================================
+        // STARTUP
+        // ============================================================
+        window.addEventListener('DOMContentLoaded', async () => {
+            logger.info('🚀 Initializing...');
+            await detectConnection();
+        });
     </script>
 </body>
 </html>
