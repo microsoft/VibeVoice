@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeVoice + Llama Pipeline Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .status-box {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            font-size: 14px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-indicator.ok { background: #4caf50; }
+        .status-indicator.error { background: #f44336; }
+        .status-indicator.loading { background: #ff9800; animation: pulse 1s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            grid-column: 1 / -1;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .output-box {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .output-box.active {
+            display: block;
+        }
+        
+        .output-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+        
+        .output-content {
+            background: white;
+            padding: 12px;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #333;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .latency {
+            color: #666;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-box {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            padding: 12px;
+            border-radius: 6px;
+            color: #c62828;
+            margin-top: 15px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 VibeVoice + Llama</h1>
+            <p>Real-time Text-to-Speech with LLM Response Generation</p>
+        </div>
+        
+        <div class="status-box" id="statusBox">
+            <div class="status-item">
+                <span class="status-indicator loading"></span>
+                <span>Checking system...</span>
+            </div>
+        </div>
+        
+        <form id="form">
+            <div class="form-group">
+                <label for="prompt">Your Prompt:</label>
+                <textarea 
+                    id="prompt" 
+                    placeholder="What would you like to ask? (e.g., 'What is the capital of France?')"
+                    required
+                ></textarea>
+            </div>
+            
+            <div class="controls">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="temperature">Temperature:</label>
+                    <input 
+                        type="range" 
+                        id="temperature" 
+                        min="0.1" 
+                        max="1.0" 
+                        step="0.1" 
+                        value="0.7"
+                        style="padding: 5px;"
+                    >
+                    <small id="tempValue" style="color: #666;">0.7</small>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="maxTokens">Max Tokens:</label>
+                    <select id="maxTokens">
+                        <option value="128">Short (128)</option>
+                        <option value="256" selected>Medium (256)</option>
+                        <option value="512">Long (512)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn-primary" id="submitBtn">
+                <span id="submitText">Generate Response</span>
+            </button>
+        </form>
+        
+        <div class="output-box" id="outputBox">
+            <div class="output-label">LLM Response:</div>
+            <div class="output-content" id="outputContent"></div>
+            <div class="latency" id="latency"></div>
+        </div>
+        
+        <div class="error-box" id="errorBox" style="display: none;"></div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('form');
+        const promptInput = document.getElementById('prompt');
+        const tempSlider = document.getElementById('temperature');
+        const tempValue = document.getElementById('tempValue');
+        const maxTokensSelect = document.getElementById('maxTokens');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitText = document.getElementById('submitText');
+        const outputBox = document.getElementById('outputBox');
+        const outputContent = document.getElementById('outputContent');
+        const latencyDiv = document.getElementById('latency');
+        const errorBox = document.getElementById('errorBox');
+        const statusBox = document.getElementById('statusBox');
+        
+        // Update temp value display
+        tempSlider.addEventListener('input', (e) => {
+            tempValue.textContent = e.target.value;
+        });
+        
+        // Check health on load
+        async function checkHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                const statusHTML = `
+                    <div class="status-item">
+                        <span class="status-indicator ${data.tts_loaded ? 'ok' : 'error'}"></span>
+                        <span>TTS: ${data.tts_loaded ? '✅ Ready' : '❌ Error'}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-indicator ${data.llm_loaded ? 'ok' : 'error'}"></span>
+                        <span>LLM: ${data.llm_loaded ? '✅ Ready' : '❌ Loading...'}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-indicator ok"></span>
+                        <span>GPU: ${data.gpu_memory_gb?.toFixed(1)}GB</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-indicator ${data.status === 'ok' ? 'ok' : 'error'}"></span>
+                        <span>Status: ${data.status.toUpperCase()}</span>
+                    </div>
+                `;
+                
+                statusBox.innerHTML = statusHTML;
+                submitBtn.disabled = !data.llm_loaded;
+                
+            } catch (error) {
+                statusBox.innerHTML = '<div style="color: #f44336;">❌ Cannot connect to server</div>';
+                submitBtn.disabled = true;
+            }
+        }
+        
+        checkHealth();
+        setInterval(checkHealth, 5000); // Check every 5 seconds
+        
+        // Form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorBox.style.display = 'none';
+            
+            const prompt = promptInput.value.trim();
+            if (!prompt) return;
+            
+            // Disable button and show loading
+            submitBtn.disabled = true;
+            submitText.innerHTML = '<span class="loading-spinner"></span>Processing...';
+            
+            try {
+                const start = performance.now();
+                
+                const response = await fetch('/generate_response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        temperature: parseFloat(tempSlider.value),
+                        max_tokens: parseInt(maxTokensSelect.value),
+                        streaming: false
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Request failed');
+                }
+                
+                const data = await response.json();
+                const elapsed = performance.now() - start;
+                
+                // Display results
+                outputContent.textContent = data.llm_response;
+                latencyDiv.textContent = `⏱️ Generated in ${elapsed.toFixed(0)}ms (${data.generation_ms.toFixed(0)}ms on server)`;
+                outputBox.classList.add('active');
+                
+            } catch (error) {
+                errorBox.textContent = `❌ Error: ${error.message}`;
+                errorBox.style.display = 'block';
+                outputBox.classList.remove('active');
+            } finally {
+                submitBtn.disabled = false;
+                submitText.innerHTML = 'Generate Response';
+            }
+        });
+    </script>
+</body>
+</html>
