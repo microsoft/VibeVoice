@@ -284,6 +284,7 @@
             word-break: break-all;
             max-height: 100px;
             overflow-y: auto;
+            font-family: monospace;
         }
 
         .latency-info {
@@ -311,20 +312,6 @@
             font-size: 1.4em;
             font-weight: bold;
             color: #667eea;
-        }
-
-        .loading {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            background: #667eea;
-            border-radius: 50%;
-            animation: bounce 1.4s infinite;
-        }
-
-        @keyframes bounce {
-            0%, 80%, 100% { opacity: 0.3; }
-            40% { opacity: 1; }
         }
 
         .error-message {
@@ -518,29 +505,30 @@
         </div>
 
         <div class="footer">
-            <p>🚀 Phase 2: LLM + TTS Connected | Version 0.3.0 (CORS & HTTPS Fixed)</p>
+            <p>🚀 Phase 2: LLM + TTS Connected | Version 0.3.1 (WebSocket Proxy Fixed)</p>
             <p>Backend: Port 8005 | Audio Stream: Port 8000</p>
         </div>
     </div>
 
     <script>
         // ==========================================
-        // AUTO-DETECT CONNECTION MODE (Local vs RunPod)
+        // AUTO-DETECT CONNECTION MODE & BUILD URLs
         // ==========================================
         
         let API_URL;
         let WS_BASE;
         let CONNECTION_MODE;
+        let IS_PROXY = false;
 
         function detectConnectionMode() {
             const currentUrl = window.location.href;
-            const isProxyUrl = currentUrl.includes('proxy.runpod.net');
+            IS_PROXY = currentUrl.includes('proxy.runpod.net');
             
-            if (isProxyUrl) {
+            if (IS_PROXY) {
                 // RunPod HTTPS Proxy Mode
                 CONNECTION_MODE = '🔒 RunPod HTTPS Proxy (Secure)';
                 
-                // Extract the proxy prefix (e.g., "17melvk973qz-8005")
+                // Extract the proxy prefix (e.g., "17wlelvk973qxz-8005")
                 const proxyMatch = currentUrl.match(/https?:\/\/([a-z0-9]+-)(8005|8010|8001)/);
                 if (proxyMatch) {
                     const proxyPrefix = proxyMatch[1].replace('-8005', '').replace('-8010', '').replace('-8001', '');
@@ -568,6 +556,7 @@
             console.log('Connection Mode:', CONNECTION_MODE);
             console.log('API URL:', API_URL);
             console.log('WebSocket Base:', WS_BASE);
+            console.log('Is Proxy:', IS_PROXY);
             
             document.getElementById('connectionMode').textContent = CONNECTION_MODE;
         }
@@ -712,17 +701,55 @@
             showSuccess('Response generated! Connecting to audio stream...');
         }
 
+        function convertWebSocketUrl(wsUrl) {
+            """
+            KEY FIX: Convert WebSocket URL based on connection type
+            
+            If backend returns ws://localhost:8000/stream?...
+            But we're on HTTPS proxy, convert to: wss://proxy-host:8000/stream?...
+            """
+            if (!wsUrl) return null;
+
+            // Extract query params
+            let url = wsUrl;
+            let queryStart = url.indexOf('?');
+            let queryParams = '';
+            if (queryStart !== -1) {
+                queryParams = url.substring(queryStart);
+                url = url.substring(0, queryStart);
+            }
+
+            // Check if we're on proxy and need to convert localhost to proxy URL
+            if (IS_PROXY && wsUrl.includes('localhost')) {
+                // Extract proxy prefix from current window URL
+                const currentUrl = window.location.href;
+                const proxyMatch = currentUrl.match(/https?:\/\/([a-z0-9]+-)/);
+                if (proxyMatch) {
+                    const proxyPrefix = proxyMatch[1].slice(0, -1); // Remove trailing dash
+                    // Convert to proxy WebSocket URL
+                    const convertedUrl = `wss://${proxyPrefix}-8000.proxy.runpod.net/stream${queryParams}`;
+                    console.log('Converted WebSocket URL from:', wsUrl);
+                    console.log('Converted WebSocket URL to:', convertedUrl);
+                    return convertedUrl;
+                }
+            }
+
+            // If it's already correct or local, return as-is
+            console.log('Using WebSocket URL as-is:', wsUrl);
+            return wsUrl;
+        }
+
         function connectWebSocket(wsUrl) {
             try {
-                // Convert HTTP URL to WebSocket if needed
-                let finalWsUrl = wsUrl;
-                if (wsUrl.startsWith('http://')) {
-                    finalWsUrl = wsUrl.replace('http://', 'ws://');
-                } else if (wsUrl.startsWith('https://')) {
-                    finalWsUrl = wsUrl.replace('https://', 'wss://');
+                // Convert URL if needed
+                let finalWsUrl = convertWebSocketUrl(wsUrl);
+
+                if (!finalWsUrl) {
+                    showError('No audio URL received');
+                    return;
                 }
 
-                console.log('Connecting to WebSocket:', finalWsUrl);
+                console.log('Final WebSocket URL:', finalWsUrl);
 
                 const ws = new WebSocket(finalWsUrl);
 
@@ -740,6 +767,7 @@
                     try {
                         const audioData = new Uint8Array(event.data);
                         audioChunks.push(audioData);
+                        console.log(`📦 Audio chunk received: ${audioData.length} bytes`);
                     } catch (error) {
                         console.error('Error processing audio chunk:', error);
                     }
@@ -799,7 +827,7 @@
         }
 
         function showSuccess(message) {
-            successMessage.textContent = '✅ ' + message;
+            successMessage.textContent = message;
             successMessage.style.display = 'block';
             errorMessage.style.display = 'none';
             setTimeout(() => {
