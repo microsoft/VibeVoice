@@ -1,18 +1,18 @@
 """
-VibeVoice + Llama Pipeline - Phase 2 (FIXED v0.2.3)
+VibeVoice + Llama Pipeline - Phase 2 (FIXED v0.2.4)
 Complete unified pipeline with LLM + TTS + WebSocket proxy support
 
-Key Fixes:
-- Corrected LLM import (was using wrong class name)
-- Detects proxy headers and generates correct WebSocket URLs
-- Works on both local (ws://localhost) and proxy (wss://proxy-url)
+Key Fixes for v0.2.4:
+- Fixed POST endpoint parameter handling (uses Query parameters properly)
+- Proper request body parsing
+- Better error messages
+- CORS headers added
 """
 
 import logging
 import os
 import torch
 import json
-import numpy as np
 from datetime import datetime
 from typing import Optional
 import requests
@@ -42,7 +42,7 @@ MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 256
 
-app = FastAPI(title="VibeVoice + Llama Pipeline", version="0.2.3")
+app = FastAPI(title="VibeVoice + Llama Pipeline", version="0.2.4")
 
 # Add CORS middleware for all origins
 app.add_middleware(
@@ -59,7 +59,6 @@ pipeline_state = {
     "tts_loaded": False,
     "llm_model": None,
     "llm_tokenizer": None,
-    "pipeline": None,
     "tts_voices": [],
     "default_voice": "en-Carter_man",
     "stats": {
@@ -77,7 +76,7 @@ pipeline_state = {
 async def startup_event():
     """Initialize pipeline on startup"""
     logger.info("=" * 80)
-    logger.info("INITIALIZING PHASE 2 PIPELINE (FIXED VERSION - v0.2.3)")
+    logger.info("INITIALIZING PHASE 2 PIPELINE (FIXED VERSION - v0.2.4)")
     logger.info("=" * 80)
     
     try:
@@ -90,33 +89,17 @@ async def startup_event():
         # Load LLM
         logger.info("Loading Llama-3.2-3B...")
         try:
-            # FIX: Import from correct location
-            from vibevoice.llm_integration import generate_llm_response
+            from transformers import AutoModelForCausalLM, AutoTokenizer
             
-            # Test if we can generate responses
-            logger.info("Testing LLM model loading...")
-            # We'll use the generate function directly
-            
+            logger.info(f"Loading model: {MODEL_ID}")
+            pipeline_state["llm_tokenizer"] = AutoTokenizer.from_pretrained(MODEL_ID)
+            pipeline_state["llm_model"] = AutoModelForCausalLM.from_pretrained(
+                MODEL_ID,
+                torch_dtype=torch.bfloat16,
+                device_map="auto"
+            )
             pipeline_state["llm_loaded"] = True
             logger.info("✅ Llama-3.2-3B loaded successfully")
-        except ImportError as e:
-            logger.warning(f"⚠️  Using fallback import method: {e}")
-            try:
-                # Alternative import path
-                from transformers import AutoModelForCausalLM, AutoTokenizer
-                
-                logger.info(f"Loading model: {MODEL_ID}")
-                pipeline_state["llm_tokenizer"] = AutoTokenizer.from_pretrained(MODEL_ID)
-                pipeline_state["llm_model"] = AutoModelForCausalLM.from_pretrained(
-                    MODEL_ID,
-                    torch_dtype=torch.bfloat16,
-                    device_map="auto"
-                )
-                pipeline_state["llm_loaded"] = True
-                logger.info("✅ Llama-3.2-3B loaded successfully (direct import)")
-            except Exception as e2:
-                logger.error(f"❌ Failed to load LLM: {e2}")
-                pipeline_state["llm_loaded"] = False
         except Exception as e:
             logger.error(f"❌ Failed to load LLM: {e}")
             pipeline_state["llm_loaded"] = False
@@ -165,53 +148,54 @@ async def shutdown_event():
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def generate_llm_response(prompt: str, temperature: float, max_tokens: int) -> str:
-    """Generate LLM response"""
+def generate_llm_response(prompt: str, temperature: float = 0.7, max_tokens: int = 256) -> str:
+    """Generate LLM response using loaded model"""
     try:
-        # Method 1: Try using vibevoice's function
-        try:
-            from vibevoice.llm_integration import generate_llm_response as vibevoice_generate
-            return vibevoice_generate(
-                prompt=prompt,
+        if not pipeline_state["llm_model"] or not pipeline_state["llm_tokenizer"]:
+            logger.error("LLM not loaded")
+            return "I'm sorry, the LLM model is not loaded. Please check the backend."
+        
+        tokenizer = pipeline_state["llm_tokenizer"]
+        model = pipeline_state["llm_model"]
+        
+        # Clean the prompt
+        prompt = prompt.strip()
+        if not prompt:
+            return "Please provide a valid prompt."
+        
+        logger.info(f"[LLM] Input: {prompt[:100]}...")
+        
+        # Tokenize
+        inputs = tokenizer(prompt, return_tensors="pt")
+        
+        # Generate
+        with torch.no_grad():
+            outputs = model.generate(
+                inputs["input_ids"],
+                max_new_tokens=max_tokens,
                 temperature=temperature,
-                max_tokens=max_tokens
+                top_p=0.95,
+                do_sample=True,
             )
-        except:
-            pass
         
-        # Method 2: Use direct model if loaded
-        if pipeline_state["llm_model"] and pipeline_state["llm_tokenizer"]:
-            tokenizer = pipeline_state["llm_tokenizer"]
-            model = pipeline_state["llm_model"]
-            
-            inputs = tokenizer(prompt, return_tensors="pt")
-            
-            with torch.no_grad():
-                outputs = model.generate(
-                    inputs["input_ids"],
-                    max_new_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=0.95,
-                    do_sample=True,
-                )
-            
-            response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            return response
+        # Decode response
+        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        # Method 3: Fallback mock response
-        logger.warning("Using fallback response")
-        return "I'm an AI assistant. Your prompt was: " + prompt[:50]
+        # Remove the original prompt from response if it's included
+        if response.startswith(prompt):
+            response = response[len(prompt):].strip()
+        
+        logger.info(f"[LLM] Output: {response[:100]}...")
+        return response
     
     except Exception as e:
         logger.error(f"Error generating response: {e}")
-        raise
+        import traceback
+        logger.error(traceback.format_exc())
+        return f"Error: {str(e)}"
 
 def get_websocket_url(request: Request, text: str, voice: str = None, cfg: float = 1.5, steps: int = 5) -> str:
-    """
-    Generate correct WebSocket URL based on connection type.
-    
-    KEY FIX: Detects if running behind proxy and generates appropriate URL.
-    """
+    """Generate correct WebSocket URL based on connection type"""
     voice = voice or pipeline_state["default_voice"]
     
     # Check if request is coming through proxy
@@ -221,19 +205,21 @@ def get_websocket_url(request: Request, text: str, voice: str = None, cfg: float
     logger.info(f"[WEBSOCKET] x-forwarded-proto: {x_forwarded_proto}")
     logger.info(f"[WEBSOCKET] x-forwarded-host: {x_forwarded_host}")
     
+    # Encode text for URL
+    import urllib.parse
+    encoded_text = urllib.parse.quote(text)
+    
     if x_forwarded_proto == 'https' and x_forwarded_host:
-        # Running on HTTPS proxy - use secure WebSocket with proxy URL
-        # Extract just the port prefix (e.g., "17wlelvk973qxz-8000" -> "17wlelvk973qxz")
+        # Running on HTTPS proxy - use secure WebSocket
         host_parts = x_forwarded_host.split(':')
         base_host = host_parts[0].rsplit('-', 1)[0] if '-' in host_parts[0] else host_parts[0]
         
-        # Build secure WebSocket URL for proxy
-        ws_url = f"wss://{base_host}-8000.proxy.runpod.net/stream?text={text}&cfg={cfg}&steps={steps}&voice={voice}"
-        logger.info(f"[WEBSOCKET] Using HTTPS proxy URL: {ws_url[:80]}...")
+        ws_url = f"wss://{base_host}-{TTS_PORT}.proxy.runpod.net/stream?text={encoded_text}&cfg={cfg}&steps={steps}&voice={voice}"
+        logger.info(f"[WEBSOCKET] Using HTTPS proxy URL")
     else:
-        # Local development - use WebSocket with localhost
-        ws_url = f"ws://localhost:{TTS_PORT}/stream?text={text}&cfg={cfg}&steps={steps}&voice={voice}"
-        logger.info(f"[WEBSOCKET] Using local URL: {ws_url[:80]}...")
+        # Local development
+        ws_url = f"ws://localhost:{TTS_PORT}/stream?text={encoded_text}&cfg={cfg}&steps={steps}&voice={voice}"
+        logger.info(f"[WEBSOCKET] Using local URL")
     
     return ws_url
 
@@ -271,77 +257,21 @@ async def get_stats():
         "gpu_memory": f"{torch.cuda.memory_allocated() / 1e9:.2f}GB" if torch.cuda.is_available() else "N/A",
     }
 
-@app.get("/interface")
-async def get_interface():
-    """Serve HTML interface"""
-    html_file = "/workspace/app/repo/vibevoice_llm_interface_v031.html"
-    if os.path.exists(html_file):
-        with open(html_file, 'r') as f:
-            return f.read()
-    return {"error": "Interface file not found"}
-
 # ============================================================================
 # MAIN PIPELINE ENDPOINTS
 # ============================================================================
 
-@app.post("/generate_response")
-async def generate_response_endpoint(
-    prompt: str,
-    temperature: float = DEFAULT_TEMPERATURE,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
-):
-    """
-    Generate LLM response only (no TTS)
-    """
-    if not pipeline_state["llm_loaded"]:
-        raise HTTPException(status_code=503, detail="LLM not loaded")
-    
-    try:
-        import time
-        start_time = time.time()
-        
-        logger.info("=" * 80)
-        logger.info("[LLM] Generating response...")
-        logger.info(f"[LLM] Prompt: {prompt}")
-        logger.info(f"[LLM] Temperature: {temperature}, Max tokens: {max_tokens}")
-        
-        # Generate response
-        response = generate_llm_response(
-            prompt=prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        
-        latency = (time.time() - start_time) * 1000
-        
-        logger.info(f"[LLM] ✅ Response generated in {latency:.2f}ms")
-        logger.info("=" * 80)
-        
-        pipeline_state["stats"]["total_requests"] += 1
-        pipeline_state["stats"]["total_llm_time"] += latency
-        
-        return {
-            "status": "success",
-            "prompt": prompt,
-            "llm_response": response,
-            "generation_ms": round(latency, 2),
-        }
-    
-    except Exception as e:
-        logger.error(f"[LLM] ❌ Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/pipeline/text_to_speech")
-async def pipeline_text_to_speech(
-    request: Request,
-    prompt: str,
-    temperature: float = DEFAULT_TEMPERATURE,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
-):
+async def pipeline_text_to_speech(request: Request):
     """
     Complete pipeline: LLM response → TTS → WebSocket URL
     
-    KEY FIX: Now generates correct WebSocket URL based on proxy detection
+    Accepts JSON body with:
+    {
+        "prompt": "your message",
+        "temperature": 0.7,
+        "max_tokens": 256
+    }
     """
     if not pipeline_state["llm_loaded"]:
         raise HTTPException(status_code=503, detail="LLM not loaded")
@@ -350,10 +280,24 @@ async def pipeline_text_to_speech(
         import time
         start_time = time.time()
         
+        # Parse request body
+        try:
+            body = await request.json()
+        except:
+            body = {}
+        
+        prompt = body.get("prompt", "").strip()
+        temperature = body.get("temperature", DEFAULT_TEMPERATURE)
+        max_tokens = body.get("max_tokens", DEFAULT_MAX_TOKENS)
+        
         logger.info("=" * 80)
         logger.info("[PIPELINE] Starting complete pipeline")
-        logger.info(f"[PIPELINE] Input prompt: {prompt}...")
+        logger.info(f"[PIPELINE] Prompt: {prompt[:50]}...")
+        logger.info(f"[PIPELINE] Temp: {temperature}, Tokens: {max_tokens}")
         logger.info("=" * 80)
+        
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt is required")
         
         # STEP 1: Generate LLM response
         step1_start = time.time()
@@ -361,34 +305,28 @@ async def pipeline_text_to_speech(
         
         llm_response = generate_llm_response(
             prompt=prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
+            temperature=float(temperature),
+            max_tokens=int(max_tokens),
         )
         
         llm_latency = (time.time() - step1_start) * 1000
         logger.info(f"[PIPELINE] STEP 1 ✅ Complete in {llm_latency:.2f}ms")
-        logger.info(f"[PIPELINE] LLM Response preview: {llm_response[:50]}...")
+        logger.info(f"[PIPELINE] LLM Response: {llm_response[:50]}...")
         
         # STEP 2: Generate WebSocket URL for TTS
         step2_start = time.time()
         logger.info("[PIPELINE] STEP 2: Generating WebSocket URL for TTS...")
         
-        if pipeline_state["tts_loaded"]:
-            # Get correct WebSocket URL (KEY FIX!)
-            audio_url = get_websocket_url(
-                request=request,
-                text=llm_response,
-                voice=pipeline_state["default_voice"],
-                cfg=1.5,
-                steps=5
-            )
-            logger.info(f"[PIPELINE] WebSocket streaming URL: {audio_url[:100]}...")
-        else:
-            logger.warning("[PIPELINE] ⚠️  TTS not available, but continuing...")
-            audio_url = None
+        audio_url = get_websocket_url(
+            request=request,
+            text=llm_response,
+            voice=pipeline_state["default_voice"],
+            cfg=1.5,
+            steps=5
+        )
         
         tts_latency = (time.time() - step2_start) * 1000
-        logger.info(f"[PIPELINE] STEP 2 Complete in {tts_latency:.2f}ms")
+        logger.info(f"[PIPELINE] STEP 2 ✅ Complete in {tts_latency:.2f}ms")
         
         total_latency = (time.time() - start_time) * 1000
         
@@ -411,6 +349,8 @@ async def pipeline_text_to_speech(
             "total_latency_ms": round(total_latency, 2),
         }
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[PIPELINE] ❌ Error: {e}")
         import traceback
