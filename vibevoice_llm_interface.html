@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeVoice + Llama Pipeline - AI Voice Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .status-item {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.online {
+            background: #4caf50;
+        }
+
+        .status-indicator.offline {
+            background: #f44336;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1em;
+        }
+
+        textarea, input[type="range"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        textarea:focus, input[type="range"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        input[type="range"] {
+            padding: 0;
+            height: 6px;
+            border: none;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(to right, #667eea, #764ba2);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .slider-values {
+            display: flex;
+            gap: 30px;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            flex: 2;
+        }
+
+        .btn-submit:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-clear {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-clear:hover {
+            background: #e0e0e0;
+        }
+
+        .response-section {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .response-title {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .response-content {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            min-height: 60px;
+            color: #333;
+            line-height: 1.6;
+            word-wrap: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .response-empty {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+        }
+
+        .audio-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+
+        .audio-player {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        audio {
+            width: 100%;
+            height: 40px;
+        }
+
+        .websocket-status {
+            display: inline-block;
+            padding: 8px 12px;
+            background: #e3f2fd;
+            color: #1976d2;
+            border-radius: 6px;
+            font-size: 0.9em;
+            word-break: break-all;
+        }
+
+        .latency-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .latency-box {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            border-top: 3px solid #667eea;
+        }
+
+        .latency-box .label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .latency-box .value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% { opacity: 0.3; }
+            40% { opacity: 1; }
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .success-message {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .pipeline-info {
+            background: #e8eaf6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .pipeline-info p {
+            margin: 5px 0;
+            color: #333;
+            font-size: 0.95em;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .status-bar {
+                flex-direction: column;
+            }
+
+            .control-buttons {
+                flex-direction: column;
+            }
+
+            .btn-submit {
+                flex: 1;
+            }
+
+            .latency-info {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 VibeVoice + Llama Pipeline</h1>
+            <p>AI Voice Assistant - Text to Speech with LLM Response</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator" id="llmStatus"></div>
+                <span>LLM (Port 8005)</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator" id="ttsStatus"></div>
+                <span>TTS (Port 8000)</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator" id="wsStatus"></div>
+                <span>WebSocket</span>
+            </div>
+        </div>
+
+        <div class="pipeline-info">
+            <p>📝 <strong>How it works:</strong></p>
+            <p>Type your message → AI generates response → Audio streams in real-time</p>
+        </div>
+
+        <form id="pipelineForm">
+            <div class="form-group">
+                <label for="prompt">📝 Your Message</label>
+                <textarea id="prompt" placeholder="Ask me anything..." required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="temperature">🌡️ Temperature (Creativity)</label>
+                <input type="range" id="temperature" min="0.1" max="1.0" step="0.1" value="0.7">
+                <div class="slider-values">
+                    <span>More Focused <span id="tempValue">0.7</span> More Creative</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="maxTokens">📊 Response Length</label>
+                <input type="range" id="maxTokens" min="50" max="512" step="50" value="256">
+                <div class="slider-values">
+                    <span>Short <span id="tokensValue">256</span> tokens Long</span>
+                </div>
+            </div>
+
+            <div class="control-buttons">
+                <button type="submit" class="btn-submit" id="submitBtn">🚀 Send & Generate Audio</button>
+                <button type="button" class="btn-clear" id="clearBtn">Clear</button>
+            </div>
+
+            <div class="error-message" id="errorMessage"></div>
+            <div class="success-message" id="successMessage"></div>
+        </form>
+
+        <div class="response-section" id="responseSection" style="display: none;">
+            <div class="response-title">🤖 AI Response</div>
+            <div class="response-content" id="responseContent" class="response-empty">
+                Waiting for response...
+            </div>
+
+            <div class="response-title">🔊 Audio Stream</div>
+            <div class="audio-controls">
+                <div class="audio-player">
+                    <audio id="audioPlayer" controls></audio>
+                </div>
+            </div>
+
+            <div id="websocketInfo" style="margin-top: 15px; display: none;">
+                <div class="response-title">🌐 WebSocket Connection</div>
+                <div class="websocket-status" id="wsUrl"></div>
+            </div>
+
+            <div class="latency-info">
+                <div class="latency-box">
+                    <div class="label">LLM Latency</div>
+                    <div class="value" id="llmLatency">-</div>
+                </div>
+                <div class="latency-box">
+                    <div class="label">TTS Latency</div>
+                    <div class="value" id="ttsLatency">-</div>
+                </div>
+                <div class="latency-box">
+                    <div class="label">Total Latency</div>
+                    <div class="value" id="totalLatency">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🚀 Phase 2: LLM + TTS Connected | Version 0.2.1</p>
+            <p>Backend: Port 8005 | Audio Stream: Port 8000</p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = `http://${window.location.hostname}:8005`;
+        const WS_BASE = `ws://${window.location.hostname}:8000/stream`;
+
+        // DOM Elements
+        const form = document.getElementById('pipelineForm');
+        const promptInput = document.getElementById('prompt');
+        const temperatureInput = document.getElementById('temperature');
+        const maxTokensInput = document.getElementById('maxTokens');
+        const submitBtn = document.getElementById('submitBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const responseSection = document.getElementById('responseSection');
+        const responseContent = document.getElementById('responseContent');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const llmStatus = document.getElementById('llmStatus');
+        const ttsStatus = document.getElementById('ttsStatus');
+        const wsStatus = document.getElementById('wsStatus');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const tempValue = document.getElementById('tempValue');
+        const tokensValue = document.getElementById('tokensValue');
+
+        // Initialize
+        checkHealth();
+        setInterval(checkHealth, 5000);
+
+        // Event Listeners
+        temperatureInput.addEventListener('change', (e) => {
+            tempValue.textContent = e.target.value;
+        });
+
+        maxTokensInput.addEventListener('change', (e) => {
+            tokensValue.textContent = e.target.value;
+        });
+
+        form.addEventListener('submit', handleSubmit);
+        clearBtn.addEventListener('click', clearForm);
+
+        // Functions
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+
+                llmStatus.classList.toggle('online', data.llm_loaded);
+                llmStatus.classList.toggle('offline', !data.llm_loaded);
+
+                ttsStatus.classList.toggle('online', data.tts_loaded);
+                ttsStatus.classList.toggle('offline', !data.tts_loaded);
+
+                wsStatus.classList.toggle('online', true);
+            } catch (error) {
+                llmStatus.classList.add('offline');
+                ttsStatus.classList.add('offline');
+                wsStatus.classList.add('offline');
+            }
+        }
+
+        async function handleSubmit(e) {
+            e.preventDefault();
+
+            const prompt = promptInput.value.trim();
+            const temperature = parseFloat(temperatureInput.value);
+            const maxTokens = parseInt(maxTokensInput.value);
+
+            if (!prompt) {
+                showError('Please enter a message');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<div class="spinner"></div>Generating...';
+            clearMessage();
+
+            try {
+                const response = await fetch(`${API_URL}/pipeline/text_to_speech`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        prompt,
+                        temperature,
+                        max_tokens: maxTokens
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    displayResponse(data);
+                    connectWebSocket(data.audio_url);
+                } else {
+                    showError(`Error: ${data.message || 'Unknown error'}`);
+                }
+            } catch (error) {
+                showError(`Failed to process request: ${error.message}`);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '🚀 Send & Generate Audio';
+            }
+        }
+
+        function displayResponse(data) {
+            responseSection.style.display = 'block';
+            
+            // Clean response text
+            const cleanResponse = data.llm_response.replace(/<\|im_end\|>/g, '').trim();
+            responseContent.textContent = cleanResponse;
+
+            // Display latencies
+            document.getElementById('llmLatency').textContent = Math.round(data.llm_latency_ms) + 'ms';
+            document.getElementById('ttsLatency').textContent = Math.round(data.tts_latency_ms) + 'ms';
+            document.getElementById('totalLatency').textContent = Math.round(data.total_latency_ms) + 'ms';
+
+            // Show WebSocket URL
+            const wsInfo = document.getElementById('websocketInfo');
+            document.getElementById('wsUrl').textContent = data.audio_url;
+            wsInfo.style.display = 'block';
+
+            showSuccess('Response generated! Connecting to audio stream...');
+        }
+
+        function connectWebSocket(wsUrl) {
+            try {
+                const ws = new WebSocket(wsUrl);
+
+                ws.binaryType = 'arraybuffer';
+
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const audioChunks = [];
+
+                ws.onopen = () => {
+                    console.log('WebSocket connected');
+                };
+
+                ws.onmessage = (event) => {
+                    const audioData = new Uint8Array(event.data);
+                    audioChunks.push(audioData);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    showError('Audio streaming error. You can still see the text response.');
+                };
+
+                ws.onclose = () => {
+                    console.log('WebSocket closed');
+                    if (audioChunks.length > 0) {
+                        const totalLength = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+                        const audioData = new Uint8Array(totalLength);
+                        let offset = 0;
+                        for (const chunk of audioChunks) {
+                            audioData.set(chunk, offset);
+                            offset += chunk.length;
+                        }
+
+                        const blob = new Blob([audioData], { type: 'audio/wav' });
+                        const url = URL.createObjectURL(blob);
+                        audioPlayer.src = url;
+                        showSuccess('Audio ready to play!');
+                    }
+                };
+            } catch (error) {
+                console.error('WebSocket connection error:', error);
+                showError('Could not connect to audio stream. Text response is available.');
+            }
+        }
+
+        function clearForm() {
+            promptInput.value = '';
+            temperatureInput.value = '0.7';
+            maxTokensInput.value = '256';
+            tempValue.textContent = '0.7';
+            tokensValue.textContent = '256';
+            responseSection.style.display = 'none';
+            audioPlayer.src = '';
+            clearMessage();
+        }
+
+        function showError(message) {
+            errorMessage.textContent = '❌ ' + message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = '✅ ' + message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+            setTimeout(() => {
+                successMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        function clearMessage() {
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
