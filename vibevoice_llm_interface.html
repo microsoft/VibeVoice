@@ -81,6 +81,7 @@
             font-size: 12px;
             color: #666;
             font-family: monospace;
+            word-break: break-all;
         }
 
         .form-group {
@@ -140,19 +141,18 @@
             color: white;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
 
-        .btn-primary:active {
+        .btn-primary:active:not(:disabled) {
             transform: translateY(0);
         }
 
         .btn-primary:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            transform: none;
         }
 
         .btn-secondary {
@@ -326,8 +326,6 @@
             API_PORT: 8005,
             TTS_PORT: 8000,
             WEB_PORT: 8010,
-            PROD_API_PREFIX: '',
-            PROD_WS_PREFIX: '',
         };
 
         // ============================================================
@@ -354,7 +352,8 @@
             log(message, type = 'info') {
                 const entry = document.createElement('div');
                 entry.className = `log-entry log-${type}`;
-                entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                const time = new Date().toLocaleTimeString();
+                entry.textContent = `[${time}] ${message}`;
                 this.container.appendChild(entry);
                 
                 const entries = this.container.querySelectorAll('.log-entry');
@@ -363,6 +362,8 @@
                 }
                 
                 this.container.scrollTop = this.container.scrollHeight;
+                
+                console.log(`[${type.toUpperCase()}] ${message}`);
             }
 
             info(msg) { this.log(msg, 'info'); }
@@ -412,9 +413,9 @@
         function updateConnectionInfo() {
             const connectionMode = state.isProxy ? '🔒 RunPod HTTPS Proxy (Secure)' : '🌐 Local HTTP (Development)';
             const info = `
-                📍 Mode: ${connectionMode}
-                🔗 API: ${state.apiUrl}
-                📡 WS: ${state.wsBase}
+📍 Mode: ${connectionMode}
+🔗 API: ${state.apiUrl}
+📡 WS: ${state.wsBase}
             `.trim();
             document.getElementById('connectionInfo').textContent = info;
         }
@@ -455,7 +456,7 @@
         // ============================================================
         // WEBSOCKET AUDIO STREAMING
         // ============================================================
-        function connectWebSocket(wsUrl, onChunk, onComplete, onError) {
+        function connectWebSocket(wsUrl, onComplete, onError) {
             logger.info(`Connecting to WebSocket: ${wsUrl.substring(0, 80)}...`);
 
             try {
@@ -473,7 +474,6 @@
                         if (data instanceof Blob) {
                             state.currentAudioChunks.push(data);
                             logger.info(`📦 Audio chunk ${totalChunks} received: ${(data.size / 1024).toFixed(1)}KB`);
-                            onChunk(data);
                         }
                     } catch (e) {
                         logger.error(`Error processing audio chunk: ${e.message}`);
@@ -530,7 +530,7 @@
 
                 const startTime = Date.now();
 
-                // Call pipeline endpoint
+                // Call pipeline endpoint with JSON body
                 const response = await fetch(`${state.apiUrl}/pipeline/text_to_speech`, {
                     method: 'POST',
                     headers: {
@@ -543,11 +543,26 @@
                     }),
                 });
 
+                const responseText = await response.text();
+                
                 if (!response.ok) {
+                    logger.error(`❌ HTTP ${response.status}: ${responseText}`);
                     throw new Error(`HTTP ${response.status}`);
                 }
 
-                const data = await response.json();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    logger.error(`❌ Failed to parse response: ${responseText}`);
+                    throw e;
+                }
+
+                if (data.status !== 'success') {
+                    logger.error(`❌ Response status: ${data.status}`);
+                    throw new Error(data.detail || 'Unknown error');
+                }
+
                 logger.success(`✅ Response received in ${data.total_latency_ms}ms`);
 
                 // Display LLM response
@@ -566,7 +581,6 @@
                     logger.info('🔊 Starting audio stream...');
                     connectWebSocket(
                         data.audio_url,
-                        (chunk) => {},
                         (audioUrl) => {
                             const player = document.getElementById('audioPlayer');
                             document.getElementById('audioElement').src = audioUrl;
