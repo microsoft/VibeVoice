@@ -282,6 +282,8 @@
             border-radius: 6px;
             font-size: 0.9em;
             word-break: break-all;
+            max-height: 100px;
+            overflow-y: auto;
         }
 
         .latency-info {
@@ -383,6 +385,15 @@
             100% { transform: rotate(360deg); }
         }
 
+        .connection-mode {
+            background: #fff3e0;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            color: #e65100;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
@@ -415,6 +426,10 @@
         <div class="header">
             <h1>🎤 VibeVoice + Llama Pipeline</h1>
             <p>AI Voice Assistant - Text to Speech with LLM Response</p>
+        </div>
+
+        <div class="connection-mode">
+            📍 <strong>Connection Mode:</strong> <span id="connectionMode">Detecting...</span>
         </div>
 
         <div class="status-bar">
@@ -503,16 +518,67 @@
         </div>
 
         <div class="footer">
-            <p>🚀 Phase 2: LLM + TTS Connected | Version 0.2.1</p>
+            <p>🚀 Phase 2: LLM + TTS Connected | Version 0.3.0 (CORS & HTTPS Fixed)</p>
             <p>Backend: Port 8005 | Audio Stream: Port 8000</p>
         </div>
     </div>
 
     <script>
-        const API_URL = `http://${window.location.hostname}:8005`;
-        const WS_BASE = `ws://${window.location.hostname}:8000/stream`;
+        // ==========================================
+        // AUTO-DETECT CONNECTION MODE (Local vs RunPod)
+        // ==========================================
+        
+        let API_URL;
+        let WS_BASE;
+        let CONNECTION_MODE;
 
-        // DOM Elements
+        function detectConnectionMode() {
+            const currentUrl = window.location.href;
+            const isProxyUrl = currentUrl.includes('proxy.runpod.net');
+            
+            if (isProxyUrl) {
+                // RunPod HTTPS Proxy Mode
+                CONNECTION_MODE = '🔒 RunPod HTTPS Proxy (Secure)';
+                
+                // Extract the proxy prefix (e.g., "17melvk973qz-8005")
+                const proxyMatch = currentUrl.match(/https?:\/\/([a-z0-9]+-)(8005|8010|8001)/);
+                if (proxyMatch) {
+                    const proxyPrefix = proxyMatch[1].replace('-8005', '').replace('-8010', '').replace('-8001', '');
+                    
+                    // Use HTTPS for API and WSS for WebSocket (required for secure proxy)
+                    API_URL = `https://${proxyPrefix}8005.proxy.runpod.net`;
+                    WS_BASE = `wss://${proxyPrefix}8000.proxy.runpod.net/stream`;
+                } else {
+                    // Fallback
+                    API_URL = `https://${window.location.hostname}`;
+                    WS_BASE = `wss://${window.location.hostname}/stream`;
+                }
+            } else if (window.location.protocol === 'https:') {
+                // Local HTTPS (if running on HTTPS)
+                CONNECTION_MODE = '🔒 Local HTTPS';
+                API_URL = `https://${window.location.hostname}:8005`;
+                WS_BASE = `wss://${window.location.hostname}:8000/stream`;
+            } else {
+                // Local HTTP (development)
+                CONNECTION_MODE = '🌐 Local HTTP (Development)';
+                API_URL = `http://${window.location.hostname}:8005`;
+                WS_BASE = `ws://${window.location.hostname}:8000/stream`;
+            }
+
+            console.log('Connection Mode:', CONNECTION_MODE);
+            console.log('API URL:', API_URL);
+            console.log('WebSocket Base:', WS_BASE);
+            
+            document.getElementById('connectionMode').textContent = CONNECTION_MODE;
+        }
+
+        // Initialize connection mode on load
+        detectConnectionMode();
+
+        // ==========================================
+        // DOM ELEMENTS
+        // ==========================================
+        
         const form = document.getElementById('pipelineForm');
         const promptInput = document.getElementById('prompt');
         const temperatureInput = document.getElementById('temperature');
@@ -530,11 +596,17 @@
         const tempValue = document.getElementById('tempValue');
         const tokensValue = document.getElementById('tokensValue');
 
-        // Initialize
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        
         checkHealth();
         setInterval(checkHealth, 5000);
 
-        // Event Listeners
+        // ==========================================
+        // EVENT LISTENERS
+        // ==========================================
+        
         temperatureInput.addEventListener('change', (e) => {
             tempValue.textContent = e.target.value;
         });
@@ -546,7 +618,10 @@
         form.addEventListener('submit', handleSubmit);
         clearBtn.addEventListener('click', clearForm);
 
-        // Functions
+        // ==========================================
+        // FUNCTIONS
+        // ==========================================
+        
         async function checkHealth() {
             try {
                 const response = await fetch(`${API_URL}/health`);
@@ -560,6 +635,7 @@
 
                 wsStatus.classList.toggle('online', true);
             } catch (error) {
+                console.error('Health check error:', error);
                 llmStatus.classList.add('offline');
                 ttsStatus.classList.add('offline');
                 wsStatus.classList.add('offline');
@@ -609,6 +685,7 @@
                 }
             } catch (error) {
                 showError(`Failed to process request: ${error.message}`);
+                console.error('Request error:', error);
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '🚀 Send & Generate Audio';
@@ -637,29 +714,46 @@
 
         function connectWebSocket(wsUrl) {
             try {
-                const ws = new WebSocket(wsUrl);
+                // Convert HTTP URL to WebSocket if needed
+                let finalWsUrl = wsUrl;
+                if (wsUrl.startsWith('http://')) {
+                    finalWsUrl = wsUrl.replace('http://', 'ws://');
+                } else if (wsUrl.startsWith('https://')) {
+                    finalWsUrl = wsUrl.replace('https://', 'wss://');
+                }
+
+                console.log('Connecting to WebSocket:', finalWsUrl);
+
+                const ws = new WebSocket(finalWsUrl);
 
                 ws.binaryType = 'arraybuffer';
 
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const audioChunks = [];
 
                 ws.onopen = () => {
-                    console.log('WebSocket connected');
+                    console.log('✅ WebSocket connected');
+                    wsStatus.classList.add('online');
+                    wsStatus.classList.remove('offline');
                 };
 
                 ws.onmessage = (event) => {
-                    const audioData = new Uint8Array(event.data);
-                    audioChunks.push(audioData);
+                    try {
+                        const audioData = new Uint8Array(event.data);
+                        audioChunks.push(audioData);
+                    } catch (error) {
+                        console.error('Error processing audio chunk:', error);
+                    }
                 };
 
                 ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
+                    console.error('❌ WebSocket error:', error);
+                    wsStatus.classList.add('offline');
+                    wsStatus.classList.remove('online');
                     showError('Audio streaming error. You can still see the text response.');
                 };
 
                 ws.onclose = () => {
-                    console.log('WebSocket closed');
+                    console.log('WebSocket closed. Total chunks received:', audioChunks.length);
                     if (audioChunks.length > 0) {
                         const totalLength = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
                         const audioData = new Uint8Array(totalLength);
@@ -672,11 +766,14 @@
                         const blob = new Blob([audioData], { type: 'audio/wav' });
                         const url = URL.createObjectURL(blob);
                         audioPlayer.src = url;
-                        showSuccess('Audio ready to play!');
+                        showSuccess('✅ Audio ready to play!');
+                    } else {
+                        showError('No audio data received from WebSocket');
                     }
                 };
             } catch (error) {
                 console.error('WebSocket connection error:', error);
+                wsStatus.classList.add('offline');
                 showError('Could not connect to audio stream. Text response is available.');
             }
         }
