@@ -45,7 +45,8 @@ class StreamingTTSService:
         device: str = "cuda",
         inference_steps: int = 5,
     ) -> None:
-        self.model_path = Path(model_path)
+        # Keep model_path as string for HuggingFace repo IDs (Path() converts / to \ on Windows)
+        self.model_path = model_path
         self.inference_steps = inference_steps
         self.sample_rate = SAMPLE_RATE
 
@@ -66,7 +67,7 @@ class StreamingTTSService:
 
     def load(self) -> None:
         print(f"[startup] Loading processor from {self.model_path}")
-        self.processor = VibeVoiceStreamingProcessor.from_pretrained(str(self.model_path))
+        self.processor = VibeVoiceStreamingProcessor.from_pretrained(self.model_path)
 
         
         # Decide dtype & attention
@@ -86,7 +87,7 @@ class StreamingTTSService:
         # Load model
         try:
             self.model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
-                str(self.model_path),
+                self.model_path,
                 torch_dtype=load_dtype,
                 device_map=device_map,
                 attn_implementation=attn_impl_primary,
@@ -99,7 +100,7 @@ class StreamingTTSService:
                 print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
                 
                 self.model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
-                    str(self.model_path),
+                    self.model_path,
                     torch_dtype=load_dtype,
                     device_map=self.device,
                     attn_implementation='sdpa',
