@@ -172,7 +172,7 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         elif audio.ndim == 2:
             # assume channels are the last dimension or the first; prefer last
             # common shapes: (T, C) or (C, T). Handle both.
-            if audio.shape[0] <= 8 and audio.shape[1] > audio.shape[0]:
+            if audio.shape[0] <= 8 and audio.shape[1] > 1000:
                 # likely (C, T)
                 return np.mean(audio, axis=0).astype(np.float32)
             else:
