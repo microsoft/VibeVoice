@@ -9,6 +9,12 @@ import re
 import torch
 from typing import Dict, List, Tuple
 
+try:
+    import fickling.pytorch as fpytorch
+    FICKLING_AVAILABLE = True
+except ImportError:
+    FICKLING_AVAILABLE = False
+
 from vibevoice.modular.configuration_vibevoice import (
     VibeVoiceConfig
 )
@@ -27,13 +33,24 @@ def convert_vibevoice_nnscaler_checkpoint_to_hf(
     Supports both regular checkpoints and tensor parallel checkpoints.
     """
     
-    # Load regular checkpoint
+    # Load regular checkpoint using fickling for secure deserialization
     logger.info(f"Loading regular checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location="cpu") # ['model', 'optimizer', 'lr_scheduler', 'train_status', 'train_args', 'rng_states', 'nnscaler', 'dataloader']
+    if FICKLING_AVAILABLE:
+        logger.info("Using fickling for secure PyTorch checkpoint deserialization")
+        checkpoint = fpytorch.load(checkpoint_path, map_location="cpu")
+    else:
+        logger.warning("fickling not available, using torch.load with weights_only=True")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     
-    # config = checkpoint['train_args']
-    init_config_name = checkpoint['train_args']['vars']['model_args']['config_path']['relative_path']
-    pretrained_name = checkpoint['train_args']['vars']['data_args']['tokenizer_path']
+    # Extract config information from checkpoint
+    try:
+        init_config_name = checkpoint['train_args']['vars']['model_args']['config_path']['relative_path']
+        pretrained_name = checkpoint['train_args']['vars']['data_args']['tokenizer_path']
+    except (KeyError, TypeError) as e:
+        logger.error(f"Failed to extract config from checkpoint: {e}")
+        logger.info("Falling back to default config paths")
+        init_config_name = "vibevoice_config.json"
+        pretrained_name = "tokenizer.model"
     
     init_config_path = Path(__file__).parent.parent / 'configs' / init_config_name.split('/')[-1]
     if init_config_path.exists():
