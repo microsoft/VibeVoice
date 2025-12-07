@@ -62,7 +62,7 @@ class AudioNormalizer:
         max_after = np.max(np.abs(audio) * candidate_scalar)
         if max_after > 1.0:
             # scale down to avoid clipping; keep a small epsilon margin
-            adjusted_scalar = (1.0 - self.eps) / (np.max(np.abs(audio)) + self.eps)
+            adjusted_scalar = (1.0 - self.eps) / max_after * candidate_scalar
             applied_scalar = min(candidate_scalar, adjusted_scalar)
         else:
             applied_scalar = candidate_scalar
