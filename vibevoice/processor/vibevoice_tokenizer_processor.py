@@ -105,6 +105,10 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
     """
     model_input_names = ["input_features"]
     
+    # Maximum audio size in samples (1 hour at 24kHz = 86,400,000 samples)
+    # Adjust based on available memory and use case
+    MAX_AUDIO_SIZE = 86_400_000  # ~1 hour of audio at 24kHz
+    
     def __init__(
         self,
         sampling_rate: int = 24000,
@@ -169,12 +173,23 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
             
         Returns:
             np.ndarray: Processed audio
+            
+        Raises:
+            ValueError: If audio size exceeds maximum allowed size
         """
         # Convert to numpy array
         if not isinstance(audio, np.ndarray):
             audio = np.array(audio, dtype=np.float32)
         else:
             audio = audio.astype(np.float32)
+        
+        # Validate audio size before processing
+        audio_size = audio.size
+        if audio_size > self.MAX_AUDIO_SIZE:
+            raise ValueError(
+                f"Audio size ({audio_size} samples) exceeds maximum allowed size "
+                f"({self.MAX_AUDIO_SIZE} samples). Please provide a shorter audio file."
+            )
         
         # Ensure mono
         audio = self._ensure_mono(audio)
@@ -223,6 +238,12 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         if isinstance(audio, str):
             # Single audio file path
             audio = self._load_audio_from_path(audio)
+            # Validate size after loading
+            if isinstance(audio, np.ndarray) and audio.size > self.MAX_AUDIO_SIZE:
+                raise ValueError(
+                    f"Loaded audio size ({audio.size} samples) exceeds maximum "
+                    f"allowed size ({self.MAX_AUDIO_SIZE} samples)."
+                )
             is_batched = False
         elif isinstance(audio, list):
             if len(audio) == 0:
@@ -232,6 +253,13 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
             if all(isinstance(item, str) for item in audio):
                 # Batch of audio file paths
                 audio = [self._load_audio_from_path(path) for path in audio]
+                # Validate each loaded audio
+                for a in audio:
+                    if isinstance(a, np.ndarray) and a.size > self.MAX_AUDIO_SIZE:
+                        raise ValueError(
+                            f"Loaded audio size ({a.size} samples) exceeds maximum "
+                            f"allowed size ({self.MAX_AUDIO_SIZE} samples)."
+                        )
                 is_batched = True
             else:
                 # Check if it's batched audio arrays
@@ -239,6 +267,35 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         else:
             # Single audio array or list
             is_batched = False
+        
+        # Validate total audio size to prevent DoS attacks
+        if is_batched:
+            # For batched audio, validate total combined size
+            total_size = 0
+            for a in audio:
+                if isinstance(a, np.ndarray):
+                    total_size += a.size
+                elif isinstance(a, list):
+                    total_size += len(a)
+            if total_size > self.MAX_AUDIO_SIZE:
+                raise ValueError(
+                    f"Total batch audio size ({total_size} samples) exceeds maximum "
+                    f"allowed size ({self.MAX_AUDIO_SIZE} samples)."
+                )
+        else:
+            # For single audio, validate size
+            if isinstance(audio, np.ndarray):
+                audio_size = audio.size
+            elif isinstance(audio, list):
+                audio_size = len(audio)
+            else:
+                audio_size = 0
+            
+            if audio_size > self.MAX_AUDIO_SIZE:
+                raise ValueError(
+                    f"Audio size ({audio_size} samples) exceeds maximum allowed size "
+                    f"({self.MAX_AUDIO_SIZE} samples)."
+                )
         
         # Process audio
         if is_batched:
@@ -277,7 +334,25 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
             
         Returns:
             np.ndarray: Loaded audio array
+            
+        Raises:
+            ValueError: If file size exceeds maximum allowed size
         """
+        # Validate file size before loading to prevent DoS
+        if not os.path.exists(audio_path):
+            raise ValueError(f"Audio file not found: {audio_path}")
+        
+        file_size_bytes = os.path.getsize(audio_path)
+        # Assuming 4 bytes per sample (float32), estimate sample count
+        # Add safety margin for different formats (MP3, FLAC have overhead)
+        estimated_samples = file_size_bytes // 2  # Conservative estimate
+        if estimated_samples > self.MAX_AUDIO_SIZE:
+            raise ValueError(
+                f"Audio file size ({file_size_bytes} bytes) is too large. "
+                f"Maximum allowed file size is approximately "
+                f"{self.MAX_AUDIO_SIZE * 4} bytes."
+            )
+        
         # Get file extension to determine loading method
         file_ext = os.path.splitext(audio_path)[1].lower()
         
