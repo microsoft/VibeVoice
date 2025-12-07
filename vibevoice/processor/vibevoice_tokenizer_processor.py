@@ -402,12 +402,16 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         Merge with parent dict if available to remain compatible with HF save/load.
         """
         parent_dict = {}
-        try:
-            parent = super()
-            if hasattr(parent, "to_dict"):
+        parent = super()
+        if hasattr(parent, "to_dict"):
+            try:
                 parent_dict = parent.to_dict()
-        except Exception:
-            parent_dict = {}
+            except AttributeError as e:
+                logger.warning(f"Parent class does not have a working to_dict method: {e}")
+                parent_dict = {}
+            except Exception as e:
+                logger.error(f"Unexpected error calling parent to_dict: {e}", exc_info=True)
+                parent_dict = {}
 
         merged = dict(parent_dict)
         merged.update(self.feature_extractor_dict)
