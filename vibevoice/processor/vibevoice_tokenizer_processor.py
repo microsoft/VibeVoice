@@ -328,7 +328,7 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         if file_ext in [".wav", ".mp3", ".flac", ".m4a", ".ogg", ".opus"]:
             try:
                 import librosa
-            except Exception as e:
+            except ImportError as e:
                 raise ImportError(
                     "librosa is required to load compressed audio formats. Install it with: pip install librosa"
                 ) from e
