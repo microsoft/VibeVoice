@@ -447,7 +447,7 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
 
         try:
             import soundfile as sf
-        except Exception as e:
+        except ImportError as e:
             raise ImportError(
                 "soundfile is required to save audio files. Install it with: pip install soundfile"
             ) from e
