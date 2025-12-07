@@ -471,8 +471,14 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
             # Ensure 1D or 2D with shape (T,) or (T, channels)
             a = np.asarray(a, dtype=np.float32)
             if a.ndim == 3:
-                # (B, C, T) -> iterate
-                raise ValueError("Please pass a batch as a list or pass (B, C, T) and call save_audio with a directory output path.")
+                # (B, C, T) -- handle batch size 1 as single audio, else error
+                if a.shape[0] == 1:
+                    a = np.squeeze(a, axis=0)
+                else:
+                    raise ValueError(
+                        "3D array detected with batch size > 1. For batches, pass as a list or use output_path as a directory. "
+                        f"Got shape {a.shape}."
+                    )
             if a.ndim == 2:
                 # (C, T) -> transpose to (T, C)
                 if a.shape[0] <= 8 and a.shape[1] > a.shape[0]:
