@@ -743,10 +743,23 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                                 await ws.send_json({"type": "status", "state": "ready"})
                 
                 except WebSocketDisconnect:
+                    logger.info("Client disconnected")
+                    break
+                except RuntimeError as e:
+                    # Handle "Cannot call receive once disconnect received" gracefully
+                    if "disconnect" in str(e).lower():
+                        break
+                    logger.error(f"WebSocket runtime error: {e}")
                     break
                 except Exception as e:
                     logger.error(f"WebSocket error: {e}")
-                    await ws.send_json({"type": "error", "message": str(e)})
+                    # Only try to send error if connection is still open
+                    try:
+                        if ws.client_state.name == "CONNECTED":
+                            await ws.send_json({"type": "error", "message": str(e)})
+                    except Exception:
+                        pass  # Connection already closed, ignore
+                    break
         
         finally:
             pipeline.reset()

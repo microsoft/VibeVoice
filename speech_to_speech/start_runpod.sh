@@ -2,6 +2,11 @@
 # VibeVoice S2S RunPod Start Script
 # ==================================
 # Use this script when deploying on RunPod
+#
+# Usage:
+#   bash speech_to_speech/start_runpod.sh           # Normal start
+#   bash speech_to_speech/start_runpod.sh --fresh   # Fresh install (clear cache)
+#   bash speech_to_speech/start_runpod.sh --setup   # First-time setup (install apt packages)
 
 set -e
 
@@ -9,6 +14,22 @@ echo "========================================"
 echo "VibeVoice Speech-to-Speech Server"
 echo "========================================"
 echo ""
+
+# Check for --setup flag to install system dependencies
+for arg in "$@"; do
+    if [ "$arg" = "--setup" ]; then
+        echo "Installing system dependencies..."
+        apt-get update && apt-get install -y --no-install-recommends \
+            ffmpeg \
+            libsndfile1 \
+            libportaudio2 \
+            portaudio19-dev \
+            libasound2-dev \
+            && rm -rf /var/lib/apt/lists/*
+        echo "System dependencies installed."
+        echo ""
+    fi
+done
 
 # Display system info
 echo "System Information:"

@@ -215,32 +215,63 @@ Then use your image in RunPod.
 
 ## 🚀 Deployment Steps
 
-### Option 1: Using RunPod Web Terminal
+### Option 1: Using RunPod Web Terminal (Recommended)
 
-1. **Create Pod** with PyTorch template
-2. **Open Web Terminal** (not SSH)
-3. **Clone repository**:
-   ```bash
-   cd /workspace
-   git clone https://github.com/microsoft/VibeVoice.git app
-   cd app
-   ```
+#### First-Time Setup (New Pod)
 
-4. **Install dependencies**:
-   ```bash
-   pip install -e .
-   pip install -r speech_to_speech/requirements.txt
-   ```
+```bash
+# 1. Navigate to workspace
+cd /workspace
 
-5. **Start server**:
-   ```bash
-   bash speech_to_speech/start_runpod.sh
-   ```
+# 2. Clone repository (use your repo URL)
+git clone https://github.com/devasphn/VibeVoice.git
+cd VibeVoice
 
-6. **Access via proxy URL**:
-   ```
-   https://<POD_ID>-8005.proxy.runpod.net/
-   ```
+# 3. First-time setup with system dependencies
+bash speech_to_speech/start_runpod.sh --setup --fresh
+```
+
+#### Subsequent Starts (Same Pod)
+
+```bash
+cd /workspace/VibeVoice
+bash speech_to_speech/start_runpod.sh
+```
+
+#### After Code Updates (Git Pull)
+
+```bash
+cd /workspace/VibeVoice
+git pull origin main
+bash speech_to_speech/start_runpod.sh --fresh
+```
+
+#### Quick One-Liner Commands
+
+```bash
+# Fresh start (after git pull)
+cd /workspace/VibeVoice && git pull origin main && bash speech_to_speech/start_runpod.sh --fresh
+
+# Normal start
+cd /workspace/VibeVoice && bash speech_to_speech/start_runpod.sh
+
+# Full setup (new pod)
+cd /workspace && git clone https://github.com/devasphn/VibeVoice.git && cd VibeVoice && bash speech_to_speech/start_runpod.sh --setup --fresh
+```
+
+#### Access URLs
+
+After startup, access via RunPod proxy:
+```
+# Web UI
+https://<POD_ID>-8005.proxy.runpod.net/
+
+# WebSocket (for custom clients)
+wss://<POD_ID>-8005.proxy.runpod.net/stream
+
+# Health check
+https://<POD_ID>-8005.proxy.runpod.net/health
+```
 
 ### Option 2: Using Custom Docker Image
 
@@ -272,6 +303,18 @@ Then use your image in RunPod.
 - Ensure using `wss://` not `ws://` for RunPod proxy
 - Check browser console for errors
 - Verify server is running with `/health` endpoint
+
+**Audio quality issues (noise/artifacts)**
+- Run with `--setup` flag to install audio libraries:
+  ```bash
+  bash speech_to_speech/start_runpod.sh --setup
+  ```
+- This installs: ffmpeg, libsndfile1, libportaudio2, libasound2-dev
+
+**cuDNN library errors**
+- The start script automatically configures LD_LIBRARY_PATH
+- If you see cuDNN errors, the library paths are logged at startup
+- Verify the paths are correct in the "Library Path" output
 
 ### Logs
 
@@ -311,7 +354,9 @@ grep -i error /workspace/logs/s2s.log
 
 1. **Use larger ASR model**:
    ```bash
-   ASR_MODEL=openai/whisper-small.en
+   ASR_MODEL=medium.en  # More accurate, slower
+   # or
+   ASR_MODEL=large-v3   # Best accuracy, slowest
    ```
 
 2. **Increase LLM tokens**:
