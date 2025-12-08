@@ -26,6 +26,11 @@ jobs:
           # 2. All other checks - warn only (exit-zero)
           ruff check . --exit-zero
 
+      - name: Check formatting with black
+        run: |
+          pip install black
+          black --check .
+
   install-test:
     runs-on: ubuntu-latest
     strategy:
