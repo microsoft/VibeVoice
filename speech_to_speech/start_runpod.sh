@@ -23,6 +23,51 @@ export HF_HOME="${HF_HOME:-/workspace/models}"
 export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-/workspace/models/transformers}"
 export TORCH_HOME="${TORCH_HOME:-/workspace/models/torch}"
 
+# Fix cuDNN library path for ctranslate2/faster-whisper
+# The pip-installed nvidia packages put libraries in non-standard locations
+echo "Configuring CUDA library paths..."
+
+# Try to find nvidia library paths from pip packages
+NVIDIA_LIBS=""
+
+# cuDNN
+CUDNN_PATH=$(python -c "import nvidia.cudnn; print(nvidia.cudnn.__path__[0])" 2>/dev/null)
+if [ -n "$CUDNN_PATH" ] && [ -d "$CUDNN_PATH/lib" ]; then
+    NVIDIA_LIBS="${CUDNN_PATH}/lib"
+    echo "  Found cuDNN: $CUDNN_PATH/lib"
+fi
+
+# cuBLAS
+CUBLAS_PATH=$(python -c "import nvidia.cublas; print(nvidia.cublas.__path__[0])" 2>/dev/null)
+if [ -n "$CUBLAS_PATH" ] && [ -d "$CUBLAS_PATH/lib" ]; then
+    NVIDIA_LIBS="${NVIDIA_LIBS:+$NVIDIA_LIBS:}${CUBLAS_PATH}/lib"
+    echo "  Found cuBLAS: $CUBLAS_PATH/lib"
+fi
+
+# cuFFT (sometimes needed)
+CUFFT_PATH=$(python -c "import nvidia.cufft; print(nvidia.cufft.__path__[0])" 2>/dev/null)
+if [ -n "$CUFFT_PATH" ] && [ -d "$CUFFT_PATH/lib" ]; then
+    NVIDIA_LIBS="${NVIDIA_LIBS:+$NVIDIA_LIBS:}${CUFFT_PATH}/lib"
+fi
+
+# Fallback: search in common pip locations
+if [ -z "$NVIDIA_LIBS" ]; then
+    SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
+    if [ -d "$SITE_PACKAGES/nvidia" ]; then
+        for lib_dir in "$SITE_PACKAGES/nvidia"/*/lib; do
+            if [ -d "$lib_dir" ]; then
+                NVIDIA_LIBS="${NVIDIA_LIBS:+$NVIDIA_LIBS:}$lib_dir"
+            fi
+        done
+        echo "  Found nvidia libs in: $SITE_PACKAGES/nvidia/*/lib"
+    fi
+fi
+
+# Set LD_LIBRARY_PATH
+if [ -n "$NVIDIA_LIBS" ]; then
+    export LD_LIBRARY_PATH="${NVIDIA_LIBS}:${LD_LIBRARY_PATH:-}"
+fi
+
 # Model configurations
 # NOTE: ASR_MODEL must be a faster-whisper compatible model:
 #   - Built-in: tiny, tiny.en, base, base.en, small, small.en, medium, medium.en, large-v2, large-v3
@@ -54,6 +99,9 @@ echo "-------------------"
 echo "TTS Model: $MODEL_PATH"
 echo "ASR Model: $ASR_MODEL"
 echo "LLM Model: $LLM_MODEL"
+echo ""
+echo "Library Path (LD_LIBRARY_PATH):"
+echo "  ${LD_LIBRARY_PATH:-<not set>}"
 echo ""
 
 # Navigate to app directory
