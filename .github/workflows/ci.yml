@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install ruff
+        run: |
+          pip install ruff
+      - name: Run ruff check
+        run: |
+          # Run ruff on the current directory
+          # We use --exit-zero to treat all errors as warnings initially if there are many errors,
+          # but for a proper CI we usually want it to fail.
+          # Given this is a new CI on an existing codebase, let's try to be strict but allow some flexibility if needed.
+          # For now, let's just run it standard.
+          ruff check .
+
+  install-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Verify import
+        run: |
+          python -c "import vibevoice; print('Successfully imported vibevoice')"
