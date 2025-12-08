@@ -17,7 +17,7 @@ jobs:
           python-version: "3.10"
       - name: Install ruff
         run: |
-          pip install ruff
+          pip install ruff==0.4.2
       - name: Run ruff check
         run: |
           # Run ruff on the current directory
