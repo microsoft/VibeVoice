@@ -16,6 +16,7 @@ ENV TRANSFORMERS_CACHE=/workspace/models/transformers
 ENV TORCH_HOME=/workspace/models/torch
 
 # Application settings
+# NOTE: ASR_MODEL must be faster-whisper compatible (NOT distil-whisper/distil-small.en)
 ENV MODEL_PATH=microsoft/VibeVoice-Realtime-0.5B
 ENV ASR_MODEL=small.en
 ENV LLM_MODEL=Qwen/Qwen2.5-1.5B-Instruct

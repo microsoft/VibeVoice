@@ -24,8 +24,12 @@ export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-/workspace/models/transformers}
 export TORCH_HOME="${TORCH_HOME:-/workspace/models/torch}"
 
 # Model configurations
+# NOTE: ASR_MODEL must be a faster-whisper compatible model:
+#   - Built-in: tiny, tiny.en, base, base.en, small, small.en, medium, medium.en, large-v2, large-v3
+#   - CTranslate2: Systran/faster-distil-whisper-small.en, Systran/faster-distil-whisper-medium.en
+# Do NOT use distil-whisper/distil-small.en (wrong format)
 export MODEL_PATH="${MODEL_PATH:-microsoft/VibeVoice-Realtime-0.5B}"
-export ASR_MODEL="${ASR_MODEL:-small.en}"
+export ASR_MODEL="small.en"  # Force correct model, override any env var
 export LLM_MODEL="${LLM_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 
 # Server ports (avoid 8001, 8888 which are reserved by RunPod)
@@ -37,8 +41,35 @@ export FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 mkdir -p "$HF_HOME"
 mkdir -p /workspace/logs
 
+# Clean up any incorrectly cached ASR models (distil-whisper is wrong format)
+if [ -d "$HF_HOME/hub/models--distil-whisper--distil-small.en" ]; then
+    echo "Removing incorrectly cached ASR model (distil-whisper format)..."
+    rm -rf "$HF_HOME/hub/models--distil-whisper--distil-small.en"
+fi
+
+# Display model configuration
+echo ""
+echo "Model Configuration:"
+echo "-------------------"
+echo "TTS Model: $MODEL_PATH"
+echo "ASR Model: $ASR_MODEL"
+echo "LLM Model: $LLM_MODEL"
+echo ""
+
 # Navigate to app directory
 cd /workspace/app 2>/dev/null || cd "$(dirname "$0")/.."
+
+# Check for --fresh flag to force reinstall
+FRESH_INSTALL=false
+for arg in "$@"; do
+    if [ "$arg" = "--fresh" ]; then
+        FRESH_INSTALL=true
+        echo "Fresh install requested, removing cached files..."
+        rm -f .deps_installed
+        find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        find . -type f -name "*.pyc" -delete 2>/dev/null || true
+    fi
+done
 
 # Install dependencies if needed
 if [ ! -f ".deps_installed" ]; then
@@ -46,6 +77,7 @@ if [ ! -f ".deps_installed" ]; then
     pip install -e . --quiet
     pip install -r speech_to_speech/requirements.txt --quiet
     touch .deps_installed
+    echo "Dependencies installed successfully."
 fi
 
 # Pre-download models
