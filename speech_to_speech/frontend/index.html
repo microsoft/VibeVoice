@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeVoice S2S - Real-Time Speech-to-Speech</title>
+    <style>
+        :root {
+            --bg: #0f0f23;
+            --surface: #1a1a2e;
+            --surface-hover: #252540;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --accent-dark: #4f46e5;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: rgba(99, 102, 241, 0.2);
+            --glow: 0 0 20px rgba(99, 102, 241, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-light), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        .status-dot.processing {
+            background: var(--warning);
+            box-shadow: 0 0 10px var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        .status-dot.error {
+            background: var(--error);
+            box-shadow: 0 0 10px var(--error);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .latency-display {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .latency-value {
+            color: var(--accent-light);
+            font-weight: 600;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .mic-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 3px solid var(--accent);
+            background: var(--surface);
+            color: var(--accent);
+            font-size: 3rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .mic-button:hover {
+            background: var(--accent);
+            color: white;
+            box-shadow: var(--glow);
+        }
+
+        .mic-button.recording {
+            background: var(--error);
+            border-color: var(--error);
+            color: white;
+            animation: recording-pulse 1.5s infinite;
+        }
+
+        @keyframes recording-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+        }
+
+        .mic-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .mic-icon {
+            font-style: normal;
+        }
+
+        .instructions {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        .conversation {
+            max-height: 400px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            padding: 1rem;
+            border-radius: 12px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            background: var(--accent);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            background: var(--surface-hover);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-header {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 0.25rem;
+        }
+
+        .message.assistant .message-header {
+            color: var(--text-muted);
+        }
+
+        .message-text {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 0.75rem;
+            background: var(--surface-hover);
+            border-radius: 8px;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-light);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .settings-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .setting {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .setting label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .setting input, .setting select {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface-hover);
+            color: var(--text);
+            font-size: 0.875rem;
+        }
+
+        .setting input:focus, .setting select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-dark);
+        }
+
+        .btn-secondary {
+            background: var(--surface-hover);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface);
+        }
+
+        .visualizer {
+            height: 60px;
+            background: var(--surface-hover);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            overflow: hidden;
+        }
+
+        .bar {
+            width: 4px;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        footer a {
+            color: var(--accent-light);
+            text-decoration: none;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎙️ VibeVoice S2S</h1>
+            <p class="subtitle">Real-Time Speech-to-Speech AI • <800ms Latency</p>
+        </header>
+
+        <!-- Status Card -->
+        <div class="card">
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Disconnected</span>
+                </div>
+                <div class="latency-display">
+                    E2E Latency: <span class="latency-value" id="latencyValue">--</span>ms
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Card -->
+        <div class="card">
+            <div class="controls">
+                <button class="mic-button disabled" id="micButton" disabled>
+                    <span class="mic-icon">🎤</span>
+                </button>
+                <p class="instructions" id="instructions">Connecting to server...</p>
+                
+                <!-- Audio Visualizer -->
+                <div class="visualizer" id="visualizer">
+                    <div class="bar" style="height: 10px;"></div>
+                    <div class="bar" style="height: 15px;"></div>
+                    <div class="bar" style="height: 20px;"></div>
+                    <div class="bar" style="height: 25px;"></div>
+                    <div class="bar" style="height: 30px;"></div>
+                    <div class="bar" style="height: 35px;"></div>
+                    <div class="bar" style="height: 30px;"></div>
+                    <div class="bar" style="height: 25px;"></div>
+                    <div class="bar" style="height: 20px;"></div>
+                    <div class="bar" style="height: 15px;"></div>
+                    <div class="bar" style="height: 10px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conversation Card -->
+        <div class="card">
+            <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Conversation</h3>
+            <div class="conversation" id="conversation">
+                <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
+                    Start speaking to begin the conversation...
+                </p>
+            </div>
+        </div>
+
+        <!-- Metrics Card -->
+        <div class="card">
+            <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Performance Metrics</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-value" id="metricVAD">--</div>
+                    <div class="metric-label">VAD (ms)</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="metricASR">--</div>
+                    <div class="metric-label">ASR (ms)</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="metricLLM">--</div>
+                    <div class="metric-label">LLM (ms)</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="metricTTS">--</div>
+                    <div class="metric-label">TTS (ms)</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="metricTotal">--</div>
+                    <div class="metric-label">Total (ms)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Card -->
+        <div class="card">
+            <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Settings</h3>
+            <div class="settings-row">
+                <div class="setting">
+                    <label for="serverUrl">Server URL</label>
+                    <input type="text" id="serverUrl" placeholder="ws://localhost:8005/stream">
+                </div>
+                <div class="setting">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" id="connectBtn">Connect</button>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                Powered by 
+                <a href="https://github.com/microsoft/VibeVoice">VibeVoice</a> • 
+                Silero VAD • faster-whisper • Qwen2.5
+            </p>
+            <p style="margin-top: 0.5rem;">All components MIT/Apache 2.0 licensed</p>
+        </footer>
+    </div>
+
+    <!-- Audio Playback -->
+    <audio id="audioPlayer" style="display: none;"></audio>
+
+    <script>
+        // =========================================
+        // VibeVoice S2S Client
+        // =========================================
+
+        class S2SClient {
+            constructor() {
+                this.ws = null;
+                this.audioContext = null;
+                this.mediaStream = null;
+                this.mediaRecorder = null;
+                this.audioProcessor = null;
+                this.isRecording = false;
+                this.isConnected = false;
+                this.audioQueue = [];
+                this.isPlaying = false;
+
+                // Audio settings
+                this.inputSampleRate = 16000;
+                this.outputSampleRate = 24000;
+
+                // UI Elements
+                this.statusDot = document.getElementById('statusDot');
+                this.statusText = document.getElementById('statusText');
+                this.latencyValue = document.getElementById('latencyValue');
+                this.micButton = document.getElementById('micButton');
+                this.instructions = document.getElementById('instructions');
+                this.conversation = document.getElementById('conversation');
+                this.serverUrl = document.getElementById('serverUrl');
+                this.connectBtn = document.getElementById('connectBtn');
+                this.visualizer = document.getElementById('visualizer');
+
+                // Set default server URL
+                this.serverUrl.value = this.getDefaultUrl();
+
+                // Event listeners
+                this.micButton.addEventListener('click', () => this.toggleRecording());
+                this.connectBtn.addEventListener('click', () => this.connect());
+
+                // Auto-connect on load
+                setTimeout(() => this.connect(), 500);
+            }
+
+            getDefaultUrl() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host || 'localhost:8005';
+                return `${protocol}//${host}/stream`;
+            }
+
+            async connect() {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.disconnect();
+                    return;
+                }
+
+                const url = this.serverUrl.value || this.getDefaultUrl();
+                this.updateStatus('connecting', 'Connecting...');
+
+                try {
+                    this.ws = new WebSocket(url);
+                    
+                    this.ws.onopen = () => {
+                        this.isConnected = true;
+                        this.updateStatus('connected', 'Connected');
+                        this.instructions.textContent = 'Click the microphone to start speaking';
+                        this.micButton.classList.remove('disabled');
+                        this.micButton.disabled = false;
+                        this.connectBtn.textContent = 'Disconnect';
+                    };
+
+                    this.ws.onclose = () => {
+                        this.isConnected = false;
+                        this.updateStatus('disconnected', 'Disconnected');
+                        this.instructions.textContent = 'Connection closed. Click Connect to reconnect.';
+                        this.micButton.classList.add('disabled');
+                        this.micButton.disabled = true;
+                        this.connectBtn.textContent = 'Connect';
+                        this.stopRecording();
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateStatus('error', 'Connection error');
+                    };
+
+                    this.ws.onmessage = (event) => this.handleMessage(event);
+
+                } catch (error) {
+                    console.error('Connection error:', error);
+                    this.updateStatus('error', 'Failed to connect');
+                }
+            }
+
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+                this.stopRecording();
+            }
+
+            async handleMessage(event) {
+                if (event.data instanceof Blob) {
+                    // Binary audio data
+                    const audioData = await event.data.arrayBuffer();
+                    this.queueAudio(audioData);
+                } else {
+                    // JSON message
+                    try {
+                        const msg = JSON.parse(event.data);
+                        this.handleJsonMessage(msg);
+                    } catch (e) {
+                        console.error('Failed to parse message:', e);
+                    }
+                }
+            }
+
+            handleJsonMessage(msg) {
+                switch (msg.type) {
+                    case 'status':
+                        if (msg.state === 'processing') {
+                            this.updateStatus('processing', 'Processing...');
+                        } else if (msg.state === 'ready') {
+                            this.updateStatus('connected', 'Ready');
+                        }
+                        if (msg.input_sample_rate) {
+                            this.inputSampleRate = msg.input_sample_rate;
+                        }
+                        if (msg.output_sample_rate) {
+                            this.outputSampleRate = msg.output_sample_rate;
+                        }
+                        break;
+
+                    case 'transcript':
+                        this.addMessage('user', msg.user);
+                        this.addMessage('assistant', msg.assistant);
+                        break;
+
+                    case 'metrics':
+                        this.updateMetrics(msg);
+                        break;
+
+                    case 'error':
+                        console.error('Server error:', msg.message);
+                        this.updateStatus('error', 'Error: ' + msg.message);
+                        break;
+                }
+            }
+
+            updateStatus(state, text) {
+                this.statusDot.className = 'status-dot';
+                if (state === 'connected' || state === 'ready') {
+                    this.statusDot.classList.add('connected');
+                } else if (state === 'processing' || state === 'connecting') {
+                    this.statusDot.classList.add('processing');
+                } else if (state === 'error') {
+                    this.statusDot.classList.add('error');
+                }
+                this.statusText.textContent = text;
+            }
+
+            updateMetrics(metrics) {
+                document.getElementById('metricVAD').textContent = 
+                    Math.round(metrics.vad_latency_ms || 0);
+                document.getElementById('metricASR').textContent = 
+                    Math.round(metrics.asr_latency_ms || 0);
+                document.getElementById('metricLLM').textContent = 
+                    Math.round(metrics.llm_latency_ms || 0);
+                document.getElementById('metricTTS').textContent = 
+                    Math.round(metrics.tts_first_chunk_ms || 0);
+                document.getElementById('metricTotal').textContent = 
+                    Math.round(metrics.total_latency_ms || 0);
+                
+                this.latencyValue.textContent = Math.round(metrics.total_latency_ms || 0);
+            }
+
+            addMessage(role, text) {
+                // Clear placeholder
+                if (this.conversation.querySelector('p')) {
+                    this.conversation.innerHTML = '';
+                }
+
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `message ${role}`;
+                
+                const header = document.createElement('div');
+                header.className = 'message-header';
+                header.textContent = role === 'user' ? 'You' : 'Assistant';
+                
+                const textDiv = document.createElement('div');
+                textDiv.className = 'message-text';
+                textDiv.textContent = text;
+                
+                msgDiv.appendChild(header);
+                msgDiv.appendChild(textDiv);
+                this.conversation.appendChild(msgDiv);
+                
+                // Scroll to bottom
+                this.conversation.scrollTop = this.conversation.scrollHeight;
+            }
+
+            async toggleRecording() {
+                if (this.isRecording) {
+                    this.stopRecording();
+                } else {
+                    await this.startRecording();
+                }
+            }
+
+            async startRecording() {
+                if (!this.isConnected) return;
+
+                try {
+                    // Request microphone access
+                    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            sampleRate: this.inputSampleRate,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
+
+                    // Create audio context
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: this.inputSampleRate
+                    });
+
+                    // Create audio processor
+                    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+                    const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+
+                    processor.onaudioprocess = (e) => {
+                        if (!this.isRecording) return;
+                        
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        
+                        // Convert to PCM16
+                        const pcm16 = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) {
+                            pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+                        }
+                        
+                        // Send to server
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            this.ws.send(pcm16.buffer);
+                        }
+
+                        // Update visualizer
+                        this.updateVisualizer(inputData);
+                    };
+
+                    source.connect(processor);
+                    processor.connect(this.audioContext.destination);
+                    this.audioProcessor = processor;
+
+                    this.isRecording = true;
+                    this.micButton.classList.add('recording');
+                    this.micButton.querySelector('.mic-icon').textContent = '⏹️';
+                    this.instructions.textContent = 'Listening... Click to stop';
+
+                } catch (error) {
+                    console.error('Failed to start recording:', error);
+                    this.instructions.textContent = 'Microphone access denied';
+                }
+            }
+
+            stopRecording() {
+                this.isRecording = false;
+                
+                if (this.audioProcessor) {
+                    this.audioProcessor.disconnect();
+                    this.audioProcessor = null;
+                }
+                
+                if (this.audioContext) {
+                    this.audioContext.close();
+                    this.audioContext = null;
+                }
+                
+                if (this.mediaStream) {
+                    this.mediaStream.getTracks().forEach(track => track.stop());
+                    this.mediaStream = null;
+                }
+
+                this.micButton.classList.remove('recording');
+                this.micButton.querySelector('.mic-icon').textContent = '🎤';
+                this.instructions.textContent = 'Click the microphone to start speaking';
+                
+                // Reset visualizer
+                this.resetVisualizer();
+            }
+
+            updateVisualizer(audioData) {
+                const bars = this.visualizer.querySelectorAll('.bar');
+                const chunkSize = Math.floor(audioData.length / bars.length);
+                
+                bars.forEach((bar, i) => {
+                    let sum = 0;
+                    for (let j = 0; j < chunkSize; j++) {
+                        sum += Math.abs(audioData[i * chunkSize + j] || 0);
+                    }
+                    const avg = sum / chunkSize;
+                    const height = Math.max(5, Math.min(50, avg * 500));
+                    bar.style.height = `${height}px`;
+                });
+            }
+
+            resetVisualizer() {
+                const bars = this.visualizer.querySelectorAll('.bar');
+                bars.forEach((bar, i) => {
+                    bar.style.height = `${10 + (i % 3) * 5}px`;
+                });
+            }
+
+            queueAudio(audioData) {
+                this.audioQueue.push(audioData);
+                if (!this.isPlaying) {
+                    this.playNextAudio();
+                }
+            }
+
+            async playNextAudio() {
+                if (this.audioQueue.length === 0) {
+                    this.isPlaying = false;
+                    return;
+                }
+
+                this.isPlaying = true;
+                const audioData = this.audioQueue.shift();
+
+                try {
+                    // Create audio context for playback
+                    const playbackContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: this.outputSampleRate
+                    });
+
+                    // Convert PCM16 to Float32
+                    const pcm16 = new Int16Array(audioData);
+                    const float32 = new Float32Array(pcm16.length);
+                    for (let i = 0; i < pcm16.length; i++) {
+                        float32[i] = pcm16[i] / 32768;
+                    }
+
+                    // Create audio buffer
+                    const buffer = playbackContext.createBuffer(1, float32.length, this.outputSampleRate);
+                    buffer.getChannelData(0).set(float32);
+
+                    // Play
+                    const source = playbackContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(playbackContext.destination);
+                    source.onended = () => {
+                        playbackContext.close();
+                        this.playNextAudio();
+                    };
+                    source.start();
+
+                } catch (error) {
+                    console.error('Audio playback error:', error);
+                    this.playNextAudio();
+                }
+            }
+        }
+
+        // Initialize client
+        const client = new S2SClient();
+    </script>
+</body>
+</html>
