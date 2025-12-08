@@ -363,11 +363,22 @@ def streaming_tts(text: str, **kwargs) -> Iterator[np.ndarray]:
 @app.websocket("/stream")
 async def websocket_stream(ws: WebSocket) -> None:
     await ws.accept()
-    text = ws.query_params.get("text", "")
-    print(f"Client connected, text={text!r}")
-    cfg_param = ws.query_params.get("cfg")
-    steps_param = ws.query_params.get("steps")
-    voice_param = ws.query_params.get("voice")
+
+    # Receive initial configuration message from client
+    try:
+        config_message = await ws.receive_text()
+        config = json.loads(config_message)
+    except Exception as e:
+        print(f"Error receiving config: {e}")
+        await ws.close(code=1003, reason="Invalid configuration")
+        return
+
+    text = config.get("text", "")
+    cfg_param = config.get("cfg")
+    steps_param = config.get("steps")
+    voice_param = config.get("voice")
+
+    print(f"Client connected, text length={len(text)}, cfg={cfg_param}, steps={steps_param}, voice={voice_param}")
 
     try:
         cfg_scale = float(cfg_param) if cfg_param is not None else 1.5
