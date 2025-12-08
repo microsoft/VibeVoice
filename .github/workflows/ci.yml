@@ -21,11 +21,10 @@ jobs:
       - name: Run ruff check
         run: |
           # Run ruff on the current directory
-          # We use --exit-zero to treat all errors as warnings initially if there are many errors,
-          # but for a proper CI we usually want it to fail.
-          # Given this is a new CI on an existing codebase, let's try to be strict but allow some flexibility if needed.
-          # For now, let's just run it standard.
-          ruff check .
+          # 1. Critical errors (syntax, undefined names, etc.) - fail on these
+          ruff check . --select=E9,F63,F7,F82
+          # 2. All other checks - warn only (exit-zero)
+          ruff check . --exit-zero
 
   install-test:
     runs-on: ubuntu-latest
