@@ -8,7 +8,7 @@ End-to-end Speech-to-Speech (S2S) system with **<800ms latency** target for real
 | Component | Target Latency | Description |
 |-----------|---------------|-------------|
 | **VAD** | <5ms | Silero VAD voice activity detection |
-| **ASR** | <200ms | faster-whisper with distil-whisper-small |
+| **ASR** | <200ms | faster-whisper with small.en model |
 | **LLM** | <300ms | Qwen2.5-1.5B-Instruct (short responses) |
 | **TTS** | <300ms | VibeVoice-Realtime-0.5B first chunk |
 | **Total** | **<800ms** | End-to-end first audio response |
@@ -20,7 +20,7 @@ End-to-end Speech-to-Speech (S2S) system with **<800ms latency** target for real
 | Component | Model | License | Notes |
 |-----------|-------|---------|-------|
 | VAD | Silero VAD | MIT | <1ms per chunk, CPU-based |
-| ASR | faster-whisper (distil-whisper-small) | MIT | CTranslate2 backend, int8 quantization |
+| ASR | faster-whisper (small.en) | MIT | CTranslate2 backend, int8 quantization |
 | LLM | Qwen2.5-1.5B-Instruct | Apache 2.0 | Fast inference, multilingual |
 | TTS | VibeVoice-Realtime-0.5B | MIT | Streaming audio, ~300ms first chunk |
 
@@ -101,7 +101,7 @@ End-to-end Speech-to-Speech (S2S) system with **<800ms latency** target for real
 HF_HOME=/workspace/models
 TRANSFORMERS_CACHE=/workspace/models/transformers
 MODEL_PATH=microsoft/VibeVoice-Realtime-0.5B
-ASR_MODEL=distil-whisper/distil-small.en
+ASR_MODEL=small.en
 LLM_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 CUDA_VISIBLE_DEVICES=0
 ```

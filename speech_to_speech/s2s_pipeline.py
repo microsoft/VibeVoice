@@ -56,7 +56,7 @@ class PipelineState(Enum):
 class PipelineConfig:
     """Configuration for S2S Pipeline"""
     # Component settings
-    asr_model: str = "distil-whisper/distil-small.en"
+    asr_model: str = "small.en"  # faster-whisper built-in model, fast and accurate
     llm_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     tts_model: str = "microsoft/VibeVoice-Realtime-0.5B"
     

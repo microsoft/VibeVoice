@@ -32,8 +32,10 @@ class WhisperModel(Enum):
     BASE_EN = "base.en"
     SMALL = "small"
     SMALL_EN = "small.en"
-    DISTIL_SMALL_EN = "distil-whisper/distil-small.en"
-    DISTIL_MEDIUM_EN = "distil-whisper/distil-medium.en"
+    DISTIL_SMALL_EN = "Systran/faster-distil-whisper-small.en"
+    DISTIL_MEDIUM_EN = "Systran/faster-distil-whisper-medium.en"
+    DISTIL_LARGE_V2 = "Systran/faster-distil-whisper-large-v2"
+    DISTIL_LARGE_V3 = "Systran/faster-distil-whisper-large-v3"
     MEDIUM = "medium"
     MEDIUM_EN = "medium.en"
     LARGE_V2 = "large-v2"
@@ -45,7 +47,7 @@ class WhisperModel(Enum):
 class ASRConfig:
     """Configuration for faster-whisper ASR"""
     # Model settings
-    model_size: str = "distil-whisper/distil-small.en"  # Best for <200ms latency
+    model_size: str = "small.en"  # Best for <200ms latency, or use Systran/faster-distil-whisper-small.en
     device: str = "cuda"  # cuda, cpu, or auto
     compute_type: str = "int8"  # int8, int8_float16, float16, float32
     

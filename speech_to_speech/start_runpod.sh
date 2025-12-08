@@ -25,7 +25,7 @@ export TORCH_HOME="${TORCH_HOME:-/workspace/models/torch}"
 
 # Model configurations
 export MODEL_PATH="${MODEL_PATH:-microsoft/VibeVoice-Realtime-0.5B}"
-export ASR_MODEL="${ASR_MODEL:-distil-whisper/distil-small.en}"
+export ASR_MODEL="${ASR_MODEL:-small.en}"
 export LLM_MODEL="${LLM_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 
 # Server ports (avoid 8001, 8888 which are reserved by RunPod)

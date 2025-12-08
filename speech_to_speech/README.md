@@ -14,7 +14,7 @@ End-to-end Speech-to-Speech (S2S) system with **<800ms latency** for real-time c
 | Component | Target | Actual | Model |
 |-----------|--------|--------|-------|
 | **VAD** | <5ms | ~1ms | Silero VAD (MIT) |
-| **ASR** | <200ms | ~150ms | faster-whisper distil-small.en (MIT) |
+| **ASR** | <200ms | ~150ms | faster-whisper small.en (MIT) |
 | **LLM** | <300ms | ~200ms | Qwen2.5-1.5B-Instruct (Apache 2.0) |
 | **TTS** | <300ms | ~250ms | VibeVoice-Realtime-0.5B (MIT) |
 | **Total** | **<800ms** | **~600ms** | End-to-end first audio |
@@ -86,7 +86,7 @@ speech_to_speech/
 
 ### ASR - faster-whisper
 - **License**: MIT (CTranslate2 + Whisper weights)
-- **Model**: distil-whisper/distil-small.en
+- **Model**: small.en (built-in) or Systran/faster-distil-whisper-small.en
 - **Latency**: ~150ms for typical utterance
 - **Features**: INT8 quantization, streaming transcription
 
@@ -175,7 +175,7 @@ Set these in RunPod pod configuration:
 # Required
 MODEL_PATH=microsoft/VibeVoice-Realtime-0.5B
 LLM_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-ASR_MODEL=distil-whisper/distil-small.en
+ASR_MODEL=small.en
 
 # Model Cache (use volume mount)
 HF_HOME=/workspace/models
@@ -290,9 +290,9 @@ grep -i error /workspace/logs/s2s.log
 
 1. **Use smaller ASR model**:
    ```bash
-   ASR_MODEL=distil-whisper/distil-small.en  # Fastest
+   ASR_MODEL=tiny.en  # Smallest and fastest
    # or
-   ASR_MODEL=openai/whisper-tiny.en  # Smallest
+   ASR_MODEL=base.en  # Balance of speed and accuracy
    ```
 
 2. **Reduce LLM tokens**:

@@ -17,7 +17,7 @@ ENV TORCH_HOME=/workspace/models/torch
 
 # Application settings
 ENV MODEL_PATH=microsoft/VibeVoice-Realtime-0.5B
-ENV ASR_MODEL=distil-whisper/distil-small.en
+ENV ASR_MODEL=small.en
 ENV LLM_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 ENV CUDA_VISIBLE_DEVICES=0
 
