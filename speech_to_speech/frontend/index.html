@@ -858,6 +858,14 @@
                 // Welcome message state
                 this.hasPlayedWelcome = false;
                 this.selectedVoice = this.voiceSelect.value;
+                
+                // Get agent type from URL parameter
+                const urlParams = new URLSearchParams(window.location.search);
+                this.agentType = urlParams.get('agent') || 'general';
+                console.log('Agent type:', this.agentType);
+                
+                // Update UI based on agent type
+                this.updateAgentUI();
 
                 // Set default server URL
                 this.serverUrl.value = this.getDefaultUrl();
@@ -869,6 +877,28 @@
 
                 // Auto-connect on load
                 setTimeout(() => this.connect(), 500);
+            }
+            
+            updateAgentUI() {
+                // Update page title and header based on agent type
+                const titles = {
+                    'medical': 'VEMI AI - Medical Assistant',
+                    'automobile': 'VEMI AI - Automobile Assistant',
+                    'general': 'VEMI AI - Voice Assistant'
+                };
+                const subtitles = {
+                    'medical': 'Your AI Healthcare Companion',
+                    'automobile': 'Your AI Automotive Expert',
+                    'general': 'Your AI Voice Assistant'
+                };
+                
+                document.title = titles[this.agentType] || titles['general'];
+                
+                // Update subtitle if element exists
+                const subtitle = document.querySelector('.subtitle');
+                if (subtitle) {
+                    subtitle.textContent = subtitles[this.agentType] || subtitles['general'];
+                }
             }
 
             onVoiceChange() {
@@ -1026,6 +1056,15 @@
                         this.micButton.classList.remove('disabled');
                         this.micButton.disabled = false;
                         this.connectBtn.textContent = 'Disconnect';
+                        
+                        // Set agent type on server
+                        if (this.agentType && this.agentType !== 'general') {
+                            this.ws.send(JSON.stringify({ 
+                                type: 'set_agent', 
+                                agent: this.agentType 
+                            }));
+                            console.log('Agent set to:', this.agentType);
+                        }
                         
                         // Start keepalive ping every 25 seconds
                         this.keepAliveInterval = setInterval(() => {

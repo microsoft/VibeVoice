@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VEMI AI - Choose Your Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #030712;
+            --bg-gradient: linear-gradient(135deg, #030712 0%, #0c1222 50%, #111827 100%);
+            --surface: rgba(15, 23, 42, 0.8);
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent: #06b6d4;
+            --accent-glow: rgba(6, 182, 212, 0.4);
+            --purple: #8b5cf6;
+            --purple-glow: rgba(139, 92, 246, 0.3);
+            --medical: #10b981;
+            --medical-glow: rgba(16, 185, 129, 0.4);
+            --auto: #f59e0b;
+            --auto-glow: rgba(245, 158, 11, 0.4);
+            --text: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 20% 80%, var(--accent-glow) 0%, transparent 25%),
+                        radial-gradient(circle at 80% 20%, var(--purple-glow) 0%, transparent 25%);
+            animation: bgMove 20s ease-in-out infinite;
+            z-index: -1;
+        }
+
+        @keyframes bgMove {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(2%, 2%) rotate(1deg); }
+            66% { transform: translate(-1%, 1%) rotate(-1deg); }
+        }
+
+        .container {
+            text-align: center;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .logo-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            box-shadow: 0 8px 32px var(--accent-glow);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text) 0%, var(--accent-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+        }
+
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .agent-card {
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2.5rem 2rem;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .agent-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--card-color), var(--card-color-light));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--card-color);
+            box-shadow: 0 20px 60px var(--card-glow);
+        }
+
+        .agent-card:hover::before {
+            opacity: 1;
+        }
+
+        .agent-card.medical {
+            --card-color: var(--medical);
+            --card-color-light: #34d399;
+            --card-glow: var(--medical-glow);
+        }
+
+        .agent-card.automobile {
+            --card-color: var(--auto);
+            --card-color-light: #fbbf24;
+            --card-glow: var(--auto-glow);
+        }
+
+        .agent-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            margin: 0 auto 1.5rem;
+            background: linear-gradient(135deg, var(--card-color) 0%, var(--card-color-light) 100%);
+            box-shadow: 0 8px 24px var(--card-glow);
+        }
+
+        .agent-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--text);
+        }
+
+        .agent-description {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+
+        .agent-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .feature-tag {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .agent-card:hover .feature-tag {
+            border-color: var(--card-color);
+            color: var(--card-color);
+        }
+
+        .start-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, var(--card-color) 0%, var(--card-color-light) 100%);
+            color: white;
+            padding: 0.875rem 2rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 16px var(--card-glow);
+        }
+
+        .start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 24px var(--card-glow);
+        }
+
+        footer {
+            margin-top: 3rem;
+            text-align: center;
+        }
+
+        .footer-brand {
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        footer p {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.75rem; }
+            .agents-grid { grid-template-columns: 1fr; }
+            .agent-card { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <div class="logo-icon">🎙️</div>
+        </div>
+        <h1>VEMI AI Voice Assistants</h1>
+        <p class="subtitle">Choose your specialized AI assistant for real-time voice conversation</p>
+
+        <div class="agents-grid">
+            <!-- Medical Agent -->
+            <div class="agent-card medical" onclick="selectAgent('medical')">
+                <div class="agent-icon">🏥</div>
+                <h2 class="agent-title">Medical Assistant</h2>
+                <p class="agent-description">
+                    Get help with health questions, understand symptoms, learn about treatments, 
+                    and receive general wellness guidance from your AI healthcare companion.
+                </p>
+                <div class="agent-features">
+                    <span class="feature-tag">Symptom Analysis</span>
+                    <span class="feature-tag">Treatment Info</span>
+                    <span class="feature-tag">Medication Guide</span>
+                    <span class="feature-tag">Health Tips</span>
+                </div>
+                <button class="start-btn">
+                    Start Conversation →
+                </button>
+            </div>
+
+            <!-- Automobile Agent -->
+            <div class="agent-card automobile" onclick="selectAgent('automobile')">
+                <div class="agent-icon">🚗</div>
+                <h2 class="agent-title">Automobile Assistant</h2>
+                <p class="agent-description">
+                    Expert help with car repairs, diagnostics, maintenance schedules, 
+                    and troubleshooting from your AI automotive technician.
+                </p>
+                <div class="agent-features">
+                    <span class="feature-tag">OBD Codes</span>
+                    <span class="feature-tag">Repair Guide</span>
+                    <span class="feature-tag">Maintenance</span>
+                    <span class="feature-tag">Diagnostics</span>
+                </div>
+                <button class="start-btn">
+                    Start Conversation →
+                </button>
+            </div>
+        </div>
+
+        <footer>
+            <p class="footer-brand">VEMI AI by Alvion Global Solutions</p>
+            <p>Powered by advanced real-time voice technology</p>
+        </footer>
+    </div>
+
+    <script>
+        function selectAgent(agent) {
+            // Navigate to the chat interface with the selected agent
+            window.location.href = `/chat?agent=${agent}`;
+        }
+    </script>
+</body>
+</html>

@@ -53,6 +53,28 @@ class PipelineState(Enum):
     SPEAKING = "speaking"
 
 
+# Domain-specific system prompts
+SYSTEM_PROMPTS = {
+    "medical": """You are VEMI AI Medical Assistant, a knowledgeable and compassionate healthcare assistant developed by Alvion Global Solutions.
+
+Your role is to provide accurate, evidence-based medical information, help users understand symptoms and treatments, and offer general health guidance.
+
+Important: Always recommend consulting a healthcare professional for serious symptoms or before starting treatment. You cannot diagnose or prescribe - only provide educational information.
+
+Be clear, concise, empathetic, and always prioritize user safety. For emergencies, advise calling emergency services immediately.""",
+
+    "automobile": """You are VEMI AI Automobile Assistant, an expert automotive technician developed by Alvion Global Solutions.
+
+Your role is to provide accurate car repair advice, help diagnose vehicle problems, explain OBD-II codes, guide maintenance tasks, and offer troubleshooting help.
+
+Important: Always prioritize safety. Recommend professional help for complex or dangerous repairs. Warn about hazards like hot components or high voltage in EVs.
+
+Be clear with step-by-step instructions, use common terminology, and include safety warnings where appropriate.""",
+
+    "general": """You are VEMI AI, a helpful voice assistant developed by Alvion Global Solutions. You provide accurate, helpful responses in a conversational manner. Be concise and friendly."""
+}
+
+
 @dataclass
 class PipelineConfig:
     """Configuration for S2S Pipeline"""
@@ -76,7 +98,7 @@ class PipelineConfig:
     min_silence_ms: int = 300
     
     # LLM settings
-    max_llm_tokens: int = 64
+    max_llm_tokens: int = 150  # Increased for detailed domain answers
     llm_temperature: float = 0.7
     
     # TTS settings
@@ -87,6 +109,9 @@ class PipelineConfig:
     # Server settings
     host: str = "0.0.0.0"
     port: int = 8005
+    
+    # Agent settings
+    default_agent: str = "general"
 
 
 @dataclass
@@ -136,7 +161,30 @@ class S2SPipeline:
         self._cancel_event = asyncio.Event()
         self._is_generating = False
         
+        # Agent type for domain-specific responses
+        self._agent_type = self.config.default_agent
+        
         logger.info("S2S Pipeline created")
+    
+    def set_agent(self, agent_type: str) -> None:
+        """Set the agent type for domain-specific responses"""
+        if agent_type in SYSTEM_PROMPTS:
+            self._agent_type = agent_type
+            # Update LLM system prompt if LLM is initialized
+            if self._llm:
+                self._llm.set_system_prompt(SYSTEM_PROMPTS[agent_type])
+            logger.info(f"Agent type set to: {agent_type}")
+        else:
+            logger.warning(f"Unknown agent type: {agent_type}, using general")
+            self._agent_type = "general"
+    
+    def get_agent(self) -> str:
+        """Get current agent type"""
+        return self._agent_type
+    
+    def get_system_prompt(self) -> str:
+        """Get the system prompt for current agent"""
+        return SYSTEM_PROMPTS.get(self._agent_type, SYSTEM_PROMPTS["general"])
     
     async def initialize(self) -> None:
         """Initialize all pipeline components"""
@@ -825,11 +873,23 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
     
     @app.get("/")
     async def index():
-        """Serve frontend"""
+        """Serve agent selection page"""
+        frontend_path = Path(__file__).parent / "frontend" / "agent_select.html"
+        if frontend_path.exists():
+            return FileResponse(frontend_path)
+        # Fallback to chat interface
+        chat_path = Path(__file__).parent / "frontend" / "index.html"
+        if chat_path.exists():
+            return FileResponse(chat_path)
+        return JSONResponse({"message": "S2S Pipeline API", "status": "running"})
+    
+    @app.get("/chat")
+    async def chat(agent: str = "medical"):
+        """Serve chat interface with agent parameter"""
         frontend_path = Path(__file__).parent / "frontend" / "index.html"
         if frontend_path.exists():
             return FileResponse(frontend_path)
-        return JSONResponse({"message": "S2S Pipeline API", "status": "running"})
+        return JSONResponse({"message": "Chat interface not found", "status": "error"})
     
     @app.get("/health")
     async def health():
@@ -959,6 +1019,16 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                             # Keepalive ping - respond with pong
                             await ws.send_json({"type": "pong"})
                         
+                        elif msg.get("type") == "set_agent":
+                            # Set agent type for domain-specific responses
+                            agent = msg.get("agent", "general")
+                            pipeline.set_agent(agent)
+                            await ws.send_json({
+                                "type": "status", 
+                                "state": "agent_set", 
+                                "agent": pipeline.get_agent()
+                            })
+                        
                         elif msg.get("type") == "set_voice":
                             # Change TTS voice
                             voice = msg.get("voice", "en-Carter_man")
@@ -971,9 +1041,15 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                                 await ws.send_json({"type": "error", "message": f"Failed to change voice: {e}"})
                         
                         elif msg.get("type") == "welcome":
-                            # Play welcome message
-                            welcome_text = "Hello! I'm VEMI AI, your voice assistant. How can I help you today?"
-                            logger.info("Playing welcome message")
+                            # Play domain-specific welcome message
+                            agent = pipeline.get_agent()
+                            welcome_messages = {
+                                "medical": "Hello! I'm your VEMI AI Medical Assistant. I'm here to help you with health questions, understand symptoms, and provide medical information. How can I assist you today?",
+                                "automobile": "Hello! I'm your VEMI AI Automobile Assistant. I'm here to help with car repairs, diagnostics, maintenance advice, and troubleshooting. What can I help you with today?",
+                                "general": "Hello! I'm VEMI AI, your voice assistant. How can I help you today?"
+                            }
+                            welcome_text = welcome_messages.get(agent, welcome_messages["general"])
+                            logger.info(f"Playing welcome message for agent: {agent}")
                             await ws.send_json({"type": "status", "state": "processing"})
                             
                             # Synthesize welcome message
