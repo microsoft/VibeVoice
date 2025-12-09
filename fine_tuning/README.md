@@ -34,15 +34,16 @@ cd VibeVoice/fine_tuning
 pip install -r requirements.txt
 
 # Prepare datasets
-python prepare_data.py --domain medical
-python prepare_data.py --domain automobile
+python prepare_data.py --domain all        # Prepare both datasets
+python expand_automobile_data.py           # Generate expanded auto data (500+ Q&A)
 
-# Fine-tune (choose one)
-python train_medical.py   # For medical agent
-python train_automobile.py  # For automobile agent
+# Fine-tune using PEFT (recommended - no Unsloth compatibility issues)
+python train_medical_peft.py --epochs 3 --batch_size 4
+python train_automobile_peft.py --epochs 3 --batch_size 4
 
-# Or train both
-python train_all.py
+# Optional: Use 4-bit quantization (QLoRA) to save VRAM
+python train_medical_peft.py --use_4bit
+python train_automobile_peft.py --use_4bit
 ```
 
 ## Directory Structure

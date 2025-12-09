@@ -1,29 +1,32 @@
 # Fine-tuning requirements for Qwen2.5-1.5B
-# Optimized for RunPod with A40/A100 GPUs
+# VEMI AI Fine-Tuning Requirements
+# =================================
+# Use train_medical_peft.py and train_automobile_peft.py for compatibility
 
-# Core ML
-torch>=2.1.0
-transformers>=4.44.0
-datasets>=2.14.0
-accelerate>=0.24.0
+# Core ML libraries
+torch>=2.0.0,<2.5.0
+transformers>=4.36.0,<4.46.0
+accelerate>=0.25.0
+datasets>=2.16.0
 
-# Unsloth - 2-5x faster fine-tuning, 80% less memory
-unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
-
-# LoRA/PEFT
+# Efficient fine-tuning (PEFT-based, no Unsloth for compatibility)
 peft>=0.7.0
+trl>=0.7.4,<0.12.0
 bitsandbytes>=0.41.0
-trl>=0.7.0
+
+# Training utilities
+safetensors>=0.4.0
+scipy>=1.10.0
 
 # Data processing
 pandas>=2.0.0
 numpy>=1.24.0
-scikit-learn>=1.3.0
+sentencepiece>=0.1.99
+protobuf>=4.25.0
 
-# Web scraping for automobile data
+# Web scraping (for automobile data augmentation)
 requests>=2.31.0
-beautifulsoup4>=4.12.0
-praw>=7.7.0  # Reddit API
+beautifulsoup4>=4.12.0  # Reddit API
 
 # HuggingFace utilities
 huggingface_hub>=0.19.0
