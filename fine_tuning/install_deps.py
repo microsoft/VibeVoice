@@ -12,7 +12,7 @@ print("="*60)
 
 # Uninstall conflicting packages first
 print("\n[1/3] Removing conflicting packages...")
-for pkg in ["transformers", "peft", "trl", "accelerate", "bitsandbytes", "torchao"]:
+for pkg in ["transformers", "peft", "trl", "accelerate", "bitsandbytes", "torchao", "unsloth", "unsloth-zoo"]:
     subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", pkg], 
                    capture_output=True)
 
@@ -27,6 +27,8 @@ packages = [
     "datasets>=2.16.0",
     "safetensors>=0.4.0",
     "scipy>=1.10.0",
+    "rich",  # Required by TRL
+    "typer",  # Required by TRL
 ]
 
 for pkg in packages:
