@@ -15,6 +15,8 @@ VibeVoice-Realtime is a **lightweight real‑time** text-to-speech model support
 
 </div>
 
+> Note (multilingual exploration): Although the model is primarily built for English, we found that it still exhibits a certain level of multilingual capability—and even performs reasonably well in some languages. We provide nine additional languages (German, French, Italian, Japanese, Korean, Dutch, Polish, Portuguese, and Spanish) for users to explore. These multilingual behaviors have not been extensively tested; use with caution and share observations.
+
 The model uses an interleaved, windowed design: it incrementally encodes incoming text chunks while, in parallel, continuing diffusion-based acoustic latent generation from prior context. Unlike the full multi-speaker long-form variants, this streaming model removes the semantic tokenizer and relies solely on an efficient acoustic tokenizer operating at an ultra-low frame rate (7.5 Hz).
 
 <div align="center">
