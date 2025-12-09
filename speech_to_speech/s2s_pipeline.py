@@ -174,31 +174,31 @@ def clean_llm_response(text: str, user_greeted: bool = False) -> str:
     """
     import re
     
-    # Patterns to remove (case-insensitive)
+    # Patterns to remove (case-insensitive) - use re.IGNORECASE flag
     patterns_to_remove = [
-        r"(?i)hi\s*,?\s*welcome\s+to\s+chat\s*doctor[^\n]*",
-        r"(?i)thanks?\s+for\s+(calling|contacting|asking)\s+chat\s*doctor[^\n]*",
-        r"(?i)chat\s*doctor\s*(forum|\.com|service)?\.?",
-        r"(?i)best\s+regards[^\n]*chat\s*doctor[^\n]*",
-        r"(?i)wishing\s+for\s+a\s+quick[^\n]*",
-        r"(?i)hope\s+this\s+(may\s+)?answer[^\n]*",
-        r"(?i)let\s+me\s+know\s+if\s+anything[^\n]*",
-        r"(?i)take\s*care\.?\s*chat\s*doctor[^\n]*",
-        r"(?i)regards\s*,?\s*chat\s*doctor[^\n]*",
+        r"hi\s*,?\s*welcome\s+to\s+chat\s*doctor[^\n]*",
+        r"thanks?\s+for\s+(calling|contacting|asking)\s+chat\s*doctor[^\n]*",
+        r"chat\s*doctor\s*(forum|\.com|service)?\.?",
+        r"best\s+regards[^\n]*chat\s*doctor[^\n]*",
+        r"wishing\s+for\s+a\s+quick[^\n]*",
+        r"hope\s+this\s+(may\s+)?answer[^\n]*",
+        r"let\s+me\s+know\s+if\s+anything[^\n]*",
+        r"take\s*care\.?\s*chat\s*doctor[^\n]*",
+        r"regards\s*,?\s*chat\s*doctor[^\n]*",
     ]
     
     for pattern in patterns_to_remove:
-        text = re.sub(pattern, "", text)
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
     
     # Remove greetings at the start if user didn't greet first
     if not user_greeted:
         # Remove common greetings at the start of responses
         greeting_patterns = [
-            r"^(?i)(hello|hi|hey|greetings)[\s,!\.]*",
-            r"^(?i)(good\s+(morning|afternoon|evening))[\s,!\.]*",
+            r"^(hello|hi|hey|greetings)[\s,!\.]*",
+            r"^(good\s+(morning|afternoon|evening))[\s,!\.]*",
         ]
         for pattern in greeting_patterns:
-            text = re.sub(pattern, "", text)
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE)
     
     # Clean up multiple spaces and newlines
     text = re.sub(r'\s+', ' ', text).strip()
