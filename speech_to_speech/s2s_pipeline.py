@@ -192,9 +192,30 @@ class S2SPipeline:
         )
         await self._tts_service.initialize()
         
+        # Warm up models to reduce first inference latency
+        await self._warmup_models()
+        
         init_time = (time.time() - start_time) * 1000
         self._initialized = True
         logger.info(f"S2S Pipeline initialized in {init_time:.0f}ms")
+    
+    async def _warmup_models(self) -> None:
+        """Warm up LLM and TTS models with a test inference"""
+        logger.info("Warming up models...")
+        warmup_start = time.time()
+        
+        try:
+            # Warm up LLM with a short prompt
+            _ = self._llm.respond("Hi")
+            
+            # Warm up TTS with a short text (consume but don't use the audio)
+            async for _ in self._tts_service.synthesize_streaming("Hello"):
+                pass
+            
+            warmup_time = (time.time() - warmup_start) * 1000
+            logger.info(f"Models warmed up in {warmup_time:.0f}ms")
+        except Exception as e:
+            logger.warning(f"Warmup failed (non-critical): {e}")
     
     async def process_audio(
         self,
@@ -637,6 +658,30 @@ class TTSClient:
         self._voice_preset = torch.load(voice_file, map_location=device, weights_only=False)
         logger.info(f"Loaded voice preset: {self.voice}")
     
+    def set_voice(self, voice: str) -> None:
+        """
+        Change the TTS voice preset.
+        
+        Available voices:
+        - en-Carter_man (default)
+        - en-Davis_man
+        - en-Frank_man
+        - en-Mike_man
+        - en-Emma_woman
+        - en-Grace_woman
+        - in-Samuel_man
+        """
+        if voice != self.voice:
+            self.voice = voice
+            self._load_voice_preset()
+    
+    def get_available_voices(self) -> list:
+        """Get list of available voice presets"""
+        voices_dir = REPO_ROOT / "demo" / "voices" / "streaming_model"
+        if not voices_dir.exists():
+            return []
+        return [f.stem for f in voices_dir.glob("*.pt")]
+    
     async def synthesize_streaming(self, text: str) -> AsyncGenerator[bytes, None]:
         """
         Synthesize speech from text with streaming.
@@ -811,6 +856,24 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
             "output_sample_rate": pipeline_config.output_sample_rate,
         }
     
+    @app.get("/voices")
+    async def get_voices():
+        """Get available TTS voices"""
+        voices = pipeline._tts_service.get_available_voices() if pipeline._tts_service else []
+        return {
+            "voices": voices,
+            "current_voice": pipeline._tts_service.voice if pipeline._tts_service else "en-Carter_man",
+            "voice_info": {
+                "en-Carter_man": {"name": "Carter", "gender": "Male", "accent": "American"},
+                "en-Davis_man": {"name": "Davis", "gender": "Male", "accent": "American"},
+                "en-Frank_man": {"name": "Frank", "gender": "Male", "accent": "American"},
+                "en-Mike_man": {"name": "Mike", "gender": "Male", "accent": "American"},
+                "en-Emma_woman": {"name": "Emma", "gender": "Female", "accent": "American"},
+                "en-Grace_woman": {"name": "Grace", "gender": "Female", "accent": "American"},
+                "in-Samuel_man": {"name": "Samuel", "gender": "Male", "accent": "Indian"},
+            }
+        }
+    
     @app.websocket("/stream")
     async def websocket_stream(ws: WebSocket):
         """
@@ -891,6 +954,39 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                             pipeline.cancel()
                             logger.info("Barge-in: Response cancelled by user")
                             await ws.send_json({"type": "status", "state": "cancelled"})
+                        
+                        elif msg.get("type") == "ping":
+                            # Keepalive ping - respond with pong
+                            await ws.send_json({"type": "pong"})
+                        
+                        elif msg.get("type") == "set_voice":
+                            # Change TTS voice
+                            voice = msg.get("voice", "en-Carter_man")
+                            try:
+                                pipeline._tts_service.set_voice(voice)
+                                logger.info(f"Voice changed to: {voice}")
+                                await ws.send_json({"type": "status", "state": "voice_changed", "voice": voice})
+                            except Exception as e:
+                                logger.error(f"Failed to change voice: {e}")
+                                await ws.send_json({"type": "error", "message": f"Failed to change voice: {e}"})
+                        
+                        elif msg.get("type") == "welcome":
+                            # Play welcome message
+                            welcome_text = "Hello! I'm VEMI AI, your voice assistant. How can I help you today?"
+                            logger.info("Playing welcome message")
+                            await ws.send_json({"type": "status", "state": "processing"})
+                            
+                            # Synthesize welcome message
+                            async for audio_chunk in pipeline._tts_service.synthesize_streaming(welcome_text):
+                                await ws.send_bytes(audio_chunk)
+                            
+                            # Add to conversation
+                            await ws.send_json({
+                                "type": "transcript",
+                                "user": "",
+                                "assistant": welcome_text
+                            })
+                            await ws.send_json({"type": "status", "state": "ready"})
                         
                         elif msg.get("type") == "text":
                             # Direct text input (skip ASR)

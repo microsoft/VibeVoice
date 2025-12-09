@@ -769,9 +769,21 @@
         <div class="card">
             <div class="card-header">
                 <div class="card-icon">⚙️</div>
-                <span class="card-title">Connection</span>
+                <span class="card-title">Settings</span>
             </div>
             <div class="settings-row">
+                <div class="setting">
+                    <label for="voiceSelect">🎙️ Voice</label>
+                    <select id="voiceSelect" class="voice-select">
+                        <option value="en-Carter_man">Carter (Male)</option>
+                        <option value="en-Davis_man">Davis (Male)</option>
+                        <option value="en-Frank_man">Frank (Male)</option>
+                        <option value="en-Mike_man">Mike (Male)</option>
+                        <option value="en-Emma_woman">Emma (Female)</option>
+                        <option value="en-Grace_woman">Grace (Female)</option>
+                        <option value="in-Samuel_man">Samuel (Indian Male)</option>
+                    </select>
+                </div>
                 <div class="setting">
                     <label for="serverUrl">Server Endpoint</label>
                     <input type="text" id="serverUrl" placeholder="wss://your-server/stream">
@@ -817,13 +829,15 @@
                 this.inputSampleRate = 16000;
                 this.outputSampleRate = 24000;
                 
-                // Advanced barge-in detection settings
-                this.bargeInThreshold = 0.015;  // Energy threshold for barge-in
-                this.bargeInConfirmFrames = 3;  // Consecutive frames above threshold
-                this.bargeInCooldown = 500;     // Cooldown after barge-in (ms)
+                // Advanced barge-in detection settings (tuned to reduce false positives)
+                this.bargeInThreshold = 0.035;  // Energy threshold (higher = less sensitive)
+                this.bargeInConfirmFrames = 5;  // Consecutive frames above threshold (more = more confident)
+                this.bargeInCooldown = 800;     // Cooldown after barge-in (ms)
+                this.bargeInStartDelay = 500;   // Delay before barge-in is active after AI starts speaking
                 this.energyHistory = [];        // Smoothed energy history
                 this.bargeInFrameCount = 0;     // Consecutive frames above threshold
                 this.lastBargeInTime = 0;       // Last barge-in timestamp
+                this.speakingStartTime = 0;     // When AI started speaking
                 
                 // Initialize persistent output audio context
                 this.initOutputAudioContext();
@@ -839,6 +853,11 @@
                 this.serverUrl = document.getElementById('serverUrl');
                 this.connectBtn = document.getElementById('connectBtn');
                 this.visualizer = document.getElementById('visualizer');
+                this.voiceSelect = document.getElementById('voiceSelect');
+
+                // Welcome message state
+                this.hasPlayedWelcome = false;
+                this.selectedVoice = this.voiceSelect.value;
 
                 // Set default server URL
                 this.serverUrl.value = this.getDefaultUrl();
@@ -846,9 +865,37 @@
                 // Event listeners
                 this.micButton.addEventListener('click', () => this.toggleRecording());
                 this.connectBtn.addEventListener('click', () => this.connect());
+                this.voiceSelect.addEventListener('change', () => this.onVoiceChange());
 
                 // Auto-connect on load
                 setTimeout(() => this.connect(), 500);
+            }
+
+            onVoiceChange() {
+                this.selectedVoice = this.voiceSelect.value;
+                // Send voice change to server
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({ 
+                        type: 'set_voice', 
+                        voice: this.selectedVoice 
+                    }));
+                    console.log('Voice changed to:', this.selectedVoice);
+                }
+            }
+
+            playWelcomeMessage() {
+                if (this.hasPlayedWelcome || !this.isConnected) return;
+                
+                this.hasPlayedWelcome = true;
+                
+                // Send welcome message request to server
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({ 
+                        type: 'welcome',
+                        voice: this.selectedVoice
+                    }));
+                    console.log('Requesting welcome message');
+                }
             }
 
             getDefaultUrl() {
@@ -905,15 +952,22 @@
                 console.log('Audio playback stopped (barge-in)');
             }
 
-            // Advanced barge-in detection with smoothing and hysteresis
+            // Advanced barge-in detection with smoothing, hysteresis, and start delay
             detectBargeIn(audioData) {
                 if (!this.bargeInEnabled || !this.isSpeaking) {
                     this.bargeInFrameCount = 0;
                     return false;
                 }
                 
-                // Check cooldown (prevent rapid re-triggering)
                 const now = Date.now();
+                
+                // Don't trigger barge-in immediately after AI starts speaking
+                // This prevents echo from triggering false barge-in
+                if (now - this.speakingStartTime < this.bargeInStartDelay) {
+                    return false;
+                }
+                
+                // Check cooldown (prevent rapid re-triggering)
                 if (now - this.lastBargeInTime < this.bargeInCooldown) {
                     return false;
                 }
@@ -925,9 +979,9 @@
                 }
                 energy = Math.sqrt(energy / audioData.length);
                 
-                // Smooth energy with moving average (last 5 frames)
+                // Smooth energy with moving average (last 7 frames for stability)
                 this.energyHistory.push(energy);
-                if (this.energyHistory.length > 5) {
+                if (this.energyHistory.length > 7) {
                     this.energyHistory.shift();
                 }
                 const smoothedEnergy = this.energyHistory.reduce((a, b) => a + b, 0) / this.energyHistory.length;
@@ -946,8 +1000,8 @@
                         return true;
                     }
                 } else {
-                    // Reset counter if energy drops
-                    this.bargeInFrameCount = Math.max(0, this.bargeInFrameCount - 1);
+                    // Gradual reset - decay counter slowly to handle speech pauses
+                    this.bargeInFrameCount = Math.max(0, this.bargeInFrameCount - 2);
                 }
                 
                 return false;
@@ -972,6 +1026,13 @@
                         this.micButton.classList.remove('disabled');
                         this.micButton.disabled = false;
                         this.connectBtn.textContent = 'Disconnect';
+                        
+                        // Start keepalive ping every 25 seconds
+                        this.keepAliveInterval = setInterval(() => {
+                            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                this.ws.send(JSON.stringify({ type: 'ping' }));
+                            }
+                        }, 25000);
                     };
 
                     this.ws.onclose = () => {
@@ -983,6 +1044,12 @@
                         this.connectBtn.textContent = 'Connect';
                         this.micRing.classList.remove('active');
                         this.stopRecording();
+                        
+                        // Clear keepalive interval
+                        if (this.keepAliveInterval) {
+                            clearInterval(this.keepAliveInterval);
+                            this.keepAliveInterval = null;
+                        }
                     };
 
                     this.ws.onerror = (error) => {
@@ -1034,6 +1101,8 @@
                             this.updateStatus('connected', 'Ready');
                             this.isSpeaking = false;
                             console.log('Response cancelled (barge-in acknowledged)');
+                        } else if (msg.state === 'voice_changed') {
+                            console.log('Voice changed to:', msg.voice);
                         }
                         if (msg.input_sample_rate) {
                             this.inputSampleRate = msg.input_sample_rate;
@@ -1044,8 +1113,13 @@
                         break;
 
                     case 'transcript':
-                        this.addMessage('user', msg.user);
-                        this.addMessage('assistant', msg.assistant);
+                        // Only show user message if not empty (welcome message has no user text)
+                        if (msg.user && msg.user.trim()) {
+                            this.addMessage('user', msg.user);
+                        }
+                        if (msg.assistant && msg.assistant.trim()) {
+                            this.addMessage('assistant', msg.assistant);
+                        }
                         break;
 
                     case 'metrics':
@@ -1055,6 +1129,10 @@
                     case 'error':
                         console.error('Server error:', msg.message);
                         this.updateStatus('error', 'Error: ' + msg.message);
+                        break;
+                        
+                    case 'pong':
+                        // Keepalive response - ignore
                         break;
                 }
             }
@@ -1133,6 +1211,11 @@
 
             async startRecording() {
                 try {
+                    // Play welcome message on first mic click
+                    if (!this.hasPlayedWelcome) {
+                        this.playWelcomeMessage();
+                    }
+                    
                     // Request microphone with advanced audio processing
                     // Echo cancellation is crucial for barge-in detection
                     this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -1249,6 +1332,9 @@
                 this.audioQueue.push(audioData);
                 if (!this.isSpeaking) {
                     this.isSpeaking = true;
+                    this.speakingStartTime = Date.now();  // Record when AI started speaking
+                    this.bargeInFrameCount = 0;  // Reset barge-in counter
+                    this.energyHistory = [];     // Reset energy history
                     this.updateSpeakingStatus();
                 }
                 if (!this.isPlaying) {
