@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Automobile LLM Fine-Tuning with PEFT (No Unsloth)
-=================================================
+Automobile LLM Fine-Tuning with PEFT
+====================================
 
 Fine-tunes Qwen2.5-1.5B-Instruct on automobile Q&A data using LoRA.
-This version uses standard HuggingFace PEFT without Unsloth for compatibility.
+
+IMPORTANT: Run install_deps.py first to install compatible dependencies!
+    python install_deps.py
 
 Usage:
     python train_automobile_peft.py
@@ -13,15 +15,43 @@ Usage:
 
 import os
 import sys
-import json
-import argparse
-from pathlib import Path
-from datetime import datetime
+import subprocess
 
+# Set environment variables BEFORE importing anything else
 os.environ["WANDB_DISABLED"] = "true"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
+
+
+def check_and_install_deps():
+    """Check and install compatible dependencies"""
+    try:
+        import transformers
+        import peft
+        trans_ver = tuple(map(int, transformers.__version__.split('.')[:2]))
+        if trans_ver > (4, 45):
+            raise ImportError("transformers version too new")
+    except (ImportError, Exception) as e:
+        print(f"Dependency issue detected: {e}")
+        print("Installing compatible versions...")
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "-q",
+            "transformers==4.44.2",
+            "peft==0.12.0", 
+            "trl==0.9.6",
+            "accelerate==0.33.0",
+            "bitsandbytes==0.43.1"
+        ])
+        print("Dependencies installed. Please restart the script.")
+        sys.exit(0)
+
 
 def main():
+    import argparse
+    import json
+    from pathlib import Path
+    from datetime import datetime
+    
     parser = argparse.ArgumentParser(description="Fine-tune automobile LLM with PEFT")
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size per device")
@@ -30,6 +60,7 @@ def main():
     parser.add_argument("--lora_r", type=int, default=16, help="LoRA rank")
     parser.add_argument("--output_dir", type=str, default="models/automobile", help="Output directory")
     parser.add_argument("--use_4bit", action="store_true", help="Use 4-bit quantization (QLoRA)")
+    parser.add_argument("--skip_deps_check", action="store_true", help="Skip dependency check")
     args = parser.parse_args()
     
     print("\n" + "="*60)
@@ -37,6 +68,11 @@ def main():
     print("="*60)
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
+    # Check dependencies unless skipped
+    if not args.skip_deps_check:
+        check_and_install_deps()
+    
+    # Now import the ML libraries
     import torch
     if not torch.cuda.is_available():
         print("ERROR: CUDA not available. This script requires a GPU.")
@@ -46,15 +82,16 @@ def main():
     gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
     print(f"GPU: {gpu_name} ({gpu_memory:.1f} GB)")
     
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        TrainingArguments,
-        BitsAndBytesConfig,
-    )
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    # Import libraries after dependency check
+    from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+    from peft import LoraConfig, get_peft_model
     from datasets import Dataset
     from trl import SFTTrainer
+    
+    # Import BitsAndBytesConfig only if using 4bit
+    if args.use_4bit:
+        from transformers import BitsAndBytesConfig
+        from peft import prepare_model_for_kbit_training
     
     # Load data
     data_path = Path(__file__).parent / "data" / "automobile" / "automobile_qa.json"
