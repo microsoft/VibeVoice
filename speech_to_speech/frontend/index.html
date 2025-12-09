@@ -3,22 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VibeVoice S2S - Real-Time Speech-to-Speech</title>
+    <title>VEMI AI - Voice Intelligence Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0f0f23;
-            --surface: #1a1a2e;
-            --surface-hover: #252540;
-            --accent: #6366f1;
-            --accent-light: #818cf8;
-            --accent-dark: #4f46e5;
-            --success: #22c55e;
+            --bg: #030712;
+            --bg-gradient: linear-gradient(135deg, #030712 0%, #0c1222 50%, #111827 100%);
+            --surface: rgba(15, 23, 42, 0.8);
+            --surface-solid: #0f172a;
+            --surface-hover: rgba(30, 41, 59, 0.8);
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent: #06b6d4;
+            --accent-light: #22d3ee;
+            --accent-dark: #0891b2;
+            --accent-glow: rgba(6, 182, 212, 0.4);
+            --purple: #8b5cf6;
+            --purple-glow: rgba(139, 92, 246, 0.3);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.4);
             --warning: #f59e0b;
             --error: #ef4444;
-            --text: #e2e8f0;
-            --text-muted: #94a3b8;
-            --border: rgba(99, 102, 241, 0.2);
-            --glow: 0 0 20px rgba(99, 102, 241, 0.3);
+            --error-glow: rgba(239, 68, 68, 0.4);
+            --text: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --border: rgba(148, 163, 184, 0.1);
+            --glow: 0 0 40px var(--accent-glow);
         }
 
         * {
@@ -29,45 +42,149 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
+            background: var(--bg-gradient);
             color: var(--text);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             padding: 2rem;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 20% 80%, var(--accent-glow) 0%, transparent 25%),
+                        radial-gradient(circle at 80% 20%, var(--purple-glow) 0%, transparent 25%),
+                        radial-gradient(circle at 40% 40%, rgba(6, 182, 212, 0.1) 0%, transparent 30%);
+            animation: bgMove 20s ease-in-out infinite;
+            z-index: -1;
+        }
+
+        @keyframes bgMove {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            33% { transform: translate(2%, 2%) rotate(1deg); }
+            66% { transform: translate(-1%, 1%) rotate(-1deg); }
         }
 
         .container {
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
+            position: relative;
+            z-index: 1;
         }
 
         header {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
+            padding: 1rem 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            box-shadow: 0 8px 32px var(--accent-glow);
         }
 
         h1 {
-            font-size: 2.5rem;
+            font-size: 2.75rem;
             font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-light), var(--accent));
+            background: linear-gradient(135deg, var(--accent-light) 0%, var(--accent) 50%, var(--purple) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 0.5rem;
+            background-clip: text;
+            letter-spacing: -0.02em;
         }
 
         .subtitle {
             color: var(--text-muted);
-            font-size: 1rem;
+            font-size: 1.1rem;
+            font-weight: 400;
+            margin-top: 0.5rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            padding: 0.375rem 0.875rem;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            color: var(--accent-light);
+            margin-top: 1rem;
+            backdrop-filter: blur(8px);
+        }
+
+        .badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
         }
 
         .card {
             background: var(--surface);
-            border-radius: 16px;
-            padding: 1.5rem;
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 1.75rem;
             margin-bottom: 1.5rem;
-            border: 1px solid var(--border);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .card-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
         }
 
         .status-bar {
@@ -81,42 +198,67 @@
         .status-indicator {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.625rem;
         }
 
         .status-dot {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: var(--text-muted);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .status-dot::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            border: 2px solid transparent;
             transition: all 0.3s ease;
         }
 
         .status-dot.connected {
             background: var(--success);
-            box-shadow: 0 0 10px var(--success);
+            box-shadow: 0 0 12px var(--success-glow);
+        }
+
+        .status-dot.connected::after {
+            border-color: var(--success);
+            opacity: 0.3;
         }
 
         .status-dot.processing {
-            background: var(--warning);
-            box-shadow: 0 0 10px var(--warning);
-            animation: pulse 1s infinite;
+            background: var(--accent);
+            box-shadow: 0 0 12px var(--accent-glow);
+            animation: pulse 1.5s infinite;
         }
 
         .status-dot.error {
             background: var(--error);
-            box-shadow: 0 0 10px var(--error);
+            box-shadow: 0 0 12px var(--error-glow);
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.95); }
+        }
+
+        .status-text {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
         }
 
         .latency-display {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.875rem;
+            font-size: 0.8rem;
             color: var(--text-muted);
+            background: var(--glass);
+            padding: 0.5rem 1rem;
+            border-radius: 100px;
+            border: 1px solid var(--glass-border);
         }
 
         .latency-value {
@@ -128,111 +270,234 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 1.5rem;
+            gap: 2rem;
+            padding: 1rem 0;
+        }
+
+        .mic-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mic-ring {
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 2px solid var(--glass-border);
+            transition: all 0.5s ease;
+        }
+
+        .mic-ring.active {
+            border-color: var(--accent);
+            animation: ringPulse 2s infinite;
+        }
+
+        @keyframes ringPulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.2; }
         }
 
         .mic-button {
-            width: 120px;
-            height: 120px;
+            width: 130px;
+            height: 130px;
             border-radius: 50%;
-            border: 3px solid var(--accent);
-            background: var(--surface);
+            border: none;
+            background: linear-gradient(135deg, var(--surface-solid) 0%, var(--surface-hover) 100%);
             color: var(--accent);
             font-size: 3rem;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            z-index: 2;
+        }
+
+        .mic-button::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
         .mic-button:hover {
-            background: var(--accent);
-            color: white;
-            box-shadow: var(--glow);
+            transform: scale(1.05);
+            color: var(--accent-light);
+        }
+
+        .mic-button:hover::before {
+            opacity: 1;
         }
 
         .mic-button.recording {
-            background: var(--error);
-            border-color: var(--error);
+            background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%);
             color: white;
-            animation: recording-pulse 1.5s infinite;
+            transform: scale(1.05);
+            box-shadow: 0 0 40px var(--error-glow);
+        }
+
+        .mic-button.recording::before {
+            opacity: 0;
         }
 
         @keyframes recording-pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5), 0 4px 24px rgba(0, 0, 0, 0.3); }
+            50% { box-shadow: 0 0 0 25px rgba(239, 68, 68, 0), 0 4px 24px rgba(0, 0, 0, 0.3); }
         }
 
         .mic-button.disabled {
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
+            transform: none;
+        }
+
+        .mic-button.disabled:hover {
+            transform: none;
+        }
+
+        .mic-button.disabled:hover::before {
+            opacity: 0;
         }
 
         .mic-icon {
             font-style: normal;
+            transition: transform 0.3s ease;
+        }
+
+        .mic-button:hover .mic-icon {
+            transform: scale(1.1);
         }
 
         .instructions {
             text-align: center;
             color: var(--text-muted);
-            font-size: 0.875rem;
+            font-size: 0.9rem;
+            font-weight: 400;
         }
 
         .conversation {
-            max-height: 400px;
+            max-height: 450px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 1rem;
+            padding: 0.5rem;
+            scroll-behavior: smooth;
+        }
+
+        .conversation::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .conversation::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .conversation::-webkit-scrollbar-thumb {
+            background: var(--glass-border);
+            border-radius: 3px;
+        }
+
+        .conversation::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
         }
 
         .message {
-            padding: 1rem;
-            border-radius: 12px;
-            max-width: 85%;
+            padding: 1rem 1.25rem;
+            border-radius: 16px;
+            max-width: 80%;
+            animation: messageIn 0.3s ease-out;
+        }
+
+        @keyframes messageIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .message.user {
-            background: var(--accent);
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
             color: white;
             align-self: flex-end;
-            border-bottom-right-radius: 4px;
+            border-bottom-right-radius: 6px;
+            box-shadow: 0 4px 16px var(--accent-glow);
         }
 
         .message.assistant {
-            background: var(--surface-hover);
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
             align-self: flex-start;
-            border-bottom-left-radius: 4px;
+            border-bottom-left-radius: 6px;
+            backdrop-filter: blur(10px);
         }
 
         .message-header {
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 0.375rem;
         }
 
         .message.assistant .message-header {
-            color: var(--text-muted);
+            color: var(--accent-light);
         }
 
         .message-text {
-            font-size: 1rem;
-            line-height: 1.5;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 0.95rem;
         }
 
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 1rem;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.75rem;
+        }
+
+        @media (max-width: 640px) {
+            .metrics-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
         }
 
         .metric {
             text-align: center;
-            padding: 0.75rem;
+            padding: 1rem 0.5rem;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .metric:hover {
             background: var(--surface-hover);
-            border-radius: 8px;
+            border-color: var(--accent);
         }
 
         .metric-value {
@@ -243,15 +508,19 @@
         }
 
         .metric-label {
-            font-size: 0.75rem;
+            font-size: 0.7rem;
+            font-weight: 500;
             color: var(--text-muted);
-            margin-top: 0.25rem;
+            margin-top: 0.375rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .settings-row {
             display: flex;
             gap: 1rem;
             flex-wrap: wrap;
+            align-items: flex-end;
         }
 
         .setting {
@@ -261,96 +530,152 @@
 
         .setting label {
             display: block;
-            font-size: 0.875rem;
+            font-size: 0.8rem;
+            font-weight: 500;
             color: var(--text-muted);
             margin-bottom: 0.5rem;
         }
 
         .setting input, .setting select {
             width: 100%;
-            padding: 0.75rem;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            background: var(--surface-hover);
+            padding: 0.875rem 1rem;
+            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+            background: var(--glass);
             color: var(--text);
             font-size: 0.875rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.3s ease;
         }
 
         .setting input:focus, .setting select:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+            background: var(--surface-hover);
         }
 
         .btn {
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
+            padding: 0.875rem 1.75rem;
+            border-radius: 10px;
             border: none;
             font-size: 0.875rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .btn-primary {
-            background: var(--accent);
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
             color: white;
+            box-shadow: 0 4px 16px var(--accent-glow);
         }
 
         .btn-primary:hover {
-            background: var(--accent-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px var(--accent-glow);
         }
 
         .btn-secondary {
-            background: var(--surface-hover);
+            background: var(--glass);
             color: var(--text);
-            border: 1px solid var(--border);
+            border: 1px solid var(--glass-border);
         }
 
         .btn-secondary:hover {
-            background: var(--surface);
+            background: var(--surface-hover);
+            border-color: var(--accent);
         }
 
         .visualizer {
-            height: 60px;
-            background: var(--surface-hover);
-            border-radius: 8px;
+            height: 70px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 2px;
+            gap: 3px;
             overflow: hidden;
+            padding: 0 1rem;
         }
 
         .bar {
             width: 4px;
-            background: var(--accent);
+            background: linear-gradient(180deg, var(--accent) 0%, var(--purple) 100%);
             border-radius: 2px;
             transition: height 0.1s ease;
+            min-height: 4px;
         }
 
         footer {
-            margin-top: 2rem;
+            margin-top: 3rem;
             text-align: center;
             color: var(--text-muted);
-            font-size: 0.75rem;
+            font-size: 0.8rem;
+            padding: 1.5rem;
+            border-top: 1px solid var(--glass-border);
         }
 
         footer a {
             color: var(--accent-light);
             text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+        }
+
+        .footer-brand {
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
         }
 
         .hidden {
             display: none !important;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .mic-button {
+                width: 110px;
+                height: 110px;
+                font-size: 2.5rem;
+            }
+
+            .mic-ring {
+                width: 140px;
+                height: 140px;
+            }
+
+            .card {
+                padding: 1.25rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🎙️ VibeVoice S2S</h1>
-            <p class="subtitle">Real-Time Speech-to-Speech AI • <800ms Latency</p>
+            <div class="logo">
+                <div class="logo-icon">🎙️</div>
+                <h1>VEMI AI</h1>
+            </div>
+            <p class="subtitle">Your Intelligent Voice Assistant</p>
+            <div class="badge">Real-Time Voice AI • Ultra-Low Latency</div>
         </header>
 
         <!-- Status Card -->
@@ -358,10 +683,10 @@
             <div class="status-bar">
                 <div class="status-indicator">
                     <div class="status-dot" id="statusDot"></div>
-                    <span id="statusText">Disconnected</span>
+                    <span class="status-text" id="statusText">Disconnected</span>
                 </div>
                 <div class="latency-display">
-                    E2E Latency: <span class="latency-value" id="latencyValue">--</span>ms
+                    Response: <span class="latency-value" id="latencyValue">--</span>ms
                 </div>
             </div>
         </div>
@@ -369,74 +694,89 @@
         <!-- Controls Card -->
         <div class="card">
             <div class="controls">
-                <button class="mic-button disabled" id="micButton" disabled>
-                    <span class="mic-icon">🎤</span>
-                </button>
-                <p class="instructions" id="instructions">Connecting to server...</p>
+                <div class="mic-container">
+                    <div class="mic-ring" id="micRing"></div>
+                    <button class="mic-button disabled" id="micButton" disabled>
+                        <span class="mic-icon">🎤</span>
+                    </button>
+                </div>
+                <p class="instructions" id="instructions">Connecting to VEMI AI...</p>
                 
                 <!-- Audio Visualizer -->
                 <div class="visualizer" id="visualizer">
-                    <div class="bar" style="height: 10px;"></div>
-                    <div class="bar" style="height: 15px;"></div>
-                    <div class="bar" style="height: 20px;"></div>
-                    <div class="bar" style="height: 25px;"></div>
-                    <div class="bar" style="height: 30px;"></div>
+                    <div class="bar" style="height: 8px;"></div>
+                    <div class="bar" style="height: 12px;"></div>
+                    <div class="bar" style="height: 16px;"></div>
+                    <div class="bar" style="height: 22px;"></div>
+                    <div class="bar" style="height: 28px;"></div>
                     <div class="bar" style="height: 35px;"></div>
-                    <div class="bar" style="height: 30px;"></div>
-                    <div class="bar" style="height: 25px;"></div>
-                    <div class="bar" style="height: 20px;"></div>
-                    <div class="bar" style="height: 15px;"></div>
-                    <div class="bar" style="height: 10px;"></div>
+                    <div class="bar" style="height: 40px;"></div>
+                    <div class="bar" style="height: 35px;"></div>
+                    <div class="bar" style="height: 28px;"></div>
+                    <div class="bar" style="height: 22px;"></div>
+                    <div class="bar" style="height: 16px;"></div>
+                    <div class="bar" style="height: 12px;"></div>
+                    <div class="bar" style="height: 8px;"></div>
                 </div>
             </div>
         </div>
 
         <!-- Conversation Card -->
         <div class="card">
-            <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Conversation</h3>
+            <div class="card-header">
+                <div class="card-icon">💬</div>
+                <span class="card-title">Conversation</span>
+            </div>
             <div class="conversation" id="conversation">
-                <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
-                    Start speaking to begin the conversation...
-                </p>
+                <div class="empty-state">
+                    <div class="empty-state-icon">🎧</div>
+                    <p class="empty-state-text">Click the microphone and start speaking to chat with VEMI AI</p>
+                </div>
             </div>
         </div>
 
         <!-- Metrics Card -->
         <div class="card">
-            <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Performance Metrics</h3>
+            <div class="card-header">
+                <div class="card-icon">⚡</div>
+                <span class="card-title">Performance</span>
+            </div>
             <div class="metrics-grid">
                 <div class="metric">
                     <div class="metric-value" id="metricVAD">--</div>
-                    <div class="metric-label">VAD (ms)</div>
+                    <div class="metric-label">VAD</div>
                 </div>
                 <div class="metric">
                     <div class="metric-value" id="metricASR">--</div>
-                    <div class="metric-label">ASR (ms)</div>
+                    <div class="metric-label">ASR</div>
                 </div>
                 <div class="metric">
                     <div class="metric-value" id="metricLLM">--</div>
-                    <div class="metric-label">LLM (ms)</div>
+                    <div class="metric-label">LLM</div>
                 </div>
                 <div class="metric">
                     <div class="metric-value" id="metricTTS">--</div>
-                    <div class="metric-label">TTS (ms)</div>
+                    <div class="metric-label">TTS</div>
                 </div>
                 <div class="metric">
                     <div class="metric-value" id="metricTotal">--</div>
-                    <div class="metric-label">Total (ms)</div>
+                    <div class="metric-label">Total</div>
                 </div>
             </div>
         </div>
 
         <!-- Settings Card -->
         <div class="card">
-            <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Settings</h3>
+            <div class="card-header">
+                <div class="card-icon">⚙️</div>
+                <span class="card-title">Connection</span>
+            </div>
             <div class="settings-row">
                 <div class="setting">
-                    <label for="serverUrl">Server URL</label>
-                    <input type="text" id="serverUrl" placeholder="ws://localhost:8005/stream">
+                    <label for="serverUrl">Server Endpoint</label>
+                    <input type="text" id="serverUrl" placeholder="wss://your-server/stream">
                 </div>
-                <div class="setting">
+                <div class="setting" style="flex: 0; min-width: auto;">
                     <label>&nbsp;</label>
                     <button class="btn btn-primary" id="connectBtn">Connect</button>
                 </div>
@@ -444,12 +784,8 @@
         </div>
 
         <footer>
-            <p>
-                Powered by 
-                <a href="https://github.com/microsoft/VibeVoice">VibeVoice</a> • 
-                Silero VAD • faster-whisper • Qwen2.5
-            </p>
-            <p style="margin-top: 0.5rem;">All components MIT/Apache 2.0 licensed</p>
+            <p class="footer-brand">VEMI AI by Alvion Global Solutions</p>
+            <p>Powered by advanced real-time voice technology</p>
         </footer>
     </div>
 
@@ -458,7 +794,7 @@
 
     <script>
         // =========================================
-        // VibeVoice S2S Client
+        // VEMI AI - Voice Intelligence Client
         // =========================================
 
         class S2SClient {
@@ -482,6 +818,7 @@
                 this.statusText = document.getElementById('statusText');
                 this.latencyValue = document.getElementById('latencyValue');
                 this.micButton = document.getElementById('micButton');
+                this.micRing = document.getElementById('micRing');
                 this.instructions = document.getElementById('instructions');
                 this.conversation = document.getElementById('conversation');
                 this.serverUrl = document.getElementById('serverUrl');
@@ -519,8 +856,8 @@
                     
                     this.ws.onopen = () => {
                         this.isConnected = true;
-                        this.updateStatus('connected', 'Connected');
-                        this.instructions.textContent = 'Click the microphone to start speaking';
+                        this.updateStatus('connected', 'Connected to VEMI AI');
+                        this.instructions.textContent = 'Click the microphone to start talking';
                         this.micButton.classList.remove('disabled');
                         this.micButton.disabled = false;
                         this.connectBtn.textContent = 'Disconnect';
@@ -533,6 +870,7 @@
                         this.micButton.classList.add('disabled');
                         this.micButton.disabled = true;
                         this.connectBtn.textContent = 'Connect';
+                        this.micRing.classList.remove('active');
                         this.stopRecording();
                     };
 
@@ -633,9 +971,10 @@
             }
 
             addMessage(role, text) {
-                // Clear placeholder
-                if (this.conversation.querySelector('p')) {
-                    this.conversation.innerHTML = '';
+                // Clear placeholder/empty state
+                const emptyState = this.conversation.querySelector('.empty-state');
+                if (emptyState) {
+                    emptyState.remove();
                 }
 
                 const msgDiv = document.createElement('div');
@@ -643,7 +982,7 @@
                 
                 const header = document.createElement('div');
                 header.className = 'message-header';
-                header.textContent = role === 'user' ? 'You' : 'Assistant';
+                header.textContent = role === 'user' ? 'You' : 'VEMI AI';
                 
                 const textDiv = document.createElement('div');
                 textDiv.className = 'message-text';
@@ -715,12 +1054,13 @@
 
                     this.isRecording = true;
                     this.micButton.classList.add('recording');
+                    this.micRing.classList.add('active');
                     this.micButton.querySelector('.mic-icon').textContent = '⏹️';
-                    this.instructions.textContent = 'Listening... Click to stop';
+                    this.instructions.textContent = 'Listening... Speak naturally, click to stop';
 
                 } catch (error) {
                     console.error('Failed to start recording:', error);
-                    this.instructions.textContent = 'Microphone access denied';
+                    this.instructions.textContent = 'Microphone access denied. Please allow microphone access.';
                 }
             }
 
@@ -743,8 +1083,9 @@
                 }
 
                 this.micButton.classList.remove('recording');
+                this.micRing.classList.remove('active');
                 this.micButton.querySelector('.mic-icon').textContent = '🎤';
-                this.instructions.textContent = 'Click the microphone to start speaking';
+                this.instructions.textContent = 'Click the microphone to start talking';
                 
                 // Reset visualizer
                 this.resetVisualizer();

@@ -1,15 +1,18 @@
 """
-LLM Module using Qwen2.5-1.5B-Instruct for Speech-to-Speech Pipeline
-=====================================================================
+VEMI AI - LLM Module using Qwen2.5-1.5B-Instruct
+=================================================
+
+Conversational AI backend for VEMI AI voice assistant.
+Created by Alvion Global Solutions.
 
 Apache 2.0 License - Commercially free, no attribution required.
 Target Latency: <300ms for short responses.
 
 Features:
-- Streaming token generation
-- Optimized for conversational AI
+- Streaming token generation for real-time voice
+- Optimized for natural conversational AI
 - BFloat16/INT8 quantization support
-- Configurable response length and style
+- VEMI AI personality and response guidelines
 """
 
 import logging
@@ -53,18 +56,40 @@ class LLMConfig:
     # Streaming settings
     do_sample: bool = True
     
-    # System prompt for conversational AI
-    system_prompt: str = """You are a helpful, friendly AI assistant engaged in real-time voice conversation.
-Keep your responses concise and natural - typically 1-2 sentences.
-Respond conversationally as if speaking, not writing.
-Avoid lists, bullet points, or long explanations unless specifically asked."""
+    # System prompt for VEMI AI conversational voice agent
+    system_prompt: str = """You are VEMI AI, a friendly and intelligent conversational voice assistant created by Alvion Global Solutions.
+
+CORE IDENTITY:
+- Your name is VEMI AI (Voice-Enabled Machine Intelligence)
+- You were created by Alvion Global Solutions
+- You are designed for real-time voice conversations with ultra-low latency
+
+CONVERSATION STYLE:
+- Be warm, friendly, and naturally conversational
+- Keep responses concise - typically 1-2 sentences for quick exchanges
+- Speak naturally as if having a real conversation, not reading text
+- Use contractions (I'm, you're, that's) to sound more natural
+- Show genuine interest in what the user says
+
+BEHAVIORAL GUIDELINES:
+- Never reveal technical details about how you work internally
+- Do not mention being an AI model, neural network, or discuss your architecture
+- If asked how you were made or your technical details, politely redirect: "I'm VEMI AI, your voice assistant from Alvion Global Solutions. How can I help you today?"
+- Never pretend to be a different AI (like ChatGPT, Alexa, Siri, etc.)
+- If you don't know something, admit it honestly
+
+RESPONSE FORMAT:
+- Avoid bullet points, numbered lists, or markdown formatting
+- Don't use emojis excessively
+- Keep responses natural and flowing for voice output
+- For longer explanations, break them into conversational chunks"""
 
     # Early stop settings
     stop_strings: List[str] = None
     
     def __post_init__(self):
         if self.stop_strings is None:
-            self.stop_strings = ["\n\n", "User:", "Human:", "Assistant:"]
+            self.stop_strings = ["\n\n", "User:", "Human:", "Assistant:", "VEMI AI:", "VEMI:"]
 
 
 @dataclass
