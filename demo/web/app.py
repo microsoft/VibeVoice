@@ -467,6 +467,11 @@ async def websocket_stream(ws: WebSocket) -> None:
             print("Client disconnected (WebSocketDisconnect)")
             enqueue_log("client_disconnected")
             stop_signal.set()
+        except Exception as e:
+            print(f"Error in websocket stream: {e}")
+            traceback.print_exc()
+            enqueue_log("backend_error", message=str(e))
+            stop_signal.set()
         finally:
             stop_signal.set()
             enqueue_log("backend_stream_complete")
@@ -483,8 +488,11 @@ async def websocket_stream(ws: WebSocket) -> None:
                     log_queue.get_nowait()
                 except Empty:
                     break
-            if ws.client_state == WebSocketState.CONNECTED:
-                await ws.close()
+            try:
+                if ws.client_state == WebSocketState.CONNECTED:
+                    await ws.close()
+            except Exception as e:
+                print(f"Error closing websocket: {e}")
             print("WS handler exit")
     finally:
         if acquired:
