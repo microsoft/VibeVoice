@@ -149,13 +149,15 @@ def main():
         )
         model = prepare_model_for_kbit_training(model)
     else:
-        print("Using full precision (FP16/BF16)...")
+        print("Using full precision (FP32)...")
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float32,
             device_map="auto",
             trust_remote_code=True,
         )
+        # Enable gradient computation
+        model.enable_input_require_grads()
     
     print("\nConfiguring LoRA adapters...")
     lora_config = LoraConfig(
@@ -173,6 +175,9 @@ def main():
     output_dir = Path(__file__).parent / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Ensure model is in training mode
+    model.train()
+    
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         num_train_epochs=args.epochs,
@@ -189,13 +194,14 @@ def main():
         save_strategy="steps",
         save_steps=200,
         save_total_limit=2,
-        fp16=not torch.cuda.is_bf16_supported(),
-        bf16=torch.cuda.is_bf16_supported(),
+        fp16=False,  # Disable mixed precision to avoid gradient issues
+        bf16=False,
         optim="adamw_torch",
         report_to="none",
         seed=42,
-        gradient_checkpointing=True,
-        max_grad_norm=0.3,
+        gradient_checkpointing=False,  # Disable - causes issues with PEFT
+        max_grad_norm=1.0,
+        dataloader_pin_memory=False,
     )
     
     print("\n" + "-"*40)
