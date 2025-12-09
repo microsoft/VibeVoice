@@ -231,11 +231,40 @@ class S2SPipeline:
         self._asr = StreamingASR(asr_config)
         self._asr.initialize()
         
-        # Initialize LLM
+        # Initialize LLM - check for fine-tuned models first
         logger.info("Loading LLM...")
         from .llm_module import StreamingLLM, LLMConfig
+        
+        # Check for local fine-tuned models
+        import os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        local_models = {
+            "medical": os.path.join(script_dir, "models", "medical_llm"),
+            "automobile": os.path.join(script_dir, "models", "automobile_llm"),
+        }
+        
+        # Determine which model to load
+        llm_model_path = self.config.llm_model  # Default: HuggingFace model
+        
+        # Check if we have a fine-tuned model for the default agent
+        if self._agent_type in local_models:
+            local_path = local_models[self._agent_type]
+            if os.path.exists(local_path) and os.path.isdir(local_path):
+                # Verify it has model files
+                if any(f.endswith(('.safetensors', '.bin')) for f in os.listdir(local_path)):
+                    llm_model_path = local_path
+                    logger.info(f"Using fine-tuned {self._agent_type} model: {local_path}")
+        
+        # Fallback: check if medical model exists (largest training data)
+        if llm_model_path == self.config.llm_model:
+            medical_path = local_models["medical"]
+            if os.path.exists(medical_path) and os.path.isdir(medical_path):
+                if any(f.endswith(('.safetensors', '.bin')) for f in os.listdir(medical_path)):
+                    llm_model_path = medical_path
+                    logger.info(f"Using fine-tuned medical model as base: {medical_path}")
+        
         llm_config = LLMConfig(
-            model_name=self.config.llm_model,
+            model_name=llm_model_path,
             device=self.config.device,
             dtype=self.config.llm_dtype,
             max_new_tokens=self.config.max_llm_tokens,
@@ -243,6 +272,9 @@ class S2SPipeline:
         )
         self._llm = StreamingLLM(llm_config)
         self._llm.initialize()
+        
+        # Set initial system prompt based on agent type
+        self._llm.set_system_prompt(SYSTEM_PROMPTS.get(self._agent_type, SYSTEM_PROMPTS["general"]))
         
         # Initialize TTS (connect to VibeVoice server)
         logger.info("Initializing TTS connection...")

@@ -447,10 +447,20 @@ class StreamingLLM:
         self.llm = Qwen2LLM(config)
         self.conversation_history = []
         self.max_history_turns = 5
+        self._system_prompt = None  # Custom system prompt (None = use config default)
         
     def initialize(self) -> None:
         """Initialize the LLM model"""
         self.llm.load_model()
+    
+    def set_system_prompt(self, prompt: str) -> None:
+        """Set a custom system prompt for domain-specific responses"""
+        self._system_prompt = prompt
+        logger.info(f"System prompt updated ({len(prompt)} chars)")
+    
+    def get_system_prompt(self) -> str:
+        """Get current system prompt"""
+        return self._system_prompt or self.llm.config.system_prompt
         
     def respond(
         self,
@@ -470,9 +480,9 @@ class StreamingLLM:
         # Add context if using history
         if include_history and self.conversation_history:
             context = self._build_context(user_message)
-            response = self.llm.generate(context)
+            response = self.llm.generate(context, system_prompt=self._system_prompt)
         else:
-            response = self.llm.generate(user_message)
+            response = self.llm.generate(user_message, system_prompt=self._system_prompt)
         
         # Update history
         self.conversation_history.append({
@@ -493,7 +503,7 @@ class StreamingLLM:
         """
         Stream response tokens.
         """
-        yield from self.llm.generate_streaming(user_message)
+        yield from self.llm.generate_streaming(user_message, system_prompt=self._system_prompt)
     
     async def respond_streaming_async(
         self,
@@ -502,7 +512,7 @@ class StreamingLLM:
         """
         Async stream response tokens.
         """
-        async for token in self.llm.generate_streaming_async(user_message):
+        async for token in self.llm.generate_streaming_async(user_message, system_prompt=self._system_prompt):
             yield token
     
     def _build_context(self, user_message: str) -> str:
