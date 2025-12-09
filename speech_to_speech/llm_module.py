@@ -203,6 +203,7 @@ class Qwen2LLM:
         system_prompt: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
+        conversation_history: Optional[List[dict]] = None,
     ) -> LLMResponse:
         """
         Generate a complete response.
@@ -212,6 +213,7 @@ class Qwen2LLM:
             system_prompt: Override system prompt
             max_tokens: Override max tokens
             temperature: Override temperature
+            conversation_history: List of previous turns [{"user": ..., "assistant": ...}]
             
         Returns:
             LLMResponse with generated text
@@ -221,8 +223,8 @@ class Qwen2LLM:
         
         start_time = time.time()
         
-        # Build messages
-        messages = self._build_messages(user_message, system_prompt)
+        # Build messages with conversation history
+        messages = self._build_messages(user_message, system_prompt, conversation_history)
         
         # Tokenize
         with self._lock:
@@ -271,6 +273,7 @@ class Qwen2LLM:
         user_message: str,
         system_prompt: Optional[str] = None,
         max_tokens: Optional[int] = None,
+        conversation_history: Optional[List[dict]] = None,
     ) -> Generator[str, None, None]:
         """
         Stream tokens as they are generated.
@@ -279,6 +282,7 @@ class Qwen2LLM:
             user_message: User's input message
             system_prompt: Override system prompt
             max_tokens: Override max tokens
+            conversation_history: List of previous turns [{"user": ..., "assistant": ...}]
             
         Yields:
             Token strings as they are generated
@@ -288,8 +292,8 @@ class Qwen2LLM:
         
         from transformers import TextIteratorStreamer
         
-        # Build messages
-        messages = self._build_messages(user_message, system_prompt)
+        # Build messages with conversation history
+        messages = self._build_messages(user_message, system_prompt, conversation_history)
         
         with self._lock:
             inputs = self._prepare_inputs(messages)
@@ -350,14 +354,12 @@ class Qwen2LLM:
         user_message: str,
         system_prompt: Optional[str] = None,
         max_tokens: Optional[int] = None,
+        conversation_history: Optional[List[dict]] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Async streaming generation for WebSocket integration.
         """
-        # Run sync generator in thread pool
-        loop = asyncio.get_event_loop()
-        
-        gen = self.generate_streaming(user_message, system_prompt, max_tokens)
+        gen = self.generate_streaming(user_message, system_prompt, max_tokens, conversation_history)
         
         for token in gen:
             yield token
@@ -366,19 +368,29 @@ class Qwen2LLM:
     def _build_messages(
         self,
         user_message: str,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        conversation_history: Optional[List[dict]] = None
     ) -> List[dict]:
-        """Build chat messages format"""
+        """Build chat messages format with optional conversation history"""
         messages = [
             {
                 "role": "system",
                 "content": system_prompt or self.config.system_prompt
-            },
-            {
-                "role": "user", 
-                "content": user_message
             }
         ]
+        
+        # Add conversation history if provided
+        if conversation_history:
+            for turn in conversation_history:
+                messages.append({"role": "user", "content": turn["user"]})
+                messages.append({"role": "assistant", "content": turn["assistant"]})
+        
+        # Add current user message
+        messages.append({
+            "role": "user", 
+            "content": user_message
+        })
+        
         return messages
     
     def _prepare_inputs(self, messages: List[dict]) -> dict:
@@ -458,26 +470,28 @@ class StreamingLLM:
     def respond(
         self,
         user_message: str,
-        include_history: bool = False
+        include_history: bool = True  # Default to True for conversation context
     ) -> LLMResponse:
         """
         Generate a response to user message.
         
         Args:
             user_message: Transcribed user speech
-            include_history: Whether to include conversation history
+            include_history: Whether to include conversation history (default True)
             
         Returns:
             LLM response
         """
-        # Add context if using history
-        if include_history and self.conversation_history:
-            context = self._build_context(user_message)
-            response = self.llm.generate(context, system_prompt=self._system_prompt)
-        else:
-            response = self.llm.generate(user_message, system_prompt=self._system_prompt)
+        # Pass conversation history to LLM for proper multi-turn context
+        history = self.conversation_history[-self.max_history_turns:] if include_history else None
         
-        # Update history
+        response = self.llm.generate(
+            user_message, 
+            system_prompt=self._system_prompt,
+            conversation_history=history
+        )
+        
+        # Update history with this turn
         self.conversation_history.append({
             "user": user_message,
             "assistant": response.text
@@ -491,35 +505,62 @@ class StreamingLLM:
     
     def respond_streaming(
         self,
-        user_message: str
+        user_message: str,
+        include_history: bool = True
     ) -> Generator[str, None, None]:
         """
-        Stream response tokens.
+        Stream response tokens with conversation history.
         """
-        yield from self.llm.generate_streaming(user_message, system_prompt=self._system_prompt)
+        history = self.conversation_history[-self.max_history_turns:] if include_history else None
+        
+        full_response = ""
+        for token in self.llm.generate_streaming(
+            user_message, 
+            system_prompt=self._system_prompt,
+            conversation_history=history
+        ):
+            full_response += token
+            yield token
+        
+        # Update history after streaming completes
+        self.conversation_history.append({
+            "user": user_message,
+            "assistant": full_response
+        })
+        if len(self.conversation_history) > self.max_history_turns:
+            self.conversation_history = self.conversation_history[-self.max_history_turns:]
     
     async def respond_streaming_async(
         self,
-        user_message: str
+        user_message: str,
+        include_history: bool = True
     ) -> AsyncGenerator[str, None]:
         """
-        Async stream response tokens.
+        Async stream response tokens with conversation history.
         """
-        async for token in self.llm.generate_streaming_async(user_message, system_prompt=self._system_prompt):
+        history = self.conversation_history[-self.max_history_turns:] if include_history else None
+        
+        full_response = ""
+        async for token in self.llm.generate_streaming_async(
+            user_message, 
+            system_prompt=self._system_prompt,
+            conversation_history=history
+        ):
+            full_response += token
             yield token
-    
-    def _build_context(self, user_message: str) -> str:
-        """Build context from conversation history"""
-        context_parts = []
-        for turn in self.conversation_history[-3:]:  # Last 3 turns
-            context_parts.append(f"User: {turn['user']}")
-            context_parts.append(f"Assistant: {turn['assistant']}")
-        context_parts.append(f"User: {user_message}")
-        return "\n".join(context_parts)
+        
+        # Update history after streaming completes
+        self.conversation_history.append({
+            "user": user_message,
+            "assistant": full_response
+        })
+        if len(self.conversation_history) > self.max_history_turns:
+            self.conversation_history = self.conversation_history[-self.max_history_turns:]
     
     def reset(self) -> None:
         """Reset conversation history"""
         self.conversation_history = []
+        logger.info("Conversation history cleared")
 
 
 # Convenience function

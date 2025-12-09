@@ -55,66 +55,71 @@ class PipelineState(Enum):
 
 # Domain-specific system prompts - designed for natural voice conversation
 SYSTEM_PROMPTS = {
-    "medical": """You are VEMI AI Medical Assistant, a friendly and knowledgeable healthcare assistant created by Alvion Global Solutions.
+    "medical": """You are VEMI AI Medical Assistant, a caring and knowledgeable healthcare assistant created by Alvion Global Solutions.
 
-CRITICAL RULES:
-- Your name is VEMI AI Medical Assistant - NEVER call yourself "Chat Doctor", "ChatDoctor", or any other name
-- NEVER start responses with "Hi welcome to Chat Doctor" or similar - you are VEMI AI
-- Keep responses SHORT (1-3 sentences) - this is a voice conversation, not a text chat
-- Be conversational and natural, like talking to a helpful friend who knows medicine
-- Do NOT greet unless the user greets you first
-- Answer the user's ACTUAL question directly - don't give generic medical advice
+CONVERSATION CONTEXT:
+You are having an ongoing voice conversation. The user's previous messages are provided for context. Always remember what was discussed earlier and refer back to it naturally.
 
-RESPONSE STYLE:
-- Speak naturally as in a real conversation
-- Use simple, clear language
-- If asked your name, say "I'm VEMI AI Medical Assistant"
-- For serious symptoms, briefly recommend seeing a doctor
-- Be warm and empathetic but concise
+CRITICAL BEHAVIOR:
+- NEVER say "Hello", "Hi", or any greeting UNLESS the user greets you first in this message
+- If the user describes a symptom (like back pain), ASK CLARIFYING QUESTIONS:
+  * "Which part of your back - upper, middle, or lower?"
+  * "How long have you had this pain?"
+  * "Is it sharp or dull? Does it come and go?"
+  * "Did anything trigger it - lifting, sitting, injury?"
+- After gathering information, suggest possible causes and recommend seeing a doctor if needed
+- Remember the conversation context - if discussing back pain, stay on that topic
 
-NEVER DO:
-- Never say "Chat Doctor", "ChatDoctor Forum", or reference any chat service
-- Never give long paragraphs of text
-- Never list multiple unrelated conditions
-- Never ignore what the user actually said""",
+YOUR APPROACH:
+1. Listen to the symptom
+2. Ask 1-2 specific clarifying questions
+3. Based on answers, provide targeted guidance
+4. Recommend professional help when appropriate
 
-    "automobile": """You are VEMI AI Automobile Assistant, a friendly automotive expert created by Alvion Global Solutions.
+IDENTITY:
+- You are VEMI AI Medical Assistant - NEVER say "Chat Doctor" or any other name
+- Be warm, empathetic, and professional
+- Keep responses conversational (2-4 sentences)""",
 
-CRITICAL RULES:
-- Your name is VEMI AI Automobile Assistant - always identify as VEMI AI
-- Keep responses SHORT (1-3 sentences) - this is a voice conversation
-- Be conversational and natural, like talking to a knowledgeable mechanic friend
-- Do NOT greet unless the user greets you first
-- Answer the user's ACTUAL question directly
+    "automobile": """You are VEMI AI Automobile Assistant, a friendly and expert automotive technician created by Alvion Global Solutions.
 
-RESPONSE STYLE:
-- Speak naturally as in a real conversation
-- Use common car terminology, not overly technical jargon
-- Give practical, actionable advice
-- If asked your name, say "I'm VEMI AI Automobile Assistant"
-- For dangerous repairs, briefly recommend a professional
+CONVERSATION CONTEXT:
+You are having an ongoing voice conversation. The user's previous messages are provided for context. Always remember what was discussed earlier and continue that topic naturally.
 
-NEVER DO:
-- Never give long paragraphs of generic advice
-- Never ignore what the user actually asked
-- Never list unrelated car problems""",
+CRITICAL BEHAVIOR:
+- NEVER say "Hello", "Hi", or any greeting UNLESS the user greets you first in this message
+- If the user mentions a car problem (like flat tire, AC not working), ASK CLARIFYING QUESTIONS:
+  * For AC: "Is it blowing warm air, or no air at all? Any strange noises?"
+  * For tire: "Do you have a spare tire? Is the car in a safe location?"
+  * For engine: "Any warning lights on? What sound is it making?"
+- Remember conversation context - if you were discussing AC, questions like "how to test it" refer to the AC
+- Provide step-by-step troubleshooting guidance
 
-    "general": """You are VEMI AI, a friendly voice assistant created by Alvion Global Solutions.
+YOUR APPROACH:
+1. Understand the specific problem
+2. Ask 1-2 diagnostic questions
+3. Give practical troubleshooting steps
+4. Recommend a mechanic for complex/dangerous repairs
 
-CRITICAL RULES:
-- Your name is VEMI AI - always identify yourself as VEMI AI
-- Keep responses SHORT (1-3 sentences) - this is a voice conversation
+IDENTITY:
+- You are VEMI AI Automobile Assistant - always identify as VEMI AI
+- Be helpful like a knowledgeable mechanic friend
+- Keep responses conversational (2-4 sentences)""",
+
+    "general": """You are VEMI AI, a friendly and helpful voice assistant created by Alvion Global Solutions.
+
+CONVERSATION CONTEXT:
+You are having an ongoing voice conversation. Remember what was discussed earlier and maintain context.
+
+CRITICAL BEHAVIOR:
+- NEVER say "Hello", "Hi", or any greeting UNLESS the user greets you first in this message
+- Remember conversation context and refer back to previous topics naturally
+- Ask clarifying questions when the user's request is unclear
+
+IDENTITY:
+- You are VEMI AI - always identify yourself as VEMI AI
 - Be conversational and natural
-- Do NOT greet unless the user greets you first
-
-RESPONSE STYLE:
-- Speak naturally like a helpful friend
-- Be concise and direct
-- If asked your name, say "I'm VEMI AI, your voice assistant"
-
-NEVER DO:
-- Never give long paragraphs
-- Never ignore the user's actual question"""
+- Keep responses concise (2-3 sentences)"""
 }
 
 
@@ -135,15 +140,15 @@ class PipelineConfig:
     input_sample_rate: int = 16000
     output_sample_rate: int = 24000
     
-    # VAD settings
-    vad_threshold: float = 0.5
-    min_speech_ms: int = 250
-    min_silence_ms: int = 300
+    # VAD settings - tuned for responsive barge-in
+    vad_threshold: float = 0.4  # Lower = more sensitive to speech (better barge-in)
+    min_speech_ms: int = 150  # Shorter = faster detection of user speaking
+    min_silence_ms: int = 200  # Shorter = quicker end-of-speech detection
     
     # LLM settings
-    max_llm_tokens: int = 64  # Keep short for conversational voice responses
+    max_llm_tokens: int = 150  # Allow longer responses for detailed answers
     llm_temperature: float = 0.7
-    use_finetuned_model: bool = False  # Set to False - fine-tuned model has ChatDoctor patterns
+    use_finetuned_model: bool = False  # Fine-tuned model learned ChatDoctor patterns from training data
     
     # TTS settings
     tts_voice: str = "en-Carter_man"
@@ -158,10 +163,14 @@ class PipelineConfig:
     default_agent: str = "general"
 
 
-def clean_llm_response(text: str) -> str:
+def clean_llm_response(text: str, user_greeted: bool = False) -> str:
     """
-    Clean LLM response to remove unwanted patterns from fine-tuned model.
-    Removes ChatDoctor references and other artifacts.
+    Clean LLM response to remove unwanted patterns.
+    Removes ChatDoctor references, unnecessary greetings, and other artifacts.
+    
+    Args:
+        text: The LLM response text
+        user_greeted: Whether the user greeted first (if False, remove greetings from response)
     """
     import re
     
@@ -181,6 +190,16 @@ def clean_llm_response(text: str) -> str:
     for pattern in patterns_to_remove:
         text = re.sub(pattern, "", text)
     
+    # Remove greetings at the start if user didn't greet first
+    if not user_greeted:
+        # Remove common greetings at the start of responses
+        greeting_patterns = [
+            r"^(?i)(hello|hi|hey|greetings)[\s,!\.]*",
+            r"^(?i)(good\s+(morning|afternoon|evening))[\s,!\.]*",
+        ]
+        for pattern in greeting_patterns:
+            text = re.sub(pattern, "", text)
+    
     # Clean up multiple spaces and newlines
     text = re.sub(r'\s+', ' ', text).strip()
     
@@ -193,6 +212,20 @@ def clean_llm_response(text: str) -> str:
                 break
     
     return text.strip()
+
+
+def user_is_greeting(text: str) -> bool:
+    """Check if user message is a greeting."""
+    import re
+    text_lower = text.lower().strip()
+    greeting_patterns = [
+        r"^(hello|hi|hey|greetings|good\s+(morning|afternoon|evening))[\s,!\.]*$",
+        r"^(hello|hi|hey)[\s,!\.]+",
+    ]
+    for pattern in greeting_patterns:
+        if re.match(pattern, text_lower):
+            return True
+    return False
 
 
 @dataclass
@@ -419,13 +452,16 @@ class S2SPipeline:
             logger.info(f"User: {transcription.text}")
             self.state = PipelineState.GENERATING
             
+            # Check if user greeted (to allow greeting in response)
+            user_greeted = user_is_greeting(transcription.text)
+            
             # Step 3: LLM - Generate response
             llm_start = time.time()
             llm_response = self._llm.respond(transcription.text)
             llm_time = (time.time() - llm_start) * 1000
             
-            # Clean response to remove any ChatDoctor patterns
-            cleaned_response = clean_llm_response(llm_response.text)
+            # Clean response to remove unwanted patterns and greetings (if user didn't greet)
+            cleaned_response = clean_llm_response(llm_response.text, user_greeted)
             llm_response.text = cleaned_response
             
             logger.info(f"Assistant: {llm_response.text}")
@@ -506,14 +542,17 @@ class S2SPipeline:
                 logger.info("Cancelled after ASR")
                 return
             
+            # Check if user greeted
+            user_greeted = user_is_greeting(transcription.text)
+            
             # LLM
             self.state = PipelineState.GENERATING
             llm_start = time.time()
             llm_response = self._llm.respond(transcription.text)
             llm_time = (time.time() - llm_start) * 1000
             
-            # Clean response to remove any ChatDoctor patterns
-            llm_response.text = clean_llm_response(llm_response.text)
+            # Clean response to remove unwanted patterns and greetings
+            llm_response.text = clean_llm_response(llm_response.text, user_greeted)
             
             logger.info(f"[LLM] '{llm_response.text}' ({llm_time:.0f}ms)")
             
@@ -602,6 +641,9 @@ class S2SPipeline:
                 logger.info("Cancelled after ASR")
                 return
             
+            # Check if user greeted
+            user_greeted = user_is_greeting(transcription.text)
+            
             # LLM with sentence-level streaming
             self.state = PipelineState.GENERATING
             llm_start = time.time()
@@ -626,8 +668,8 @@ class S2SPipeline:
                 # Check for sentence boundary
                 if any(sentence_buffer.rstrip().endswith(d) for d in sentence_delimiters):
                     sentence = sentence_buffer.strip()
-                    # Clean the sentence to remove ChatDoctor patterns
-                    sentence = clean_llm_response(sentence)
+                    # Clean the sentence to remove unwanted patterns
+                    sentence = clean_llm_response(sentence, user_greeted)
                     if sentence:
                         # Log first sentence timing
                         if first_audio_chunk:
@@ -665,7 +707,7 @@ class S2SPipeline:
             
             # Process any remaining text in buffer
             remaining = sentence_buffer.strip()
-            remaining = clean_llm_response(remaining)  # Clean remaining text
+            remaining = clean_llm_response(remaining, user_greeted)  # Clean remaining text
             if remaining and not self._cancel_event.is_set():
                 self.state = PipelineState.SYNTHESIZING
                 async for audio_chunk in self._tts_service.synthesize_streaming(remaining):
@@ -1189,13 +1231,16 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                             if text:
                                 await ws.send_json({"type": "status", "state": "processing"})
                                 
+                                # Check if user greeted
+                                user_greeted = user_is_greeting(text)
+                                
                                 # Generate response
                                 llm_start = time.time()
                                 response = pipeline._llm.respond(text)
                                 llm_time = (time.time() - llm_start) * 1000
                                 
-                                # Clean response to remove any ChatDoctor patterns
-                                response.text = clean_llm_response(response.text)
+                                # Clean response to remove unwanted patterns
+                                response.text = clean_llm_response(response.text, user_greeted)
                                 
                                 # Synthesize
                                 tts_start = time.time()
