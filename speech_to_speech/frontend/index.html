@@ -800,7 +800,8 @@
         class S2SClient {
             constructor() {
                 this.ws = null;
-                this.audioContext = null;
+                this.inputAudioContext = null;
+                this.outputAudioContext = null;
                 this.mediaStream = null;
                 this.mediaRecorder = null;
                 this.audioProcessor = null;
@@ -808,10 +809,16 @@
                 this.isConnected = false;
                 this.audioQueue = [];
                 this.isPlaying = false;
+                this.currentSource = null;
+                this.isSpeaking = false;  // AI is speaking
+                this.bargeInEnabled = true;  // Allow interruption
 
                 // Audio settings
                 this.inputSampleRate = 16000;
                 this.outputSampleRate = 24000;
+                
+                // Initialize persistent output audio context
+                this.initOutputAudioContext();
 
                 // UI Elements
                 this.statusDot = document.getElementById('statusDot');
@@ -840,6 +847,75 @@
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.host || 'localhost:8005';
                 return `${protocol}//${host}/stream`;
+            }
+
+            initOutputAudioContext() {
+                // Create a persistent audio context for smooth playback
+                this.outputAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: this.outputSampleRate,
+                    latencyHint: 'interactive'
+                });
+                
+                // Create a gain node for smooth volume control
+                this.gainNode = this.outputAudioContext.createGain();
+                this.gainNode.connect(this.outputAudioContext.destination);
+                
+                // Low-pass filter to remove any high-frequency artifacts
+                this.lowPassFilter = this.outputAudioContext.createBiquadFilter();
+                this.lowPassFilter.type = 'lowpass';
+                this.lowPassFilter.frequency.value = 8000;  // Cut frequencies above 8kHz
+                this.lowPassFilter.connect(this.gainNode);
+                
+                console.log('Audio context initialized:', this.outputSampleRate, 'Hz');
+            }
+
+            // Stop all audio playback immediately (barge-in)
+            stopAudioPlayback() {
+                // Stop current playing source
+                if (this.currentSource) {
+                    try {
+                        this.currentSource.stop();
+                    } catch (e) {
+                        // Already stopped
+                    }
+                    this.currentSource = null;
+                }
+                
+                // Clear the audio queue
+                this.audioQueue = [];
+                this.isPlaying = false;
+                this.isSpeaking = false;
+                
+                // Update UI
+                this.updateSpeakingStatus();
+                
+                // Notify server to cancel current response
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({ type: 'cancel' }));
+                }
+                
+                console.log('Audio playback stopped (barge-in)');
+            }
+
+            // Check if user is speaking while AI is talking
+            detectBargeIn(audioData) {
+                if (!this.bargeInEnabled || !this.isSpeaking) return false;
+                
+                // Calculate audio energy
+                let energy = 0;
+                for (let i = 0; i < audioData.length; i++) {
+                    energy += audioData[i] * audioData[i];
+                }
+                energy = Math.sqrt(energy / audioData.length);
+                
+                // If energy is above threshold, user is speaking
+                const threshold = 0.02;  // Adjust based on testing
+                if (energy > threshold) {
+                    console.log('Barge-in detected, energy:', energy.toFixed(4));
+                    this.stopAudioPlayback();
+                    return true;
+                }
+                return false;
             }
 
             async connect() {
@@ -918,6 +994,11 @@
                             this.updateStatus('processing', 'Processing...');
                         } else if (msg.state === 'ready') {
                             this.updateStatus('connected', 'Ready');
+                            this.isSpeaking = false;
+                        } else if (msg.state === 'cancelled') {
+                            this.updateStatus('connected', 'Ready');
+                            this.isSpeaking = false;
+                            console.log('Response cancelled (barge-in acknowledged)');
                         }
                         if (msg.input_sample_rate) {
                             this.inputSampleRate = msg.input_sample_rate;
@@ -949,10 +1030,21 @@
                     this.statusDot.classList.add('connected');
                 } else if (state === 'processing' || state === 'connecting') {
                     this.statusDot.classList.add('processing');
+                } else if (state === 'speaking') {
+                    this.statusDot.classList.add('connected');
                 } else if (state === 'error') {
                     this.statusDot.classList.add('error');
                 }
                 this.statusText.textContent = text;
+            }
+
+            // Update status when AI starts/stops speaking
+            updateSpeakingStatus() {
+                if (this.isSpeaking) {
+                    this.updateStatus('speaking', 'VEMI AI is speaking...');
+                } else if (this.isConnected) {
+                    this.updateStatus('connected', 'Ready');
+                }
             }
 
             updateMetrics(metrics) {
@@ -1032,6 +1124,11 @@
                         if (!this.isRecording) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
+                        
+                        // Check for barge-in (user speaking while AI is talking)
+                        if (this.isSpeaking && this.bargeInEnabled) {
+                            this.detectBargeIn(inputData);
+                        }
                         
                         // Convert to PCM16
                         const pcm16 = new Int16Array(inputData.length);
@@ -1115,6 +1212,10 @@
 
             queueAudio(audioData) {
                 this.audioQueue.push(audioData);
+                if (!this.isSpeaking) {
+                    this.isSpeaking = true;
+                    this.updateSpeakingStatus();
+                }
                 if (!this.isPlaying) {
                     this.playNextAudio();
                 }
@@ -1123,6 +1224,11 @@
             async playNextAudio() {
                 if (this.audioQueue.length === 0) {
                     this.isPlaying = false;
+                    if (this.isSpeaking) {
+                        this.isSpeaking = false;
+                        this.updateSpeakingStatus();
+                    }
+                    this.currentSource = null;
                     return;
                 }
 
@@ -1130,30 +1236,48 @@
                 const audioData = this.audioQueue.shift();
 
                 try {
-                    // Create audio context for playback
-                    const playbackContext = new (window.AudioContext || window.webkitAudioContext)({
-                        sampleRate: this.outputSampleRate
-                    });
-
-                    // Convert PCM16 to Float32
-                    const pcm16 = new Int16Array(audioData);
-                    const float32 = new Float32Array(pcm16.length);
-                    for (let i = 0; i < pcm16.length; i++) {
-                        float32[i] = pcm16[i] / 32768;
+                    // Resume context if suspended (autoplay policy)
+                    if (this.outputAudioContext.state === 'suspended') {
+                        await this.outputAudioContext.resume();
                     }
 
-                    // Create audio buffer
-                    const buffer = playbackContext.createBuffer(1, float32.length, this.outputSampleRate);
+                    // Convert PCM16 to Float32 with smoothing
+                    const pcm16 = new Int16Array(audioData);
+                    const float32 = new Float32Array(pcm16.length);
+                    
+                    // Apply soft conversion with slight smoothing
+                    for (let i = 0; i < pcm16.length; i++) {
+                        float32[i] = pcm16[i] / 32768.0;
+                    }
+
+                    // Apply fade-in/fade-out to prevent clicks (first/last 64 samples)
+                    const fadeLength = Math.min(64, float32.length / 4);
+                    for (let i = 0; i < fadeLength; i++) {
+                        const fade = i / fadeLength;
+                        float32[i] *= fade;
+                        float32[float32.length - 1 - i] *= fade;
+                    }
+
+                    // Create audio buffer using persistent context
+                    const buffer = this.outputAudioContext.createBuffer(1, float32.length, this.outputSampleRate);
                     buffer.getChannelData(0).set(float32);
 
-                    // Play
-                    const source = playbackContext.createBufferSource();
+                    // Create and configure source
+                    const source = this.outputAudioContext.createBufferSource();
                     source.buffer = buffer;
-                    source.connect(playbackContext.destination);
+                    
+                    // Connect through low-pass filter for cleaner sound
+                    source.connect(this.lowPassFilter);
+                    
+                    this.currentSource = source;
+                    
                     source.onended = () => {
-                        playbackContext.close();
+                        if (this.currentSource === source) {
+                            this.currentSource = null;
+                        }
                         this.playNextAudio();
                     };
+                    
                     source.start();
 
                 } catch (error) {
@@ -1161,7 +1285,25 @@
                     this.playNextAudio();
                 }
             }
+
+            // Clean up audio context on page unload
+            cleanup() {
+                this.stopAudioPlayback();
+                if (this.outputAudioContext) {
+                    this.outputAudioContext.close();
+                }
+                if (this.inputAudioContext) {
+                    this.inputAudioContext.close();
+                }
+            }
         }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (window.client) {
+                window.client.cleanup();
+            }
+        });
 
         // Initialize client
         const client = new S2SClient();

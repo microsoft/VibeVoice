@@ -712,6 +712,12 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                             pipeline.reset()
                             await ws.send_json({"type": "status", "state": "reset"})
                         
+                        elif msg.get("type") == "cancel":
+                            # Barge-in: User interrupted, cancel current response
+                            pipeline.reset()
+                            logger.info("Barge-in: Response cancelled by user")
+                            await ws.send_json({"type": "status", "state": "cancelled"})
+                        
                         elif msg.get("type") == "text":
                             # Direct text input (skip ASR)
                             text = msg.get("text", "")
