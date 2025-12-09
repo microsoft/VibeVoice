@@ -292,7 +292,7 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
             return audio_array
         elif file_ext == '.pt':
             # PyTorch tensor file
-            audio_tensor = torch.load(audio_path, map_location='cpu').squeeze()
+            audio_tensor = torch.load(audio_path, map_location='cpu', weights_only=True).squeeze()
             if isinstance(audio_tensor, torch.Tensor):
                 audio_array = audio_tensor.numpy()
             else:
