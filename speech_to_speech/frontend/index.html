@@ -817,6 +817,14 @@
                 this.inputSampleRate = 16000;
                 this.outputSampleRate = 24000;
                 
+                // Advanced barge-in detection settings
+                this.bargeInThreshold = 0.015;  // Energy threshold for barge-in
+                this.bargeInConfirmFrames = 3;  // Consecutive frames above threshold
+                this.bargeInCooldown = 500;     // Cooldown after barge-in (ms)
+                this.energyHistory = [];        // Smoothed energy history
+                this.bargeInFrameCount = 0;     // Consecutive frames above threshold
+                this.lastBargeInTime = 0;       // Last barge-in timestamp
+                
                 // Initialize persistent output audio context
                 this.initOutputAudioContext();
 
@@ -897,24 +905,51 @@
                 console.log('Audio playback stopped (barge-in)');
             }
 
-            // Check if user is speaking while AI is talking
+            // Advanced barge-in detection with smoothing and hysteresis
             detectBargeIn(audioData) {
-                if (!this.bargeInEnabled || !this.isSpeaking) return false;
+                if (!this.bargeInEnabled || !this.isSpeaking) {
+                    this.bargeInFrameCount = 0;
+                    return false;
+                }
                 
-                // Calculate audio energy
+                // Check cooldown (prevent rapid re-triggering)
+                const now = Date.now();
+                if (now - this.lastBargeInTime < this.bargeInCooldown) {
+                    return false;
+                }
+                
+                // Calculate RMS energy
                 let energy = 0;
                 for (let i = 0; i < audioData.length; i++) {
                     energy += audioData[i] * audioData[i];
                 }
                 energy = Math.sqrt(energy / audioData.length);
                 
-                // If energy is above threshold, user is speaking
-                const threshold = 0.02;  // Adjust based on testing
-                if (energy > threshold) {
-                    console.log('Barge-in detected, energy:', energy.toFixed(4));
-                    this.stopAudioPlayback();
-                    return true;
+                // Smooth energy with moving average (last 5 frames)
+                this.energyHistory.push(energy);
+                if (this.energyHistory.length > 5) {
+                    this.energyHistory.shift();
                 }
+                const smoothedEnergy = this.energyHistory.reduce((a, b) => a + b, 0) / this.energyHistory.length;
+                
+                // Check if above threshold
+                if (smoothedEnergy > this.bargeInThreshold) {
+                    this.bargeInFrameCount++;
+                    
+                    // Require multiple consecutive frames for confirmation
+                    if (this.bargeInFrameCount >= this.bargeInConfirmFrames) {
+                        console.log('Barge-in confirmed! Energy:', smoothedEnergy.toFixed(4), 'Frames:', this.bargeInFrameCount);
+                        this.lastBargeInTime = now;
+                        this.bargeInFrameCount = 0;
+                        this.energyHistory = [];
+                        this.stopAudioPlayback();
+                        return true;
+                    }
+                } else {
+                    // Reset counter if energy drops
+                    this.bargeInFrameCount = Math.max(0, this.bargeInFrameCount - 1);
+                }
+                
                 return false;
             }
 
@@ -1097,17 +1132,17 @@
             }
 
             async startRecording() {
-                if (!this.isConnected) return;
-
                 try {
-                    // Request microphone access
+                    // Request microphone with advanced audio processing
+                    // Echo cancellation is crucial for barge-in detection
                     this.mediaStream = await navigator.mediaDevices.getUserMedia({
                         audio: {
-                            sampleRate: this.inputSampleRate,
                             channelCount: 1,
-                            echoCancellation: true,
-                            noiseSuppression: true,
-                            autoGainControl: true
+                            sampleRate: { ideal: this.inputSampleRate },
+                            echoCancellation: { ideal: true },     // Critical for barge-in
+                            noiseSuppression: { ideal: true },     // Reduce background noise
+                            autoGainControl: { ideal: true },      // Normalize volume
+                            latency: { ideal: 0.01 }               // Low latency
                         }
                     });
 

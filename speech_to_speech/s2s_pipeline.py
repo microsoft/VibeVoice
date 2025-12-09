@@ -107,8 +107,13 @@ class S2SPipeline:
     Processes audio through:
     1. VAD - Voice Activity Detection
     2. ASR - Speech Recognition
-    3. LLM - Response Generation
-    4. TTS - Speech Synthesis
+    3. LLM - Response Generation (sentence-level streaming)
+    4. TTS - Speech Synthesis (streaming)
+    
+    Features:
+    - Sentence-level LLM→TTS streaming for lower latency
+    - Barge-in cancellation support
+    - Async cancellation tokens
     """
     
     def __init__(self, config: Optional[PipelineConfig] = None):
@@ -125,6 +130,10 @@ class S2SPipeline:
         # Metrics
         self.last_metrics = PipelineMetrics()
         self.total_requests = 0
+        
+        # Cancellation support for barge-in
+        self._cancel_event = asyncio.Event()
+        self._is_generating = False
         
         logger.info("S2S Pipeline created")
     
@@ -337,8 +346,139 @@ class S2SPipeline:
         self.total_requests += 1
         self.state = PipelineState.IDLE
     
+    async def process_speech_segment_streaming(
+        self,
+        speech_audio: np.ndarray,
+        sample_rate: int = 16000
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Process speech with sentence-level LLM→TTS streaming for lower latency.
+        
+        Instead of waiting for full LLM response, this streams sentences to TTS
+        as soon as they are detected (at punctuation boundaries).
+        
+        Args:
+            speech_audio: Speech audio numpy array
+            sample_rate: Audio sample rate
+            
+        Yields:
+            PCM16 audio chunks
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        # Reset cancellation state
+        self._cancel_event.clear()
+        self._is_generating = True
+        
+        pipeline_start = time.time()
+        
+        try:
+            # ASR
+            self.state = PipelineState.TRANSCRIBING
+            asr_start = time.time()
+            transcription = self._asr.transcribe_segment(speech_audio, sample_rate)
+            asr_time = (time.time() - asr_start) * 1000
+            
+            if not transcription.text.strip():
+                self.state = PipelineState.IDLE
+                return
+            
+            logger.info(f"[ASR] '{transcription.text}' ({asr_time:.0f}ms)")
+            
+            # Check for cancellation
+            if self._cancel_event.is_set():
+                logger.info("Cancelled after ASR")
+                return
+            
+            # LLM with sentence-level streaming
+            self.state = PipelineState.GENERATING
+            llm_start = time.time()
+            
+            sentence_buffer = ""
+            full_response = ""
+            sentence_delimiters = {'.', '!', '?', '。', '！', '？'}
+            first_audio_chunk = True
+            tts_first_time = 0
+            tokens_count = 0
+            
+            async for token in self._llm.respond_streaming_async(transcription.text):
+                # Check for cancellation
+                if self._cancel_event.is_set():
+                    logger.info("Cancelled during LLM generation")
+                    return
+                
+                sentence_buffer += token
+                full_response += token
+                tokens_count += 1
+                
+                # Check for sentence boundary
+                if any(sentence_buffer.rstrip().endswith(d) for d in sentence_delimiters):
+                    sentence = sentence_buffer.strip()
+                    if sentence:
+                        # Log first sentence timing
+                        if first_audio_chunk:
+                            llm_time = (time.time() - llm_start) * 1000
+                            logger.info(f"[LLM] First sentence: '{sentence[:50]}...' ({llm_time:.0f}ms)")
+                        
+                        # Stream this sentence to TTS
+                        self.state = PipelineState.SYNTHESIZING
+                        tts_start = time.time()
+                        
+                        async for audio_chunk in self._tts_service.synthesize_streaming(sentence):
+                            if self._cancel_event.is_set():
+                                logger.info("Cancelled during TTS")
+                                return
+                            
+                            if first_audio_chunk:
+                                tts_first_time = (time.time() - tts_start) * 1000
+                                total = (time.time() - pipeline_start) * 1000
+                                
+                                self.last_metrics = PipelineMetrics(
+                                    asr_latency_ms=asr_time,
+                                    llm_latency_ms=llm_time,
+                                    tts_first_chunk_ms=tts_first_time,
+                                    total_latency_ms=total,
+                                    tokens_generated=tokens_count
+                                )
+                                
+                                logger.info(f"[E2E] {total:.0f}ms (ASR:{asr_time:.0f} LLM:{llm_time:.0f} TTS:{tts_first_time:.0f})")
+                                first_audio_chunk = False
+                            
+                            self.state = PipelineState.SPEAKING
+                            yield audio_chunk
+                    
+                    sentence_buffer = ""
+            
+            # Process any remaining text in buffer
+            remaining = sentence_buffer.strip()
+            if remaining and not self._cancel_event.is_set():
+                self.state = PipelineState.SYNTHESIZING
+                async for audio_chunk in self._tts_service.synthesize_streaming(remaining):
+                    if self._cancel_event.is_set():
+                        return
+                    self.state = PipelineState.SPEAKING
+                    yield audio_chunk
+            
+            # Log full response
+            logger.info(f"[LLM] Full: '{full_response}'")
+            
+            self.total_requests += 1
+            
+        finally:
+            self._is_generating = False
+            self.state = PipelineState.IDLE
+    
+    def cancel(self) -> None:
+        """Cancel ongoing generation (for barge-in)"""
+        if self._is_generating:
+            self._cancel_event.set()
+            logger.info("Generation cancelled (barge-in)")
+    
     def reset(self) -> None:
         """Reset pipeline state"""
+        # Cancel any ongoing generation
+        self.cancel()
         self.state = PipelineState.IDLE
         if self._vad:
             self._vad.reset()
@@ -676,7 +816,7 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                         # Process through VAD
                         speech_segments = pipeline._vad.process_audio(audio_bytes, pipeline_config.input_sample_rate)
                         
-                        # Process each speech segment
+                        # Process each speech segment with sentence-level streaming
                         for speech_audio in speech_segments:
                             # Send transcribing status
                             await ws.send_json({
@@ -684,8 +824,9 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                                 "state": "processing"
                             })
                             
-                            # Process through pipeline
-                            async for audio_chunk in pipeline.process_speech_segment(
+                            # Process through pipeline with sentence-level LLM→TTS streaming
+                            # This sends audio as soon as first sentence is generated
+                            async for audio_chunk in pipeline.process_speech_segment_streaming(
                                 speech_audio,
                                 pipeline_config.input_sample_rate
                             ):
@@ -714,7 +855,8 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                         
                         elif msg.get("type") == "cancel":
                             # Barge-in: User interrupted, cancel current response
-                            pipeline.reset()
+                            # Use cancel() instead of reset() to properly signal cancellation
+                            pipeline.cancel()
                             logger.info("Barge-in: Response cancelled by user")
                             await ws.send_json({"type": "status", "state": "cancelled"})
                         
