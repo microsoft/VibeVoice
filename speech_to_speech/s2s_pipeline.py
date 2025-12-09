@@ -228,6 +228,63 @@ def user_is_greeting(text: str) -> bool:
     return False
 
 
+def is_valid_transcript(text: str) -> bool:
+    """
+    Validate transcript to filter out false triggers.
+    Returns False for likely noise, echo, or meaningless transcripts.
+    """
+    if not text:
+        return False
+    
+    text = text.strip().lower()
+    
+    # Too short (likely noise)
+    if len(text) < 3:
+        return False
+    
+    # Common false triggers from echo/noise (TTS echo, background noise)
+    false_triggers = [
+        "thank you",
+        "thanks",
+        "okay",
+        "i'm eating",
+        "yeah",
+        "so yeah",
+        "hmm",
+        "um",
+        "uh",
+        "ah",
+        "oh",
+        "mm",
+        "mhm",
+        "uh huh",
+        "you're welcome",
+        "bye",
+        "goodbye",
+    ]
+    
+    # Check for exact matches (likely echo or filler)
+    if text.rstrip('.!?,') in false_triggers:
+        return False
+    
+    # Check for very short meaningless responses
+    word_count = len(text.split())
+    if word_count <= 2 and text.rstrip('.!?,') in false_triggers:
+        return False
+    
+    return True
+
+
+def calculate_audio_energy(audio_bytes: bytes) -> float:
+    """Calculate RMS energy of audio to detect silence/noise."""
+    import numpy as np
+    audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+    if len(audio) == 0:
+        return 0.0
+    rms = np.sqrt(np.mean(audio ** 2))
+    return rms
+
+
 @dataclass
 class PipelineMetrics:
     """Metrics for pipeline performance"""
@@ -274,6 +331,8 @@ class S2SPipeline:
         # Cancellation support for barge-in
         self._cancel_event = asyncio.Event()
         self._is_generating = False
+        self._is_speaking = False  # Track when TTS is playing (for echo suppression)
+        self._last_tts_end_time = 0  # Track when TTS finished (for echo delay)
         
         # Agent type for domain-specific responses
         self._agent_type = self.config.default_agent
@@ -450,6 +509,12 @@ class S2SPipeline:
                 continue
             
             logger.info(f"User: {transcription.text}")
+            
+            # Validate transcript - filter out false triggers (echo, noise, fillers)
+            if not is_valid_transcript(transcription.text):
+                logger.info(f"Skipping invalid transcript: '{transcription.text}'")
+                continue
+            
             self.state = PipelineState.GENERATING
             
             # Check if user greeted (to allow greeting in response)
@@ -536,6 +601,12 @@ class S2SPipeline:
                 return
             
             logger.info(f"[ASR] '{transcription.text}' ({asr_time:.0f}ms)")
+            
+            # Validate transcript - filter out false triggers (echo, noise, fillers)
+            if not is_valid_transcript(transcription.text):
+                logger.info(f"[ASR] Skipping invalid transcript: '{transcription.text}'")
+                self.state = PipelineState.IDLE
+                return
             
             # Check for cancellation after ASR
             if self._cancel_event.is_set():
@@ -636,6 +707,12 @@ class S2SPipeline:
             
             logger.info(f"[ASR] '{transcription.text}' ({asr_time:.0f}ms)")
             
+            # Validate transcript - filter out false triggers (echo, noise, fillers)
+            if not is_valid_transcript(transcription.text):
+                logger.info(f"[ASR] Skipping invalid transcript: '{transcription.text}'")
+                self.state = PipelineState.IDLE
+                return
+            
             # Check for cancellation
             if self._cancel_event.is_set():
                 logger.info("Cancelled after ASR")
@@ -727,9 +804,36 @@ class S2SPipeline:
     
     def cancel(self) -> None:
         """Cancel ongoing generation (for barge-in)"""
-        if self._is_generating:
+        if self._is_generating or self._is_speaking:
             self._cancel_event.set()
+            self._is_speaking = False
             logger.info("Generation cancelled (barge-in)")
+    
+    def start_speaking(self) -> None:
+        """Mark that TTS is now playing (for echo suppression)"""
+        self._is_speaking = True
+    
+    def stop_speaking(self) -> None:
+        """Mark that TTS has stopped playing"""
+        self._is_speaking = False
+        self._last_tts_end_time = time.time()
+    
+    def should_ignore_audio(self) -> bool:
+        """
+        Check if incoming audio should be ignored (echo suppression).
+        Returns True if TTS is playing or just finished (echo delay).
+        """
+        # Ignore audio while speaking
+        if self._is_speaking:
+            return True
+        
+        # Ignore audio for 500ms after TTS ends (echo tail)
+        echo_delay_ms = 500
+        time_since_tts = (time.time() - self._last_tts_end_time) * 1000
+        if time_since_tts < echo_delay_ms:
+            return True
+        
+        return False
     
     def reset(self) -> None:
         """Reset pipeline state"""
@@ -1118,6 +1222,9 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
             # Audio buffer for VAD
             audio_buffer = []
             
+            # Minimum audio energy threshold to filter noise
+            MIN_AUDIO_ENERGY = 500  # Adjust based on testing
+            
             while True:
                 try:
                     # Receive audio data
@@ -1127,27 +1234,52 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                         # Binary audio data
                         audio_bytes = data["bytes"]
                         
-                        # Convert to numpy
-                        audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+                        # Echo suppression: Skip audio if TTS is playing or just finished
+                        if pipeline.should_ignore_audio():
+                            # But check if this is a barge-in attempt (high energy speech)
+                            energy = calculate_audio_energy(audio_bytes)
+                            if energy > MIN_AUDIO_ENERGY * 3:  # Strong signal = barge-in
+                                logger.info(f"Barge-in detected during TTS (energy: {energy:.0f})")
+                                pipeline.cancel()
+                                await ws.send_json({"type": "status", "state": "cancelled"})
+                            continue  # Skip this audio chunk
+                        
+                        # Check audio energy - skip very low energy (silence/noise)
+                        energy = calculate_audio_energy(audio_bytes)
+                        if energy < MIN_AUDIO_ENERGY:
+                            continue  # Skip low energy audio
                         
                         # Process through VAD
                         speech_segments = pipeline._vad.process_audio(audio_bytes, pipeline_config.input_sample_rate)
                         
                         # Process each speech segment (with barge-in cancellation support)
                         for speech_audio in speech_segments:
+                            # Additional energy check on the speech segment
+                            segment_energy = calculate_audio_energy(speech_audio)
+                            if segment_energy < MIN_AUDIO_ENERGY:
+                                logger.debug(f"Skipping low-energy speech segment (energy: {segment_energy:.0f})")
+                                continue
+                            
                             # Send transcribing status
                             await ws.send_json({
                                 "type": "status",
                                 "state": "processing"
                             })
                             
-                            # Process through pipeline (with cancellation support)
-                            async for audio_chunk in pipeline.process_speech_segment(
-                                speech_audio,
-                                pipeline_config.input_sample_rate
-                            ):
-                                # Send audio chunk
-                                await ws.send_bytes(audio_chunk)
+                            # Mark that we're about to start speaking
+                            pipeline.start_speaking()
+                            
+                            try:
+                                # Process through pipeline (with cancellation support)
+                                async for audio_chunk in pipeline.process_speech_segment(
+                                    speech_audio,
+                                    pipeline_config.input_sample_rate
+                                ):
+                                    # Send audio chunk
+                                    await ws.send_bytes(audio_chunk)
+                            finally:
+                                # Mark that we've stopped speaking
+                                pipeline.stop_speaking()
                             
                             # Send metrics
                             await ws.send_json({
@@ -1214,8 +1346,12 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                             await ws.send_json({"type": "status", "state": "processing"})
                             
                             # Synthesize welcome message
-                            async for audio_chunk in pipeline._tts_service.synthesize_streaming(welcome_text):
-                                await ws.send_bytes(audio_chunk)
+                            pipeline.start_speaking()
+                            try:
+                                async for audio_chunk in pipeline._tts_service.synthesize_streaming(welcome_text):
+                                    await ws.send_bytes(audio_chunk)
+                            finally:
+                                pipeline.stop_speaking()
                             
                             # Add to conversation
                             await ws.send_json({
@@ -1245,19 +1381,23 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                                 # Synthesize
                                 tts_start = time.time()
                                 first_chunk = True
-                                async for audio_chunk in pipeline._tts_service.synthesize_streaming(response.text):
-                                    if first_chunk:
-                                        tts_first = (time.time() - tts_start) * 1000
-                                        await ws.send_json({
-                                            "type": "transcript",
-                                            "user": text,
-                                            "assistant": response.text,
-                                            "llm_ms": llm_time,
-                                            "tts_first_ms": tts_first
-                                        })
-                                        first_chunk = False
-                                    
-                                    await ws.send_bytes(audio_chunk)
+                                pipeline.start_speaking()
+                                try:
+                                    async for audio_chunk in pipeline._tts_service.synthesize_streaming(response.text):
+                                        if first_chunk:
+                                            tts_first = (time.time() - tts_start) * 1000
+                                            await ws.send_json({
+                                                "type": "transcript",
+                                                "user": text,
+                                                "assistant": response.text,
+                                                "llm_ms": llm_time,
+                                                "tts_first_ms": tts_first
+                                            })
+                                            first_chunk = False
+                                        
+                                        await ws.send_bytes(audio_chunk)
+                                finally:
+                                    pipeline.stop_speaking()
                                 
                                 await ws.send_json({"type": "status", "state": "ready"})
                 
