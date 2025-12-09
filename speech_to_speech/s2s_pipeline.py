@@ -23,6 +23,7 @@ from pathlib import Path
 from enum import Enum
 import threading
 from queue import Queue, Empty
+from contextlib import asynccontextmanager
 
 import numpy as np
 import torch
@@ -287,6 +288,8 @@ class S2SPipeline:
         """
         Process a complete speech segment (from VAD).
         
+        Supports barge-in cancellation during TTS streaming.
+        
         Args:
             speech_audio: Speech audio numpy array
             sample_rate: Audio sample rate
@@ -297,54 +300,77 @@ class S2SPipeline:
         if not self._initialized:
             await self.initialize()
         
+        # Reset cancellation state
+        self._cancel_event.clear()
+        self._is_generating = True
+        
         pipeline_start = time.time()
         
-        # ASR
-        self.state = PipelineState.TRANSCRIBING
-        asr_start = time.time()
-        transcription = self._asr.transcribe_segment(speech_audio, sample_rate)
-        asr_time = (time.time() - asr_start) * 1000
-        
-        if not transcription.text.strip():
-            self.state = PipelineState.IDLE
-            return
-        
-        logger.info(f"[ASR] '{transcription.text}' ({asr_time:.0f}ms)")
-        
-        # LLM
-        self.state = PipelineState.GENERATING
-        llm_start = time.time()
-        llm_response = self._llm.respond(transcription.text)
-        llm_time = (time.time() - llm_start) * 1000
-        
-        logger.info(f"[LLM] '{llm_response.text}' ({llm_time:.0f}ms)")
-        
-        # TTS
-        self.state = PipelineState.SYNTHESIZING
-        tts_start = time.time()
-        first_chunk = True
-        
-        async for audio_chunk in self._tts_service.synthesize_streaming(llm_response.text):
-            if first_chunk:
-                tts_first = (time.time() - tts_start) * 1000
-                total = (time.time() - pipeline_start) * 1000
-                
-                self.last_metrics = PipelineMetrics(
-                    asr_latency_ms=asr_time,
-                    llm_latency_ms=llm_time,
-                    tts_first_chunk_ms=tts_first,
-                    total_latency_ms=total,
-                    tokens_generated=llm_response.tokens_generated
-                )
-                
-                logger.info(f"[E2E] {total:.0f}ms (ASR:{asr_time:.0f} LLM:{llm_time:.0f} TTS:{tts_first:.0f})")
-                first_chunk = False
+        try:
+            # ASR
+            self.state = PipelineState.TRANSCRIBING
+            asr_start = time.time()
+            transcription = self._asr.transcribe_segment(speech_audio, sample_rate)
+            asr_time = (time.time() - asr_start) * 1000
             
-            self.state = PipelineState.SPEAKING
-            yield audio_chunk
+            if not transcription.text.strip():
+                self.state = PipelineState.IDLE
+                return
+            
+            logger.info(f"[ASR] '{transcription.text}' ({asr_time:.0f}ms)")
+            
+            # Check for cancellation after ASR
+            if self._cancel_event.is_set():
+                logger.info("Cancelled after ASR")
+                return
+            
+            # LLM
+            self.state = PipelineState.GENERATING
+            llm_start = time.time()
+            llm_response = self._llm.respond(transcription.text)
+            llm_time = (time.time() - llm_start) * 1000
+            
+            logger.info(f"[LLM] '{llm_response.text}' ({llm_time:.0f}ms)")
+            
+            # Check for cancellation after LLM
+            if self._cancel_event.is_set():
+                logger.info("Cancelled after LLM")
+                return
+            
+            # TTS
+            self.state = PipelineState.SYNTHESIZING
+            tts_start = time.time()
+            first_chunk = True
+            
+            async for audio_chunk in self._tts_service.synthesize_streaming(llm_response.text):
+                # Check for cancellation during TTS streaming
+                if self._cancel_event.is_set():
+                    logger.info("Cancelled during TTS")
+                    return
+                
+                if first_chunk:
+                    tts_first = (time.time() - tts_start) * 1000
+                    total = (time.time() - pipeline_start) * 1000
+                    
+                    self.last_metrics = PipelineMetrics(
+                        asr_latency_ms=asr_time,
+                        llm_latency_ms=llm_time,
+                        tts_first_chunk_ms=tts_first,
+                        total_latency_ms=total,
+                        tokens_generated=llm_response.tokens_generated
+                    )
+                    
+                    logger.info(f"[E2E] {total:.0f}ms (ASR:{asr_time:.0f} LLM:{llm_time:.0f} TTS:{tts_first:.0f})")
+                    first_chunk = False
+                
+                self.state = PipelineState.SPEAKING
+                yield audio_chunk
+            
+            self.total_requests += 1
         
-        self.total_requests += 1
-        self.state = PipelineState.IDLE
+        finally:
+            self._is_generating = False
+            self.state = PipelineState.IDLE
     
     async def process_speech_segment_streaming(
         self,
@@ -718,10 +744,25 @@ class TTSClient:
 def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
     """Create FastAPI application"""
     
+    # Pipeline instance (created before lifespan)
+    pipeline_config = config or PipelineConfig()
+    pipeline = S2SPipeline(pipeline_config)
+    
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Lifespan context manager for startup/shutdown"""
+        logger.info("Starting S2S Pipeline server...")
+        await pipeline.initialize()
+        logger.info(f"Server ready on port {pipeline_config.port}")
+        yield
+        # Cleanup on shutdown
+        logger.info("Shutting down S2S Pipeline...")
+    
     app = FastAPI(
         title="VibeVoice Speech-to-Speech",
         description="Real-time Speech-to-Speech with <800ms latency",
-        version="1.0.0"
+        version="1.0.0",
+        lifespan=lifespan
     )
     
     # CORS
@@ -733,17 +774,9 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Pipeline instance
-    pipeline_config = config or PipelineConfig()
-    pipeline = S2SPipeline(pipeline_config)
+    # Store in app state
     app.state.pipeline = pipeline
     app.state.config = pipeline_config
-    
-    @app.on_event("startup")
-    async def startup():
-        logger.info("Starting S2S Pipeline server...")
-        await pipeline.initialize()
-        logger.info(f"Server ready on port {pipeline_config.port}")
     
     @app.get("/")
     async def index():
@@ -816,7 +849,7 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                         # Process through VAD
                         speech_segments = pipeline._vad.process_audio(audio_bytes, pipeline_config.input_sample_rate)
                         
-                        # Process each speech segment with sentence-level streaming
+                        # Process each speech segment (with barge-in cancellation support)
                         for speech_audio in speech_segments:
                             # Send transcribing status
                             await ws.send_json({
@@ -824,9 +857,8 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                                 "state": "processing"
                             })
                             
-                            # Process through pipeline with sentence-level LLM→TTS streaming
-                            # This sends audio as soon as first sentence is generated
-                            async for audio_chunk in pipeline.process_speech_segment_streaming(
+                            # Process through pipeline (with cancellation support)
+                            async for audio_chunk in pipeline.process_speech_segment(
                                 speech_audio,
                                 pipeline_config.input_sample_rate
                             ):
