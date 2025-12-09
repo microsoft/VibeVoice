@@ -26,8 +26,6 @@ logger = logging.get_logger(__name__)
 if not hasattr(modeling_utils, "ALL_PARALLEL_STYLES") or modeling_utils.ALL_PARALLEL_STYLES is None:
     modeling_utils.ALL_PARALLEL_STYLES = ["tp", "none", "colwise", "rowwise"]
 
-TTS_TEXT_WINDOW_SIZE = 5
-TTS_SPEECH_WINDOW_SIZE = 6
 
 
 def _update_model_kwargs_for_generation(
@@ -489,7 +487,7 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
         audio_chunks = [[] for _ in range(batch_size)]
         tts_text_window_index = 0
         reach_max_step_sample = torch.zeros(batch_size, dtype=torch.bool, device=device)
-        first_text_window_size = TTS_TEXT_WINDOW_SIZE if tts_text_ids.shape[1] >= TTS_TEXT_WINDOW_SIZE else tts_text_ids.shape[1]
+        first_text_window_size = self.config.tts_text_window_size if tts_text_ids.shape[1] >= self.config.tts_text_window_size else tts_text_ids.shape[1]
 
         outputs = all_prefilled_outputs["lm"]
         tts_lm_outputs = all_prefilled_outputs["tts_lm"]
@@ -544,8 +542,8 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
                     progress_bar.set_description("Generation complete")
                 break
 
-            cur_input_tts_text_ids = tts_text_ids[:, tts_text_window_index*TTS_TEXT_WINDOW_SIZE:(tts_text_window_index+1)*TTS_TEXT_WINDOW_SIZE]
-            next_text_window_size = tts_text_ids[:, (tts_text_window_index+1)*TTS_TEXT_WINDOW_SIZE:(tts_text_window_index+2)*TTS_TEXT_WINDOW_SIZE].shape[1]
+            cur_input_tts_text_ids = tts_text_ids[:, tts_text_window_index*self.config.tts_text_window_size:(tts_text_window_index+1)*self.config.tts_text_window_size]
+            next_text_window_size = tts_text_ids[:, (tts_text_window_index+1)*self.config.tts_text_window_size:(tts_text_window_index+2)*self.config.tts_text_window_size].shape[1]
             tts_text_window_index += 1
 
             if cur_input_tts_text_ids.shape[1] > 0:
@@ -589,7 +587,7 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
                 )
 
             diffusion_indices = torch.LongTensor([0])
-            for cur_speech_index in range(TTS_SPEECH_WINDOW_SIZE):
+            for cur_speech_index in range(self.config.tts_speech_window_size):
                 positive_condition = tts_lm_outputs.last_hidden_state[diffusion_indices, -1, :]
                 negative_condition = tts_lm_negative_outputs.last_hidden_state[diffusion_indices, -1, :]
                 
@@ -642,7 +640,7 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
                 tts_lm_outputs = self.forward_tts_lm(
                     **tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True, output_attentions=False, output_hidden_states=False,
                 )
-                if cur_speech_index == TTS_SPEECH_WINDOW_SIZE - 1 and next_text_window_size > 0:
+                if cur_speech_index == self.config.tts_speech_window_size - 1 and next_text_window_size > 0:
                     tts_lm_model_kwargs = _update_model_kwargs_for_generation(
                         tts_lm_outputs, tts_lm_model_kwargs, num_new_tokens=next_text_window_size,
                     )

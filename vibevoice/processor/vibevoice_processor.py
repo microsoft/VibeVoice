@@ -227,8 +227,9 @@ class VibeVoiceProcessor:
         
         # Process each input
         all_encodings = []
+        strict = kwargs.get("strict", False)
         for text_input, voice_input in zip(texts, voice_samples_list):
-            encoding = self._process_single(text_input, voice_input)
+            encoding = self._process_single(text_input, voice_input, strict=strict)
             all_encodings.append(encoding)
             
         # Combine batch
@@ -247,6 +248,7 @@ class VibeVoiceProcessor:
         self,
         text: Union[str, TextInput],
         voice_samples: Optional[List[Union[str, np.ndarray]]] = None,
+        strict: bool = False,
     ) -> Dict[str, Any]:
         """Process a single podcast script."""
         # Determine if text is a file path or direct script
@@ -254,7 +256,7 @@ class VibeVoiceProcessor:
         if isinstance(text, str):
             # Check if it's a file path
             if text.endswith('.json') and os.path.exists(text):
-                script = self._convert_json_to_script(text)
+                script = self._convert_json_to_script(text, strict=strict)
             elif text.endswith('.txt') and os.path.exists(text):
                 script = self._convert_text_to_script(text)
             else:
@@ -508,7 +510,7 @@ class VibeVoiceProcessor:
             
         return result
         
-    def _convert_json_to_script(self, json_file: str) -> str:
+    def _convert_json_to_script(self, json_file: str, strict: bool = False) -> str:
         """
         Convert JSON format to script format.
         Expected JSON format:
@@ -535,6 +537,8 @@ class VibeVoiceProcessor:
             text = item.get('text')
             
             if speaker is None or text is None:
+                if strict:
+                    raise ValueError(f"Entry missing speaker or text: {item}")
                 logger.warning(f"Skipping entry missing speaker or text: {item}")
                 continue
             
@@ -542,6 +546,8 @@ class VibeVoiceProcessor:
             try:
                 speaker_id = int(speaker)
             except (ValueError, TypeError):
+                if strict:
+                    raise ValueError(f"Invalid speaker ID: {speaker}")
                 logger.warning(f"Invalid speaker ID: {speaker}, skipping entry")
                 continue
             
@@ -643,14 +649,26 @@ class VibeVoiceProcessor:
             
         return merged
 
-    def batch_decode(self, *args, **kwargs):
+    def batch_decode(
+        self,
+        sequences: Union[List[int], List[List[int]], "torch.Tensor", "np.ndarray"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        **kwargs
+    ) -> List[str]:
         """
         This method forwards all its arguments to VibeVoiceTextTokenizer's [`~PreTrainedTokenizer.batch_decode`].
         Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    def decode(self, *args, **kwargs):
+    def decode(
+        self,
+        token_ids: Union[int, List[int], "torch.Tensor", "np.ndarray"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        **kwargs
+    ) -> str:
         """
         This method forwards all its arguments to VibeVoiceTextTokenizer's [`~PreTrainedTokenizer.decode`].
         Please refer to the docstring of this method for more information.

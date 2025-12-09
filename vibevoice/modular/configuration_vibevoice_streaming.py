@@ -77,6 +77,8 @@ class VibeVoiceStreamingConfig(PretrainedConfig):
         self.acoustic_vae_dim = getattr(self.acoustic_tokenizer_config, 'vae_dim', 64)
         # The decoder of the model is divided into two components. The lower Transformer layers are only used for encoding text, while the upper Transformer layers are used for encoding text and generating speech. `tts_backbone_num_hidden_layers` indicates the number of upper layers used for TTS.
         self.tts_backbone_num_hidden_layers = tts_backbone_num_hidden_layers
+        self.tts_text_window_size = kwargs.get("tts_text_window_size", 5)
+        self.tts_speech_window_size = kwargs.get("tts_speech_window_size", 6)
 
         super().__init__(**kwargs)
 
