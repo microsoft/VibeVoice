@@ -53,40 +53,68 @@ class PipelineState(Enum):
     SPEAKING = "speaking"
 
 
-# Domain-specific system prompts
+# Domain-specific system prompts - designed for natural voice conversation
 SYSTEM_PROMPTS = {
-    "medical": """You are VEMI AI Medical Assistant, a knowledgeable healthcare assistant developed by Alvion Global Solutions.
+    "medical": """You are VEMI AI Medical Assistant, a friendly and knowledgeable healthcare assistant created by Alvion Global Solutions.
 
-Your role is to provide accurate, evidence-based medical information, help users understand symptoms and treatments, and offer general health guidance.
+CRITICAL RULES:
+- Your name is VEMI AI Medical Assistant - NEVER call yourself "Chat Doctor", "ChatDoctor", or any other name
+- NEVER start responses with "Hi welcome to Chat Doctor" or similar - you are VEMI AI
+- Keep responses SHORT (1-3 sentences) - this is a voice conversation, not a text chat
+- Be conversational and natural, like talking to a helpful friend who knows medicine
+- Do NOT greet unless the user greets you first
+- Answer the user's ACTUAL question directly - don't give generic medical advice
 
-Guidelines:
-- Do NOT greet the user (like "Hello" or "How can I help you?") unless they greet you first
-- Be concise and direct in your responses
-- Always recommend consulting a healthcare professional for serious symptoms
-- You cannot diagnose or prescribe - only provide educational information
-- For emergencies, immediately advise calling emergency services
+RESPONSE STYLE:
+- Speak naturally as in a real conversation
+- Use simple, clear language
+- If asked your name, say "I'm VEMI AI Medical Assistant"
+- For serious symptoms, briefly recommend seeing a doctor
+- Be warm and empathetic but concise
 
-Prioritize user safety and provide empathetic, clear responses.""",
+NEVER DO:
+- Never say "Chat Doctor", "ChatDoctor Forum", or reference any chat service
+- Never give long paragraphs of text
+- Never list multiple unrelated conditions
+- Never ignore what the user actually said""",
 
-    "automobile": """You are VEMI AI Automobile Assistant, an expert automotive technician developed by Alvion Global Solutions.
+    "automobile": """You are VEMI AI Automobile Assistant, a friendly automotive expert created by Alvion Global Solutions.
 
-Your role is to provide accurate car repair advice, diagnose vehicle problems, explain OBD-II codes, guide maintenance tasks, and offer troubleshooting help.
+CRITICAL RULES:
+- Your name is VEMI AI Automobile Assistant - always identify as VEMI AI
+- Keep responses SHORT (1-3 sentences) - this is a voice conversation
+- Be conversational and natural, like talking to a knowledgeable mechanic friend
+- Do NOT greet unless the user greets you first
+- Answer the user's ACTUAL question directly
 
-Guidelines:
-- Do NOT greet the user (like "Hello" or "How can I help you?") unless they greet you first
-- Be concise and direct - get straight to the answer
-- Prioritize safety - recommend professional help for dangerous repairs
-- Warn about hazards like hot components, high voltage in EVs, or working under vehicles
-- Use common terminology and provide step-by-step instructions when needed
+RESPONSE STYLE:
+- Speak naturally as in a real conversation
+- Use common car terminology, not overly technical jargon
+- Give practical, actionable advice
+- If asked your name, say "I'm VEMI AI Automobile Assistant"
+- For dangerous repairs, briefly recommend a professional
 
-Provide practical, actionable advice.""",
+NEVER DO:
+- Never give long paragraphs of generic advice
+- Never ignore what the user actually asked
+- Never list unrelated car problems""",
 
-    "general": """You are VEMI AI, a helpful voice assistant developed by Alvion Global Solutions.
+    "general": """You are VEMI AI, a friendly voice assistant created by Alvion Global Solutions.
 
-Guidelines:
-- Do NOT greet the user unless they greet you first
-- Be concise, direct, and helpful
-- Provide accurate information in a conversational manner"""
+CRITICAL RULES:
+- Your name is VEMI AI - always identify yourself as VEMI AI
+- Keep responses SHORT (1-3 sentences) - this is a voice conversation
+- Be conversational and natural
+- Do NOT greet unless the user greets you first
+
+RESPONSE STYLE:
+- Speak naturally like a helpful friend
+- Be concise and direct
+- If asked your name, say "I'm VEMI AI, your voice assistant"
+
+NEVER DO:
+- Never give long paragraphs
+- Never ignore the user's actual question"""
 }
 
 
@@ -113,8 +141,9 @@ class PipelineConfig:
     min_silence_ms: int = 300
     
     # LLM settings
-    max_llm_tokens: int = 150  # Increased for detailed domain answers
+    max_llm_tokens: int = 64  # Keep short for conversational voice responses
     llm_temperature: float = 0.7
+    use_finetuned_model: bool = False  # Set to False - fine-tuned model has ChatDoctor patterns
     
     # TTS settings
     tts_voice: str = "en-Carter_man"
@@ -127,6 +156,43 @@ class PipelineConfig:
     
     # Agent settings
     default_agent: str = "general"
+
+
+def clean_llm_response(text: str) -> str:
+    """
+    Clean LLM response to remove unwanted patterns from fine-tuned model.
+    Removes ChatDoctor references and other artifacts.
+    """
+    import re
+    
+    # Patterns to remove (case-insensitive)
+    patterns_to_remove = [
+        r"(?i)hi\s*,?\s*welcome\s+to\s+chat\s*doctor[^\n]*",
+        r"(?i)thanks?\s+for\s+(calling|contacting|asking)\s+chat\s*doctor[^\n]*",
+        r"(?i)chat\s*doctor\s*(forum|\.com|service)?\.?",
+        r"(?i)best\s+regards[^\n]*chat\s*doctor[^\n]*",
+        r"(?i)wishing\s+for\s+a\s+quick[^\n]*",
+        r"(?i)hope\s+this\s+(may\s+)?answer[^\n]*",
+        r"(?i)let\s+me\s+know\s+if\s+anything[^\n]*",
+        r"(?i)take\s*care\.?\s*chat\s*doctor[^\n]*",
+        r"(?i)regards\s*,?\s*chat\s*doctor[^\n]*",
+    ]
+    
+    for pattern in patterns_to_remove:
+        text = re.sub(pattern, "", text)
+    
+    # Clean up multiple spaces and newlines
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Remove trailing incomplete sentences
+    if text and text[-1] not in '.!?':
+        # Find last complete sentence
+        for i in range(len(text) - 1, -1, -1):
+            if text[i] in '.!?':
+                text = text[:i + 1]
+                break
+    
+    return text.strip()
 
 
 @dataclass
@@ -231,37 +297,33 @@ class S2SPipeline:
         self._asr = StreamingASR(asr_config)
         self._asr.initialize()
         
-        # Initialize LLM - check for fine-tuned models first
+        # Initialize LLM
         logger.info("Loading LLM...")
         from .llm_module import StreamingLLM, LLMConfig
         
-        # Check for local fine-tuned models
-        import os
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        local_models = {
-            "medical": os.path.join(script_dir, "models", "medical_llm"),
-            "automobile": os.path.join(script_dir, "models", "automobile_llm"),
-        }
-        
         # Determine which model to load
-        llm_model_path = self.config.llm_model  # Default: HuggingFace model
+        llm_model_path = self.config.llm_model  # Default: HuggingFace base model
         
-        # Check if we have a fine-tuned model for the default agent
-        if self._agent_type in local_models:
-            local_path = local_models[self._agent_type]
-            if os.path.exists(local_path) and os.path.isdir(local_path):
-                # Verify it has model files
-                if any(f.endswith(('.safetensors', '.bin')) for f in os.listdir(local_path)):
-                    llm_model_path = local_path
-                    logger.info(f"Using fine-tuned {self._agent_type} model: {local_path}")
-        
-        # Fallback: check if medical model exists (largest training data)
-        if llm_model_path == self.config.llm_model:
-            medical_path = local_models["medical"]
-            if os.path.exists(medical_path) and os.path.isdir(medical_path):
-                if any(f.endswith(('.safetensors', '.bin')) for f in os.listdir(medical_path)):
-                    llm_model_path = medical_path
-                    logger.info(f"Using fine-tuned medical model as base: {medical_path}")
+        # Only use fine-tuned models if explicitly enabled
+        # Note: Fine-tuned models may have learned patterns from training data (e.g., ChatDoctor)
+        # that override system prompts. Use base model with strong prompts for better control.
+        if self.config.use_finetuned_model:
+            import os
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            local_models = {
+                "medical": os.path.join(script_dir, "models", "medical_llm"),
+                "automobile": os.path.join(script_dir, "models", "automobile_llm"),
+            }
+            
+            # Check if we have a fine-tuned model for the current agent
+            if self._agent_type in local_models:
+                local_path = local_models[self._agent_type]
+                if os.path.exists(local_path) and os.path.isdir(local_path):
+                    if any(f.endswith(('.safetensors', '.bin')) for f in os.listdir(local_path)):
+                        llm_model_path = local_path
+                        logger.info(f"Using fine-tuned {self._agent_type} model: {local_path}")
+        else:
+            logger.info(f"Using base model (fine-tuned models disabled): {llm_model_path}")
         
         llm_config = LLMConfig(
             model_name=llm_model_path,
@@ -362,6 +424,10 @@ class S2SPipeline:
             llm_response = self._llm.respond(transcription.text)
             llm_time = (time.time() - llm_start) * 1000
             
+            # Clean response to remove any ChatDoctor patterns
+            cleaned_response = clean_llm_response(llm_response.text)
+            llm_response.text = cleaned_response
+            
             logger.info(f"Assistant: {llm_response.text}")
             self.state = PipelineState.SYNTHESIZING
             
@@ -445,6 +511,9 @@ class S2SPipeline:
             llm_start = time.time()
             llm_response = self._llm.respond(transcription.text)
             llm_time = (time.time() - llm_start) * 1000
+            
+            # Clean response to remove any ChatDoctor patterns
+            llm_response.text = clean_llm_response(llm_response.text)
             
             logger.info(f"[LLM] '{llm_response.text}' ({llm_time:.0f}ms)")
             
@@ -557,6 +626,8 @@ class S2SPipeline:
                 # Check for sentence boundary
                 if any(sentence_buffer.rstrip().endswith(d) for d in sentence_delimiters):
                     sentence = sentence_buffer.strip()
+                    # Clean the sentence to remove ChatDoctor patterns
+                    sentence = clean_llm_response(sentence)
                     if sentence:
                         # Log first sentence timing
                         if first_audio_chunk:
@@ -594,6 +665,7 @@ class S2SPipeline:
             
             # Process any remaining text in buffer
             remaining = sentence_buffer.strip()
+            remaining = clean_llm_response(remaining)  # Clean remaining text
             if remaining and not self._cancel_event.is_set():
                 self.state = PipelineState.SYNTHESIZING
                 async for audio_chunk in self._tts_service.synthesize_streaming(remaining):
@@ -1121,6 +1193,9 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                                 llm_start = time.time()
                                 response = pipeline._llm.respond(text)
                                 llm_time = (time.time() - llm_start) * 1000
+                                
+                                # Clean response to remove any ChatDoctor patterns
+                                response.text = clean_llm_response(response.text)
                                 
                                 # Synthesize
                                 tts_start = time.time()
