@@ -6,7 +6,8 @@ from typing import List, Tuple, Union, Dict, Any
 import time
 import torch
 import copy
-
+from vibevoice.utils.vram_utils import get_available_vram_gb, print_vram_info
+from vibevoice.utils.quantization import get_quantization_config, apply_selective_quantization
 from vibevoice.modular.modeling_vibevoice_streaming_inference import VibeVoiceStreamingForConditionalGenerationInference
 from vibevoice.processor.vibevoice_streaming_processor import VibeVoiceStreamingProcessor
 from transformers.utils import logging
@@ -129,6 +130,13 @@ def parse_args():
         default=1.5,
         help="CFG (Classifier-Free Guidance) scale for generation (default: 1.5)",
     )
+    parser.add_argument(
+        "--quantization",
+        type=str,
+        default="fp16",
+        choices=["fp16", "8bit", "4bit"],
+        help="Quantization level: fp16 (default, ~20GB), 8bit (~12GB), or 4bit (~7GB)"
+    )
     
     return parser.parse_args()
 
@@ -146,6 +154,14 @@ def main():
         args.device = "cpu"
 
     print(f"Using device: {args.device}")
+    
+    # VRAM Detection and Quantization Info (NEW)
+    if args.device == "cuda":
+        available_vram = get_available_vram_gb()
+        print_vram_info(available_vram, args.model_path, args.quantization)
+    elif args.quantization != "fp16":
+        print(f"Warning: Quantization ({args.quantization}) only works with CUDA. Using full precision.")
+        args.quantization = "fp16"
 
     # Initialize voice mapper
     voice_mapper = VoiceMapper()
@@ -164,7 +180,7 @@ def main():
         print("Error: No valid scripts found in the txt file")
         return
 
-    full_script = scripts.replace("’", "'").replace('“', '"').replace('”', '"')
+    full_script = scripts.replace("'", "'").replace('"', '"').replace('"', '"')
 
     print(f"Loading processor & model from {args.model_path}")
     processor = VibeVoiceStreamingProcessor.from_pretrained(args.model_path)
@@ -180,6 +196,15 @@ def main():
         load_dtype = torch.float32
         attn_impl_primary = "sdpa"
     print(f"Using device: {args.device}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
+    
+    # Get quantization configuration (NEW)
+    quant_config = get_quantization_config(args.quantization)
+    
+    if quant_config:
+        print(f"Using {args.quantization} quantization...")
+    else:
+        print("Using full precision (fp16)...")
+    
     # Load model with device-specific logic
     try:
         if args.device == "mps":
@@ -191,12 +216,25 @@ def main():
             )
             model.to("mps")
         elif args.device == "cuda":
+            # MODIFIED SECTION - Add quantization support
+            model_kwargs = {
+                "torch_dtype": load_dtype,
+                "device_map": "cuda",
+                "attn_implementation": attn_impl_primary,
+            }
+            
+            # Add quantization config if specified
+            if quant_config:
+                model_kwargs.update(quant_config)
+            
             model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
                 args.model_path,
-                torch_dtype=load_dtype,
-                device_map="cuda",
-                attn_implementation=attn_impl_primary,
+                **model_kwargs
             )
+            
+            # Apply selective quantization if needed (NEW)
+            if args.quantization in ["8bit", "4bit"]:
+                model = apply_selective_quantization(model, args.quantization)
         else:  # cpu
             model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
                 args.model_path,
