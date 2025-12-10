@@ -22,7 +22,7 @@ def get_available_vram_gb() -> float:
         # Get total and allocated memory
         total = torch.cuda.get_device_properties(device).total_memory
         allocated = torch.cuda.memory_allocated(device)
-        available = (total - allocated) / (1024 ** 3)  # Convert to GB
+        available = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # Convert to GB
         return available
     except Exception as e:
         logger.warning(f"Could not detect VRAM: {e}")
