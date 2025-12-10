@@ -180,7 +180,7 @@ def main():
         print("Error: No valid scripts found in the txt file")
         return
 
-    full_script = scripts.replace("'", "'").replace('"', '"').replace('"', '"')
+    full_script = scripts.replace("’", "'").replace('“', '"').replace('”', '"')
 
     print(f"Loading processor & model from {args.model_path}")
     processor = VibeVoiceStreamingProcessor.from_pretrained(args.model_path)
