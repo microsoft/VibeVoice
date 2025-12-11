@@ -143,6 +143,9 @@ instalar_python() {
     
     deactivate
     
+    # Validar y autocorregir punto ASGI
+    validar_asgi_entrypoint
+    
     # Verificar instalación
     registrar_info "Verificando instalación de Python..."
     python3 --version
@@ -160,6 +163,63 @@ instalar_python() {
     echo ""
     
     registrar_fin_modulo "Instalación de Python"
+    return 0
+}
+
+# ============================================================================
+# FUNCIÓN: validar_asgi_entrypoint
+# Propósito: Validar y autocorregir el punto de entrada ASGI
+# ============================================================================
+validar_asgi_entrypoint() {
+    registrar_info "Validando punto de entrada ASGI..."
+    
+    # Candidatos comunes para el entrypoint ASGI
+    local candidatos=(
+        "demo.web.app:app"
+        "app.main:app"
+        "main:app"
+        "app:app"
+        "vibevoice.app:app"
+    )
+    
+    # Punto configurado (si existe)
+    local asgi_app="${VIBE_UVICORN_APP:-demo.web.app:app}"
+    
+    # Activar entorno virtual para la prueba
+    source "${VIBE_VENV_DIR}/bin/activate"
+    
+    # Probar el punto configurado
+    registrar_info "Probando punto ASGI: ${asgi_app}"
+    if python3 -c "import sys; mod, obj = '${asgi_app}'.split(':'); __import__(mod.replace('.', '/')); getattr(sys.modules[mod], obj)" 2>/dev/null; then
+        registrar_exito "Punto ASGI válido: ${asgi_app}"
+        export VIBE_UVICORN_APP="${asgi_app}"
+        deactivate
+        return 0
+    fi
+    
+    # Si falla, probar candidatos comunes
+    registrar_advertencia "El punto ASGI configurado '${asgi_app}' no es válido. Probando alternativas..."
+    
+    for candidato in "${candidatos[@]}"; do
+        registrar_debug "Probando: ${candidato}"
+        if python3 -c "import sys; mod, obj = '${candidato}'.split(':'); __import__(mod); getattr(sys.modules[mod], obj)" 2>/dev/null; then
+            registrar_exito "Punto ASGI encontrado y configurado: ${candidato}"
+            export VIBE_UVICORN_APP="${candidato}"
+            registrar_auditoria "Auto-corregido VIBE_UVICORN_APP a: ${candidato}"
+            deactivate
+            return 0
+        fi
+    done
+    
+    # Si no se encuentra ninguno válido
+    deactivate
+    registrar_advertencia "No se pudo detectar automáticamente un punto ASGI válido."
+    registrar_advertencia "Ajusta manualmente VIBE_UVICORN_APP en configuracion/stack-vibe.conf"
+    registrar_advertencia "Formato: 'modulo.submodulo:objeto_app' (ej: 'demo.web.app:app')"
+    
+    # No es fatal, continuar con el valor por defecto
+    export VIBE_UVICORN_APP="demo.web.app:app"
+    registrar_info "Usando punto ASGI por defecto: ${VIBE_UVICORN_APP}"
     return 0
 }
 
