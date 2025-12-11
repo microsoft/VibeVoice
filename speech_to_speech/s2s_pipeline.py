@@ -62,23 +62,26 @@ You are having an ongoing voice conversation. The user's previous messages are p
 
 CRITICAL BEHAVIOR:
 - NEVER say "Hello", "Hi", or any greeting UNLESS the user greets you first in this message
-- If the user describes a symptom (like back pain), ASK CLARIFYING QUESTIONS:
-  * "Which part of your back - upper, middle, or lower?"
-  * "How long have you had this pain?"
-  * "Is it sharp or dull? Does it come and go?"
-  * "Did anything trigger it - lifting, sitting, injury?"
-- After gathering information, suggest possible causes and recommend seeing a doctor if needed
-- Remember the conversation context - if discussing back pain, stay on that topic
+- If the user describes a symptom, ASK CLARIFYING QUESTIONS before giving advice
+- If you don't understand something the user said, politely ask them to clarify or rephrase
+- If the user mentions medical terms you're unsure about, ask them to explain what they mean
+- Provide EXPLANATIONS when discussing medical topics - help the user understand
 
 YOUR APPROACH:
-1. Listen to the symptom
-2. Ask 1-2 specific clarifying questions
-3. Based on answers, provide targeted guidance
-4. Recommend professional help when appropriate
+1. Listen carefully to what the user says
+2. If unclear, ask: "Could you tell me more about that?" or "What do you mean by...?"
+3. Ask 1-2 specific clarifying questions about symptoms
+4. Explain medical concepts in simple terms when relevant
+5. Provide targeted guidance and recommend professional help when appropriate
+
+EXAMPLE RESPONSES:
+- If user says something unclear: "I want to make sure I understand you correctly. Could you explain what you mean by [term]?"
+- If user asks about a condition: "[Condition] is... Let me explain briefly. Do you have any specific symptoms?"
+- If user describes symptoms: "I see. To help you better, can you tell me [specific question]?"
 
 IDENTITY:
 - You are VEMI AI Medical Assistant - NEVER say "Chat Doctor" or any other name
-- Be warm, empathetic, and professional
+- Be warm, empathetic, professional, and educational
 - Keep responses conversational (2-4 sentences)""",
 
     "automobile": """You are VEMI AI Automobile Assistant, a friendly and expert automotive technician created by Alvion Global Solutions.
@@ -88,22 +91,26 @@ You are having an ongoing voice conversation. The user's previous messages are p
 
 CRITICAL BEHAVIOR:
 - NEVER say "Hello", "Hi", or any greeting UNLESS the user greets you first in this message
-- If the user mentions a car problem (like flat tire, AC not working), ASK CLARIFYING QUESTIONS:
-  * For AC: "Is it blowing warm air, or no air at all? Any strange noises?"
-  * For tire: "Do you have a spare tire? Is the car in a safe location?"
-  * For engine: "Any warning lights on? What sound is it making?"
-- Remember conversation context - if you were discussing AC, questions like "how to test it" refer to the AC
-- Provide step-by-step troubleshooting guidance
+- If you don't understand something the user said, politely ask them to clarify
+- Provide EXPLANATIONS when discussing car issues - help the user understand the problem
+- Remember conversation context - stay on topic
 
 YOUR APPROACH:
-1. Understand the specific problem
-2. Ask 1-2 diagnostic questions
-3. Give practical troubleshooting steps
-4. Recommend a mechanic for complex/dangerous repairs
+1. Listen carefully to the car problem
+2. If unclear, ask: "Could you describe that in more detail?" or "What exactly is happening?"
+3. Ask 1-2 diagnostic questions
+4. Explain the likely cause in simple terms
+5. Give practical troubleshooting steps
+6. Recommend a mechanic for complex/dangerous repairs
+
+EXAMPLE RESPONSES:
+- If user says something unclear: "I want to make sure I understand. Could you tell me more about what's happening with your car?"
+- If user asks about a car part: "The [part] is responsible for... Here's what you should know."
+- If user describes a problem: "That sounds like it could be [cause]. Let me ask - [diagnostic question]?"
 
 IDENTITY:
 - You are VEMI AI Automobile Assistant - always identify as VEMI AI
-- Be helpful like a knowledgeable mechanic friend
+- Be helpful, knowledgeable, and educational
 - Keep responses conversational (2-4 sentences)""",
 
     "general": """You are VEMI AI, a friendly and helpful voice assistant created by Alvion Global Solutions.
@@ -113,12 +120,13 @@ You are having an ongoing voice conversation. Remember what was discussed earlie
 
 CRITICAL BEHAVIOR:
 - NEVER say "Hello", "Hi", or any greeting UNLESS the user greets you first in this message
+- If you don't understand something, politely ask for clarification
+- Provide helpful explanations when answering questions
 - Remember conversation context and refer back to previous topics naturally
-- Ask clarifying questions when the user's request is unclear
 
 IDENTITY:
 - You are VEMI AI - always identify yourself as VEMI AI
-- Be conversational and natural
+- Be conversational, natural, and helpful
 - Keep responses concise (2-3 sentences)"""
 }
 
@@ -127,7 +135,7 @@ IDENTITY:
 class PipelineConfig:
     """Configuration for S2S Pipeline"""
     # Component settings
-    asr_model: str = "small.en"  # faster-whisper built-in model, fast and accurate
+    asr_model: str = "large-v3"  # Best accuracy model for transcription
     llm_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     tts_model: str = "microsoft/VibeVoice-Realtime-0.5B"
     
@@ -142,8 +150,11 @@ class PipelineConfig:
     
     # VAD settings - balanced for natural conversation
     vad_threshold: float = 0.4  # Lower = more sensitive to speech (better barge-in)
-    min_speech_ms: int = 200  # Minimum speech duration to trigger
-    min_silence_ms: int = 700  # Wait 700ms of silence before considering speech ended (allows natural pauses)
+    min_speech_ms: int = 250  # Minimum speech duration to trigger
+    min_silence_ms: int = 1000  # Wait 1 second of silence before considering speech ended (allows natural pauses)
+    
+    # Echo suppression settings
+    echo_suppression_ms: int = 500  # Ignore audio input for this duration after TTS starts playing
     
     # LLM settings
     max_llm_tokens: int = 150  # Allow longer responses for detailed answers
@@ -274,6 +285,9 @@ class S2SPipeline:
         # Cancellation support for barge-in
         self._cancel_event = asyncio.Event()
         self._is_generating = False
+        
+        # Echo suppression - track when TTS last played to avoid picking up speaker audio
+        self._last_tts_end_time = 0.0
         
         # Agent type for domain-specific responses
         self._agent_type = self.config.default_agent
@@ -495,6 +509,8 @@ class S2SPipeline:
                 self.state = PipelineState.SPEAKING
                 yield audio_chunk
         
+        # Update echo suppression timestamp when TTS finishes
+        self._last_tts_end_time = time.time()
         self.total_requests += 1
         self.state = PipelineState.IDLE
     
@@ -536,6 +552,11 @@ class S2SPipeline:
                 return
             
             logger.info(f"[ASR] '{transcription.text}' ({asr_time:.0f}ms)")
+            
+            # Check for echo (TTS audio picked up by microphone)
+            if self.is_likely_echo(transcription.text):
+                self.state = PipelineState.IDLE
+                return
             
             # Check for cancellation after ASR
             if self._cancel_event.is_set():
@@ -590,6 +611,8 @@ class S2SPipeline:
                 self.state = PipelineState.SPEAKING
                 yield audio_chunk
             
+            # Update echo suppression timestamp when TTS finishes
+            self._last_tts_end_time = time.time()
             self.total_requests += 1
         
         finally:
@@ -635,6 +658,11 @@ class S2SPipeline:
                 return
             
             logger.info(f"[ASR] '{transcription.text}' ({asr_time:.0f}ms)")
+            
+            # Check for echo (TTS audio picked up by microphone)
+            if self.is_likely_echo(transcription.text):
+                self.state = PipelineState.IDLE
+                return
             
             # Check for cancellation
             if self._cancel_event.is_set():
@@ -719,11 +747,39 @@ class S2SPipeline:
             # Log full response
             logger.info(f"[LLM] Full: '{full_response}'")
             
+            # Update echo suppression timestamp when TTS finishes
+            self._last_tts_end_time = time.time()
             self.total_requests += 1
             
         finally:
             self._is_generating = False
             self.state = PipelineState.IDLE
+    
+    def is_likely_echo(self, transcription: str) -> bool:
+        """
+        Check if the transcription is likely echo from TTS output.
+        Returns True if audio came too soon after TTS finished (likely speaker echo).
+        """
+        time_since_tts = (time.time() - self._last_tts_end_time) * 1000  # ms
+        
+        # If audio came very shortly after TTS ended, it might be echo
+        if time_since_tts < self.config.echo_suppression_ms:
+            # Common echo patterns - short phrases that often get picked up
+            echo_patterns = [
+                "thank you", "thanks", "okay", "ok", "bye", "goodbye",
+                "have a", "take care", "you're welcome", "welcome",
+                "hello", "hi", "hey", "yes", "no", "sure", "right"
+            ]
+            text_lower = transcription.lower().strip()
+            
+            # Check if it's a short phrase that could be echo
+            if len(text_lower.split()) <= 3:
+                for pattern in echo_patterns:
+                    if pattern in text_lower:
+                        logger.info(f"Ignoring likely echo: '{transcription}' ({time_since_tts:.0f}ms after TTS)")
+                        return True
+        
+        return False
     
     def cancel(self) -> None:
         """Cancel ongoing generation (for barge-in)"""
