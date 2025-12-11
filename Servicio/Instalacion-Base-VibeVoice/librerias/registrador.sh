@@ -74,7 +74,8 @@ registrar_mensaje() {
     local nivel="$1"
     local mensaje="$2"
     local archivo_log="${3:-${VIBE_LOG_FILE}}"
-    local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    local timestamp
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
     local log_entry="[${timestamp}] [${nivel}] ${mensaje}"
     
     # Escribir a archivo de log

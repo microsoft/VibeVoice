@@ -18,6 +18,7 @@ INSTALLER_VERSION="1.0.0"
 export NONINTERACTIVE="${NONINTERACTIVE:-1}"
 
 # Configurar bitácora central
+# shellcheck disable=SC2155
 export BITACORA="${INSTALLER_DIR}/bitacoras/instalacion-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "${INSTALLER_DIR}/bitacoras"
 
@@ -25,7 +26,8 @@ mkdir -p "${INSTALLER_DIR}/bitacoras"
 exec > >(tee -a "${BITACORA}") 2>&1
 
 # Trap para capturar errores
-trap 'ret=$?; echo "[ERROR] Fallo en instalador (código=$ret). Revisa ${BITACORA}" >&2; exit $ret' ERR
+# shellcheck disable=SC2064,SC2154
+trap "ret=\$?; echo '[ERROR] Fallo en instalador (código=\$ret). Revisa ${BITACORA}' >&2; exit \$ret" ERR
 
 # Cargar configuración y librerías
 source "${INSTALLER_DIR}/configuracion/stack-vibe.conf"
@@ -157,7 +159,8 @@ verificar_prerequisitos() {
 # FUNCIÓN: instalacion_principal
 # ============================================================================
 instalacion_principal() {
-    local inicio=$(date +%s)
+    local inicio
+    inicio=$(date +%s)
     
     # Inicializar sistema de bitácoras
     inicializar_bitacoras
@@ -183,7 +186,8 @@ instalacion_principal() {
     ejecutar_modulo "06" "06-systemd-service.sh" "Configuración de Servicio Systemd"
     
     # Calcular tiempo de instalación
-    local fin=$(date +%s)
+    local fin
+    fin=$(date +%s)
     local duracion=$((fin - inicio))
     local minutos=$((duracion / 60))
     local segundos=$((duracion % 60))
@@ -320,7 +324,7 @@ procesar_argumentos() {
                 exit 0
                 ;;
             --skip-confirmation)
-                SKIP_CONFIRMATION=true
+                # Legacy option - no longer needed with NONINTERACTIVE mode
                 shift
                 ;;
             *)
