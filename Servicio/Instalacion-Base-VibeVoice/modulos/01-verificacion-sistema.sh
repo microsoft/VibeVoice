@@ -78,6 +78,11 @@ verificar_sistema() {
             registrar_error_fatal "Instalación cancelada por el usuario" 6
         fi
     fi
+
+    # Intentar crear el usuario de servicio temprano para evitar problemas de permisos
+    if ! crear_usuario_sistema "${VIBE_SERVICE_USER}" "${VIBE_DIR_BASE}"; then
+        registrar_advertencia "No se pudo crear el usuario de servicio ${VIBE_SERVICE_USER}. Algunos pasos pueden omitir chown." 
+    fi
     
     registrar_fin_modulo "Verificación de Sistema"
     return 0

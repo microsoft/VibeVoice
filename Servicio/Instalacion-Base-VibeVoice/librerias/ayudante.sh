@@ -177,7 +177,12 @@ crear_directorio() {
     chmod "${permisos}" "${ruta}"
     
     if [[ -n "${propietario}" ]]; then
-        chown -R "${propietario}:${propietario}" "${ruta}"
+        # Solo ejecutar chown si el usuario (y grupo) existen para evitar fallos
+        if id "${propietario}" &>/dev/null; then
+            chown -R "${propietario}:${propietario}" "${ruta}"
+        else
+            registrar_advertencia "Propietario especificado no existe: ${propietario} - omitiendo chown"
+        fi
     fi
     
     registrar_exito "Directorio creado: ${ruta}"

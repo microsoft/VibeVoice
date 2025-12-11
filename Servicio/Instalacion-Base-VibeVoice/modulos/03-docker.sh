@@ -26,6 +26,35 @@ instalar_docker() {
         if validar_docker_version; then
             registrar_info "Docker ya está instalado en versión adecuada"
             if validar_docker_funcionando; then
+                # Asegurar que la red Docker de VibeVoice exista incluso si Docker ya estaba instalado
+                registrar_info "Verificando red Docker ${VIBE_DOCKER_NETWORK}..."
+                if ! docker network ls | grep -q "${VIBE_DOCKER_NETWORK}"; then
+                    ejecutar_comando \
+                        "docker network create --driver bridge --subnet ${VIBE_DOCKER_SUBNET} ${VIBE_DOCKER_NETWORK}" \
+                        "Creando red Docker ${VIBE_DOCKER_NETWORK}"
+                else
+                    registrar_info "Red Docker ${VIBE_DOCKER_NETWORK} ya existe"
+                fi
+                                # Asegurar wrapper docker-compose para compatibilidad con systemd
+                                registrar_info "Asegurando compatibilidad de comando docker-compose..."
+                                if [[ ! -x /usr/bin/docker-compose ]]; then
+                                        cat > /usr/bin/docker-compose <<'EOF'
+#!/bin/sh
+if command -v docker >/dev/null 2>&1; then
+    exec docker compose "$@"
+elif command -v /usr/local/bin/docker-compose >/dev/null 2>&1; then
+    exec /usr/local/bin/docker-compose "$@"
+else
+    echo "docker-compose: neither 'docker compose' nor '/usr/local/bin/docker-compose' is available" >&2
+    exit 127
+fi
+EOF
+                                        chmod 0755 /usr/bin/docker-compose
+                                        registrar_exito "Wrapper /usr/bin/docker-compose creado"
+                                        systemctl daemon-reload || true
+                                else
+                                        registrar_info "/usr/bin/docker-compose ya existe"
+                                fi
                 registrar_fin_modulo "Instalación de Docker (ya instalado)"
                 return 0
             fi
@@ -168,6 +197,30 @@ EOF
     
     # Instalar Docker Compose standalone (por compatibilidad)
     instalar_docker_compose_standalone
+
+        # Crear un wrapper en /usr/bin/docker-compose que invoque `docker compose`
+        # Esto evita fallos cuando systemd ejecuta `/usr/bin/docker-compose`.
+        registrar_info "Asegurando compatibilidad de comando docker-compose..."
+        if [[ ! -x /usr/bin/docker-compose ]]; then
+                cat > /usr/bin/docker-compose <<'EOF'
+#!/bin/sh
+# Wrapper para compatibilidad con service units que usan `docker-compose`
+if command -v docker >/dev/null 2>&1; then
+    exec docker compose "$@"
+elif command -v /usr/local/bin/docker-compose >/dev/null 2>&1; then
+    exec /usr/local/bin/docker-compose "$@"
+else
+    echo "docker-compose: neither 'docker compose' nor '/usr/local/bin/docker-compose' is available" >&2
+    exit 127
+fi
+EOF
+                chmod 0755 /usr/bin/docker-compose
+                registrar_exito "Wrapper /usr/bin/docker-compose creado"
+                # Recargar systemd para que tome cualquier cambio si es necesario
+                systemctl daemon-reload || true
+        else
+                registrar_info "/usr/bin/docker-compose ya existe"
+        fi
     
     # Mostrar resumen
     echo ""

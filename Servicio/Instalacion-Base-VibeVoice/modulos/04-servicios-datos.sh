@@ -23,6 +23,20 @@ configurar_servicios_datos() {
     
     # Crear directorios de datos
     crear_directorios_datos
+
+    # Asegurar la existencia de la red Docker requerida (por si el módulo 03 no la creó)
+    registrar_info "Verificando red Docker ${VIBE_DOCKER_NETWORK}..."
+    if command -v docker &>/dev/null; then
+        if ! docker network ls | grep -q "${VIBE_DOCKER_NETWORK}"; then
+            ejecutar_comando \
+                "docker network create --driver bridge --subnet ${VIBE_DOCKER_SUBNET} ${VIBE_DOCKER_NETWORK}" \
+                "Creando red Docker ${VIBE_DOCKER_NETWORK}"
+        else
+            registrar_info "Red Docker ${VIBE_DOCKER_NETWORK} ya existe"
+        fi
+    else
+        registrar_advertencia "Docker no está disponible; los contenedores no se podrán crear hasta que Docker esté instalado"
+    fi
     
     # Configurar PostgreSQL
     configurar_postgresql
@@ -42,6 +56,10 @@ configurar_servicios_datos() {
 # ============================================================================
 crear_directorios_datos() {
     registrar_info "Creando directorios de datos..."
+    # Asegurar que el usuario de servicio exista antes de cambiar propietarios
+    if ! crear_usuario_sistema "${VIBE_SERVICE_USER}" "${VIBE_DIR_BASE}"; then
+        registrar_advertencia "No se pudo crear el usuario ${VIBE_SERVICE_USER}; se usarán permisos root para crear directorios"
+    fi
     
     local directorios=(
         "${VIBE_DIR_DATOS}/postgresql"
