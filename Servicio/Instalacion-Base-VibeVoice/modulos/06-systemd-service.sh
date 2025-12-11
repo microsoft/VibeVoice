@@ -115,7 +115,7 @@ EnvironmentFile=${VIBE_DIR_CONFIG}/.env
 
 # Comandos de inicio
 ExecStartPre=-/usr/bin/docker-compose -f ${VIBE_DIR_CONFIG}/docker-compose.yml down
-ExecStart=/usr/bin/docker-compose -f ${VIBE_DIR_CONFIG}/docker-compose.yml up -d
+ExecStart=/bin/sh -c 'if [ "${VIBE_API_MODE:-docker}" = "host" ]; then echo "VIBE_API_MODE=host: skipping docker-compose up"; exit 0; fi; /usr/bin/docker-compose -f ${VIBE_DIR_CONFIG}/docker-compose.yml up -d --build'
 ExecStop=/usr/bin/docker-compose -f ${VIBE_DIR_CONFIG}/docker-compose.yml down
 
 # Reinicio automático
@@ -178,6 +178,48 @@ habilitar_servicio() {
     registrar_info "═══════════════════════════════════════════════════════════════"
     echo ""
     
+    return 0
+}
+
+
+# ============================================================================
+# FUNCIÓN: generar_servicio_api_host
+# Propósito: Crear un servicio systemd que ejecute la API usando el venv del host
+# ============================================================================
+generar_servicio_api_host() {
+    local service_file="/etc/systemd/system/${VIBE_SERVICE_NAME}-api.service"
+
+    registrar_info "Generando servicio systemd para API (host venv): ${service_file}"
+
+    cat > "${service_file}" <<EOF
+[Unit]
+Description=VibeVoice API (host) - Ejecuta la API con el entorno virtual del host
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=${VIBE_SERVICE_USER}
+Group=${VIBE_SERVICE_GROUP}
+WorkingDirectory=${VIBE_DIR_BASE}/app
+EnvironmentFile=${VIBE_DIR_CONFIG}/.env
+ExecStartPre=/bin/sh -c 'if [ -z "${MODEL_PATH}" ]; then echo "MODEL_PATH not set; configure ${VIBE_DIR_CONFIG}/.env and set MODEL_PATH to a HuggingFace repo id or local model path" 1>&2; exit 1; fi'
+ExecStart=${VIBE_VENV_DIR}/bin/uvicorn demo.web.app:app --host 0.0.0.0 --port ${VIBE_API_PORT:-8000} --workers 1
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=${VIBE_DIR_BASE} ${VIBE_DIR_LOGS}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    chmod 0644 "${service_file}"
+    ejecutar_comando "systemctl daemon-reload" "Recargando daemon de systemd"
+    ejecutar_comando "systemctl enable ${VIBE_SERVICE_NAME}-api" "Habilitando servicio ${VIBE_SERVICE_NAME}-api"
+
+    registrar_exito "Servicio ${VIBE_SERVICE_NAME}-api creado y habilitado"
     return 0
 }
 
