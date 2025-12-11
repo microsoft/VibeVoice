@@ -271,6 +271,68 @@ EOF
     registrar_exito "Archivo .env generado: ${env_file}"
     registrar_advertencia "IMPORTANTE: El archivo .env contiene credenciales. Protéjalo adecuadamente."
     
+    # Crear también .env.example (sin credenciales sensibles)
+    local env_example="${VIBE_DIR_CONFIG}/.env.example"
+    registrar_info "Generando archivo .env.example..."
+    
+    cat > "${env_example}" <<'ENVEXAMPLE'
+# ============================================================================
+# Ejemplo de Configuración de Entorno para VibeVoice
+# IMPORTANTE: Copiar a .env y ajustar valores según entorno
+# ============================================================================
+
+# PostgreSQL
+POSTGRES_VERSION=15-alpine
+POSTGRES_DB=vibevoice_db
+POSTGRES_USER=vibe_admin
+POSTGRES_PASSWORD=CHANGE_ME_POSTGRES_PASSWORD
+POSTGRES_PORT=5432
+POSTGRES_MAX_CONNECTIONS=200
+POSTGRES_SHARED_BUFFERS=256MB
+
+# Redis
+REDIS_VERSION=7-alpine
+REDIS_PORT=6379
+REDIS_PASSWORD=CHANGE_ME_REDIS_PASSWORD
+REDIS_MAX_MEMORY=2gb
+REDIS_EVICTION_POLICY=allkeys-lru
+
+# Kafka
+KAFKA_PORT=9092
+KAFKA_ZOOKEEPER_PORT=2181
+KAFKA_HEAP_OPTS=-Xmx1G -Xms1G
+
+# API
+API_PORT=8000
+API_WORKERS=1
+API_TIMEOUT=300
+
+# Seguridad
+SECRET_KEY=CHANGE_ME_SECRET_KEY_FOR_PRODUCTION
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION=3600
+
+# CORS
+CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+
+# Logs
+LOG_LEVEL=INFO
+
+# Directorios
+VIBE_DIR_BASE=/opt/vibevoice
+VIBE_DIR_LOGS=/opt/vibevoice/logs
+
+# Performance (para modo desarrollo local ligero)
+TRANSCRIBE_MODEL=whisper-tiny
+OMP_NUM_THREADS=1
+MKL_NUM_THREADS=1
+UVICORN_WORKERS=1
+UVICORN_LIMIT_CONCURRENCY=1
+ENVEXAMPLE
+
+    chmod 644 "${env_example}"
+    registrar_exito "Archivo .env.example generado: ${env_example}"
+    
     return 0
 }
 
