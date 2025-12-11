@@ -1,0 +1,43 @@
+name: Validate Shell Scripts
+
+on:
+  pull_request:
+    paths:
+      - 'Servicio/Instalacion-Base-VibeVoice/**/*.sh'
+  push:
+    branches:
+      - main
+      - 'feat/**'
+    paths:
+      - 'Servicio/Instalacion-Base-VibeVoice/**/*.sh'
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './Servicio/Instalacion-Base-VibeVoice'
+          severity: warning
+          ignore_paths: 'node_modules .git'
+          
+      - name: Check script permissions
+        run: |
+          echo "Verificando permisos ejecutables en scripts..."
+          find Servicio/Instalacion-Base-VibeVoice -name "*.sh" -type f ! -perm -u+x -print | while read script; do
+            echo "ADVERTENCIA: $script no tiene permisos ejecutables"
+          done
+          
+          # Contar scripts sin permisos ejecutables
+          count=$(find Servicio/Instalacion-Base-VibeVoice -name "*.sh" -type f ! -perm -u+x | wc -l)
+          if [ "$count" -gt 0 ]; then
+            echo "ERROR: $count script(s) no tienen permisos ejecutables"
+            exit 1
+          fi
+          
+          echo "✓ Todos los scripts tienen permisos ejecutables correctos"

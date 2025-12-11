@@ -121,3 +121,18 @@ We do not recommend using VibeVoice in commercial or real-world applications wit
 ## Star History
 
 ![Star History Chart](https://api.star-history.com/svg?repos=Microsoft/vibevoice&type=date&legend=top-left)
+
+---
+
+### ⚠️ Nota para Usuarios con NVIDIA GTX 1060 (y GPUs con arquitectura sm_61)
+
+Esta instalación (documentada también en Servicio/Instalacion-Base-VibeVoice/LEEME.md) se puede ejecutar en **modo host** (entorno virtual Python) en vez de Docker para mejorar compatibilidad y rendimiento en GPUs antiguas como la NVIDIA GeForce GTX 1060.
+
+Motivación: las builds precompiladas recientes de PyTorch pueden no incluir soporte para la arquitectura CUDA `sm_61`. En nuestras pruebas, la combinación estable fue usar PyTorch `2.6.0+cu118` y ejecutar la API en el `venv` del host.
+
+Configuración recomendada:
+- `VIBE_API_MODE=host` en `.env`
+- `MODEL_DEVICE=cuda`
+- `MODEL_PATH=/opt/vibevoice/models/VibeVoice-Realtime-0.5B/snapshots/<hash>`
+
+Para más detalles y pasos de reversión, ver `Servicio/Instalacion-Base-VibeVoice/LEEME.md`.
