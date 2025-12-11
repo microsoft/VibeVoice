@@ -140,10 +140,10 @@ class PipelineConfig:
     input_sample_rate: int = 16000
     output_sample_rate: int = 24000
     
-    # VAD settings - tuned for responsive barge-in
+    # VAD settings - balanced for natural conversation
     vad_threshold: float = 0.4  # Lower = more sensitive to speech (better barge-in)
-    min_speech_ms: int = 150  # Shorter = faster detection of user speaking
-    min_silence_ms: int = 200  # Shorter = quicker end-of-speech detection
+    min_speech_ms: int = 200  # Minimum speech duration to trigger
+    min_silence_ms: int = 700  # Wait 700ms of silence before considering speech ended (allows natural pauses)
     
     # LLM settings
     max_llm_tokens: int = 150  # Allow longer responses for detailed answers
