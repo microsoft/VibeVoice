@@ -91,22 +91,9 @@ configurar_postgresql() {
     
     registrar_exito "Contenedor PostgreSQL creado"
     
-    # Esperar a que PostgreSQL esté listo
-    registrar_info "Esperando a que PostgreSQL esté listo..."
-    local intentos=0
-    local max_intentos=30
-    
-    while [[ ${intentos} -lt ${max_intentos} ]]; do
-        if docker exec vibevoice-postgres pg_isready -U "${VIBE_POSTGRES_USER}" &>/dev/null; then
-            registrar_exito "PostgreSQL está listo"
-            break
-        fi
-        sleep 2
-        ((intentos++))
-    done
-    
-    if [[ ${intentos} -eq ${max_intentos} ]]; then
-        registrar_error "Timeout esperando a PostgreSQL"
+    # Usar la función wait_for_postgres
+    if ! wait_for_postgres "vibevoice-postgres" 60; then
+        registrar_error "PostgreSQL no está listo después de 60 segundos"
         return 1
     fi
     
@@ -161,17 +148,9 @@ configurar_redis() {
     local intentos=0
     local max_intentos=30
     
-    while [[ ${intentos} -lt ${max_intentos} ]]; do
-        if docker exec vibevoice-redis redis-cli -a "${VIBE_REDIS_PASSWORD}" ping 2>/dev/null | grep -q "PONG"; then
-            registrar_exito "Redis está listo"
-            break
-        fi
-        sleep 1
-        ((intentos++))
-    done
-    
-    if [[ ${intentos} -eq ${max_intentos} ]]; then
-        registrar_error "Timeout esperando a Redis"
+    # Usar la función wait_for_redis
+    if ! wait_for_redis "vibevoice-redis" 30; then
+        registrar_error "Redis no está listo después de 30 segundos"
         return 1
     fi
     

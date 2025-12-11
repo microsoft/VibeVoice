@@ -294,6 +294,64 @@ esperar_servicio() {
 }
 
 # ============================================================================
+# FUNCIÓN: wait_for_postgres
+# Propósito: Esperar a que PostgreSQL esté listo para aceptar conexiones
+# Parámetros:
+#   $1: Nombre del contenedor (opcional, por defecto vibevoice-postgres)
+#   $2: Timeout en segundos (opcional, por defecto 60)
+# Retorno: 0 si PostgreSQL está listo, 1 si timeout
+# ============================================================================
+wait_for_postgres() {
+    local container_name="${1:-vibevoice-postgres}"
+    local timeout="${2:-60}"
+    local contador=0
+    
+    registrar_info "Esperando a que PostgreSQL (${container_name}) esté listo..."
+    
+    while [[ ${contador} -lt ${timeout} ]]; do
+        if docker exec "${container_name}" pg_isready -U "${VIBE_POSTGRES_USER:-postgres}" &>/dev/null; then
+            registrar_exito "PostgreSQL está listo y aceptando conexiones"
+            return 0
+        fi
+        sleep 2
+        ((contador+=2))
+    done
+    
+    registrar_error "Timeout esperando a PostgreSQL (${timeout}s). El contenedor puede no estar funcionando correctamente."
+    registrar_error "Revisa los logs con: docker logs ${container_name}"
+    return 1
+}
+
+# ============================================================================
+# FUNCIÓN: wait_for_redis
+# Propósito: Esperar a que Redis esté listo para aceptar conexiones
+# Parámetros:
+#   $1: Nombre del contenedor (opcional, por defecto vibevoice-redis)
+#   $2: Timeout en segundos (opcional, por defecto 30)
+# Retorno: 0 si Redis está listo, 1 si timeout
+# ============================================================================
+wait_for_redis() {
+    local container_name="${1:-vibevoice-redis}"
+    local timeout="${2:-30}"
+    local contador=0
+    
+    registrar_info "Esperando a que Redis (${container_name}) esté listo..."
+    
+    while [[ ${contador} -lt ${timeout} ]]; do
+        if docker exec "${container_name}" redis-cli -a "${VIBE_REDIS_PASSWORD:-}" ping 2>/dev/null | grep -q "PONG"; then
+            registrar_exito "Redis está listo y respondiendo a PING"
+            return 0
+        fi
+        sleep 1
+        ((contador++))
+    done
+    
+    registrar_error "Timeout esperando a Redis (${timeout}s). El contenedor puede no estar funcionando correctamente."
+    registrar_error "Revisa los logs con: docker logs ${container_name}"
+    return 1
+}
+
+# ============================================================================
 # FUNCIÓN: comparar_versiones
 # Propósito: Comparar dos versiones en formato semántico
 # Parámetros:
@@ -407,6 +465,8 @@ export -f obtener_espacio_disco_gb
 export -f obtener_numero_cpus
 export -f verificar_conectividad_internet
 export -f esperar_servicio
+export -f wait_for_postgres
+export -f wait_for_redis
 export -f comparar_versiones
 export -f generar_password_seguro
 export -f crear_respaldo
