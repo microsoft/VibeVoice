@@ -157,7 +157,7 @@ class PipelineConfig:
     echo_suppression_ms: int = 500  # Ignore audio input for this duration after TTS starts playing
     
     # LLM settings
-    max_llm_tokens: int = 150  # Allow longer responses for detailed answers
+    max_llm_tokens: int = 350  # Allow complete responses with lists and explanations
     llm_temperature: float = 0.7
     use_finetuned_model: bool = False  # Fine-tuned model learned ChatDoctor patterns from training data
     
