@@ -168,6 +168,36 @@ cd /path/to/Servicio/Instalacion-Base-VibeVoice
 sudo ./pruebas/validar-instalacion.sh
 ```
 
+### Modo Ultra-Ligero (Desarrollo Local Rápido)
+
+Para ejecutar VibeVoice en modo ultra-ligero con mínimo consumo de recursos (ideal para desarrollo local):
+
+```bash
+# 1. Activar entorno virtual de Python
+source /opt/vibevoice/venv/bin/activate
+
+# 2. Configurar variables de optimización
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export TRANSCRIBE_MODEL=whisper-tiny
+
+# 3. Iniciar servidor Uvicorn en modo ligero
+python -m uvicorn demo.web.app:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 1 \
+    --limit-concurrency 1
+```
+
+**Explicación:**
+- `OMP_NUM_THREADS=1` y `MKL_NUM_THREADS=1`: Limitan threads de NumPy/MKL para reducir uso de CPU
+- `TRANSCRIBE_MODEL=whisper-tiny`: Usa el modelo más ligero de Whisper
+- `--workers 1` y `--limit-concurrency 1`: Minimizan procesos worker y conexiones concurrentes
+
+**Acceso:**
+- Aplicación: http://localhost:8000
+- Documentación API: http://localhost:8000/docs
+
 ## Configuración
 
 ### Archivo Principal de Configuración
