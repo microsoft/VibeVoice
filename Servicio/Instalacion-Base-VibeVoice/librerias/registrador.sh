@@ -13,10 +13,20 @@ source "${SCRIPT_DIR}/../configuracion/stack-vibe.conf" 2>/dev/null || true
 # ============================================================================
 # VARIABLES GLOBALES DE BITÁCORA
 # ============================================================================
+# Usar BITACORA si está definida desde el instalador, sino usar default
 VIBE_LOG_DIR="${VIBE_LOG_DIR:-${VIBE_DIR_BASE}/logs}"
-VIBE_LOG_FILE="${VIBE_LOG_DIR}/instalacion-$(date +%Y%m%d-%H%M%S).log"
-VIBE_ERROR_LOG="${VIBE_LOG_DIR}/errores-$(date +%Y%m%d-%H%M%S).log"
-VIBE_AUDIT_LOG="${VIBE_LOG_DIR}/auditoria-$(date +%Y%m%d-%H%M%S).log"
+if [[ -n "${BITACORA:-}" ]]; then
+    # Si BITACORA está definida externamente, usar esa
+    VIBE_LOG_FILE="${BITACORA}"
+    VIBE_ERROR_LOG="$(dirname "${BITACORA}")/errores-$(basename "${BITACORA}")"
+    VIBE_AUDIT_LOG="$(dirname "${BITACORA}")/auditoria-$(basename "${BITACORA}")"
+else
+    # Sino, crear archivos de log con timestamp
+    VIBE_LOG_FILE="${VIBE_LOG_DIR}/instalacion-$(date +%Y%m%d-%H%M%S).log"
+    VIBE_ERROR_LOG="${VIBE_LOG_DIR}/errores-$(date +%Y%m%d-%H%M%S).log"
+    VIBE_AUDIT_LOG="${VIBE_LOG_DIR}/auditoria-$(date +%Y%m%d-%H%M%S).log"
+    export BITACORA="${VIBE_LOG_FILE}"
+fi
 
 # Colores para salida en terminal
 COLOR_RESET='\033[0m'
