@@ -154,7 +154,8 @@ class PipelineConfig:
     min_silence_ms: int = 1000  # Wait 1 second of silence before considering speech ended (allows natural pauses)
     
     # Echo suppression settings
-    echo_suppression_ms: int = 500  # Ignore audio input for this duration after TTS starts playing
+    echo_suppression_ms: int = 1000  # Ignore echo phrases for 1 second after TTS ends
+    skip_pure_acknowledgments: bool = True  # Skip standalone "Thank you", "Okay" etc.
     
     # LLM settings
     max_llm_tokens: int = 350  # Allow complete responses with lists and explanations
@@ -757,26 +758,44 @@ class S2SPipeline:
     
     def is_likely_echo(self, transcription: str) -> bool:
         """
-        Check if the transcription is likely echo from TTS output.
-        Returns True if audio came too soon after TTS finished (likely speaker echo).
+        Check if the transcription is likely echo from TTS output or a pure acknowledgment.
+        Returns True if:
+        1. Audio came too soon after TTS finished (likely speaker echo)
+        2. It's a pure acknowledgment phrase that doesn't need a response
         """
+        text_lower = transcription.lower().strip()
+        text_clean = text_lower.rstrip('.,!?')
         time_since_tts = (time.time() - self._last_tts_end_time) * 1000  # ms
         
-        # If audio came very shortly after TTS ended, it might be echo
+        # Pure acknowledgment phrases - these rarely need a response
+        pure_acknowledgments = [
+            "thank you", "thanks", "okay", "ok", "alright", "got it",
+            "understood", "i see", "fine", "good", "great", "perfect"
+        ]
+        
+        # Echo patterns from TTS output
+        echo_patterns = [
+            "thank you", "thanks", "okay", "ok", "bye", "goodbye",
+            "have a", "take care", "you're welcome", "welcome",
+            "hello", "hi", "hey", "yes", "no", "sure", "right",
+            "safe travels", "stay safe", "good luck"
+        ]
+        
+        # Check 1: Echo detection - short phrase within echo window
         if time_since_tts < self.config.echo_suppression_ms:
-            # Common echo patterns - short phrases that often get picked up
-            echo_patterns = [
-                "thank you", "thanks", "okay", "ok", "bye", "goodbye",
-                "have a", "take care", "you're welcome", "welcome",
-                "hello", "hi", "hey", "yes", "no", "sure", "right"
-            ]
-            text_lower = transcription.lower().strip()
-            
-            # Check if it's a short phrase that could be echo
-            if len(text_lower.split()) <= 3:
+            if len(text_lower.split()) <= 4:
                 for pattern in echo_patterns:
                     if pattern in text_lower:
                         logger.info(f"Ignoring likely echo: '{transcription}' ({time_since_tts:.0f}ms after TTS)")
+                        return True
+        
+        # Check 2: Pure acknowledgment - standalone phrases that don't need response
+        if self.config.skip_pure_acknowledgments:
+            # Only skip if it's JUST the acknowledgment (1-2 words)
+            if len(text_clean.split()) <= 2:
+                for ack in pure_acknowledgments:
+                    if text_clean == ack or text_clean in [ack + " " + w for w in ["you", "so much", "very much"]]:
+                        logger.info(f"Skipping pure acknowledgment: '{transcription}'")
                         return True
         
         return False
