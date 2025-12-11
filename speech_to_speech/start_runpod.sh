@@ -95,7 +95,7 @@ fi
 #   - CTranslate2: Systran/faster-distil-whisper-small.en, Systran/faster-distil-whisper-medium.en
 # Do NOT use distil-whisper/distil-small.en (wrong format)
 export MODEL_PATH="${MODEL_PATH:-microsoft/VibeVoice-Realtime-0.5B}"
-export ASR_MODEL="small.en"  # Force correct model, override any env var
+export ASR_MODEL="${ASR_MODEL:-large-v3}"  # Best accuracy model for transcription
 export LLM_MODEL="${LLM_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 
 # Server ports (avoid 8001, 8888 which are reserved by RunPod)
