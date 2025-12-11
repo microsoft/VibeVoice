@@ -339,7 +339,7 @@ app = FastAPI()
 async def _startup() -> None:
     model_path = os.environ.get("MODEL_PATH")
     if not model_path:
-        raise RuntimeError("MODEL_PATH not set in environment")
+        raise RuntimeError("MODEL_PATH not set in environment. Set MODEL_PATH in /opt/vibevoice/config/.env or export MODEL_PATH before starting the service.")
 
     device = os.environ.get("MODEL_DEVICE", "cuda")
     
@@ -483,8 +483,14 @@ async def websocket_stream(ws: WebSocket) -> None:
                     log_queue.get_nowait()
                 except Empty:
                     break
-            if ws.client_state == WebSocketState.CONNECTED:
-                await ws.close()
+            try:
+                if ws.client_state == WebSocketState.CONNECTED:
+                    await ws.close()
+            except RuntimeError:
+                # Ignore if a close message was already sent (race-condition)
+                pass
+            except Exception as exc:  # pragma: no cover - defensive logging
+                print(f"Error while closing websocket: {exc}")
             print("WS handler exit")
     finally:
         if acquired:

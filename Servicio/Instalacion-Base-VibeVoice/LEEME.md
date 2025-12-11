@@ -27,6 +27,8 @@ Este es el **Servicio de Instalación Base para VibeVoice**, un sistema completo
 
 ### Privilegios
 - Acceso root o sudo
+ 
+**Nota:** El instalador intentará crear el usuario de sistema `vibevoice` durante la fase de verificación inicial. Asegúrese de ejecutar el instalador con privilegios `root` (sudo) para que la creación del usuario y la asignación de propietarios (`chown`) funcionen correctamente. Si no es posible crear el usuario, el instalador continuará pero omitirá operaciones `chown` cuando el propietario no exista.
 
 ## Estructura del Proyecto
 
@@ -198,6 +200,57 @@ python -m uvicorn demo.web.app:app \
 - Aplicación: http://localhost:8000
 - Documentación API: http://localhost:8000/docs
 
+### Modo GPU ligero (super liviano)
+
+Para ejecutar VibeVoice en modo **GPU** pero con consumo reducido de recursos (útil en máquinas con GPUs antiguas o para montar servicios MCP ligeros):
+
+- Ajustes recomendados en `/opt/vibevoice/config/.env`:
+   - **MODEL_PATH**: ruta o identificador HuggingFace del modelo (ej. `microsoft/VibeVoice-Realtime-0.5B`)
+   - **MODEL_DEVICE=cuda**: forzar uso de GPU
+   - **OMP_NUM_THREADS=1** y **MKL_NUM_THREADS=1**: limitar threads de BLAS/NumPy
+   - **UVICORN_WORKERS=1** y **UVICORN_LIMIT_CONCURRENCY=1**: minimizar workers y concurrencia
+   - **VIBE_API_WORKERS=1**: configuración interna para procesos
+   - **TRANSCRIBE_MODEL=whisper-tiny**: modelo de transcripción ligero
+   - **PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:64**: reducir fragmentación de memoria GPU
+
+Ejemplo de arranque (systemd, recomendado):
+
+```bash
+# (1) Editar y confirmar /opt/vibevoice/config/.env con las variables anteriores
+sudo nano /opt/vibevoice/config/.env
+
+# (2) Reiniciar el servicio de la API para aplicar cambios
+sudo systemctl daemon-reload
+sudo systemctl restart vibevoice-api
+
+# (3) Verificar estado y logs
+sudo systemctl status vibevoice-api -l
+sudo journalctl -u vibevoice-api -f
+
+# (4) Verificar uso GPU
+/usr/bin/nvidia-smi
+```
+
+Arranque manual (útil para desarrollo, no necesario si usas systemd):
+
+```bash
+source /opt/vibevoice/venv/bin/activate
+export MODEL_PATH=microsoft/VibeVoice-Realtime-0.5B
+export MODEL_DEVICE=cuda
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 TRANSCRIBE_MODEL=whisper-tiny
+/opt/vibevoice/venv/bin/uvicorn demo.web.app:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 1
+```
+
+Notas:
+- Con `MODEL_DEVICE=cuda` la aplicación cargará el modelo en GPU si PyTorch detecta CUDA; comprobar `nvidia-smi` confirmará uso GPU.
+- Si tu GPU tiene poca memoria o sigue habiendo advertencias de compatibilidad (`sm_61`), puedes forzar `MODEL_DEVICE=cpu` temporalmente para estabilidad.
+
+Nota: Si ejecuta la API en el `venv` del host (modo ultra-ligero), asegúrese de instalar las dependencias de modelos antes de iniciar el servicio:
+
+```bash
+/opt/vibevoice/venv/bin/pip install diffusers huggingface-hub safetensors
+```
+
 ## Configuración
 
 ### Archivo Principal de Configuración
@@ -215,6 +268,7 @@ El archivo `configuracion/stack-vibe.conf` es la **única fuente de verdad** par
 
 Después de la instalación, el archivo `/opt/vibevoice/config/.env` contiene las variables de entorno para Docker Compose. Este archivo contiene credenciales sensibles y debe protegerse adecuadamente.
 
+**Nota importante:** Para que la API pueda inicializarse correctamente, debe definirse la variable `MODEL_PATH` en `/opt/vibevoice/config/.env` (o exportarla en el entorno del servicio host). `MODEL_PATH` puede ser un identificador de repositorio de Hugging Face (por ejemplo `microsoft/VibeVoice-Realtime-0.5B`) o la ruta a un directorio local que contenga el modelo.
 ## Pruebas y Validación
 
 ### Validación Completa

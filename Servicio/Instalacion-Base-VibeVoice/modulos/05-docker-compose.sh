@@ -156,8 +156,13 @@ services:
   # VibeVoice API - Servicio principal
   # ============================================================================
   vibevoice-api:
+    build:
+      context: ${VIBE_DIR_BASE}/app
+      dockerfile: Dockerfile
     image: vibevoice:latest
     container_name: vibevoice-api
+    profiles:
+      - host-api
     depends_on:
       - postgres
       - redis
@@ -177,6 +182,10 @@ services:
       API_PORT: ${API_PORT:-8000}
       API_WORKERS: ${API_WORKERS:-4}
       API_TIMEOUT: ${API_TIMEOUT:-300}
+      # Modelo de inferencia
+      MODEL_PATH: ${MODEL_PATH:-}
+      MODEL_DEVICE: ${MODEL_DEVICE:-cuda}
+      VOICE_PRESET: ${VOICE_PRESET:-}
       
       # Seguridad
       SECRET_KEY: ${SECRET_KEY}
@@ -264,12 +273,23 @@ LOG_LEVEL=${VIBE_LOG_LEVEL}
 # Directorios
 VIBE_DIR_BASE=${VIBE_DIR_BASE}
 VIBE_DIR_LOGS=${VIBE_DIR_LOGS}
+# Modelo
+MODEL_PATH=${MODEL_PATH:-}
+MODEL_DEVICE=${MODEL_DEVICE:-cuda}
+VOICE_PRESET=${VOICE_PRESET:-}
 EOF
 
     chmod 600 "${env_file}"
     
     registrar_exito "Archivo .env generado: ${env_file}"
     registrar_advertencia "IMPORTANTE: El archivo .env contiene credenciales. Protéjalo adecuadamente."
+
+    if [[ -z "${MODEL_PATH:-}" ]]; then
+      registrar_advertencia "MODEL_PATH no definido en .env; la API no podrá iniciarse hasta que se configure (ver LEEME)."
+    fi
+
+    # Generar Dockerfile mínimo para la imagen `vibevoice` (intenta instalar la aplicación)
+    generar_dockerfile_api
     
     # Crear también .env.example (sin credenciales sensibles)
     local env_example="${VIBE_DIR_CONFIG}/.env.example"
@@ -328,6 +348,14 @@ OMP_NUM_THREADS=1
 MKL_NUM_THREADS=1
 UVICORN_WORKERS=1
 UVICORN_LIMIT_CONCURRENCY=1
+# Modelo de inferencia (ajustar a su modelo preferido o ruta local)
+# Puede usar un repositorio Hugging Face público, por ejemplo:
+# MODEL_PATH=microsoft/VibeVoice-Realtime-0.5B
+# O una ruta local: MODEL_PATH=/opt/vibevoice/models/VibeVoice-Realtime-0.5B
+# Dispositivo: cuda, mps, cpu
+MODEL_PATH=
+MODEL_DEVICE=cuda
+VOICE_PRESET=
 ENVEXAMPLE
 
     chmod 644 "${env_example}"
@@ -353,6 +381,39 @@ validar_docker_compose_file() {
         registrar_error "Error en la validación de docker-compose.yml"
         return 1
     fi
+}
+
+
+# ============================================================================
+# FUNCIÓN: generar_dockerfile_api
+# ============================================================================
+generar_dockerfile_api() {
+  local app_dir="${VIBE_DIR_BASE}/app"
+  crear_directorio "${app_dir}" "${VIBE_SERVICE_USER}" "755"
+
+  local dockerfile="${app_dir}/Dockerfile"
+  if [[ -f "${dockerfile}" ]]; then
+    registrar_info "Dockerfile ya existe en ${app_dir}, no se sobrescribe"
+    return 0
+  fi
+
+  registrar_info "Generando Dockerfile mínimo en: ${dockerfile}"
+  cat > "${dockerfile}" <<'DOCKERFILE'
+FROM python:3.12-slim
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+COPY . /app
+ RUN apt-get update && apt-get install -y --no-install-recommends build-essential gcc git libpq-dev && rm -rf /var/lib/apt/lists/*
+RUN python -m pip install --upgrade pip setuptools wheel
+RUN python -m pip install --no-cache-dir "uvicorn[standard]" fastapi
+RUN if [ -n "${VIBE_PYTHON_PACKAGES:-}" ]; then python -m pip install --no-cache-dir ${VIBE_PYTHON_PACKAGES}; fi
+RUN python -m pip install --no-cache-dir . || true
+ENV PYTHONUNBUFFERED=1
+CMD ["uvicorn", "demo.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+DOCKERFILE
+
+  registrar_exito "Dockerfile generado: ${dockerfile}"
+  return 0
 }
 
 # ============================================================================
