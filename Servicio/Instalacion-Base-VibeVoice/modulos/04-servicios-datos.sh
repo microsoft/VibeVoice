@@ -72,10 +72,13 @@ configurar_postgresql() {
     
     # Crear contenedor PostgreSQL
     registrar_info "Creando contenedor PostgreSQL ${VIBE_POSTGRES_VERSION}..."
+    registrar_info "Límites de recursos: Memoria=${POSTGRES_MEM}, CPUs=${POSTGRES_CPUS}"
     
     docker run -d \
         --name vibevoice-postgres \
         --network "${VIBE_DOCKER_NETWORK}" \
+        --memory="${POSTGRES_MEM}" \
+        --cpus="${POSTGRES_CPUS}" \
         -e POSTGRES_DB="${VIBE_POSTGRES_DB}" \
         -e POSTGRES_USER="${VIBE_POSTGRES_USER}" \
         -e POSTGRES_PASSWORD="${VIBE_POSTGRES_PASSWORD}" \
@@ -123,10 +126,13 @@ configurar_redis() {
     
     # Crear contenedor Redis
     registrar_info "Creando contenedor Redis ${VIBE_REDIS_VERSION}..."
+    registrar_info "Límites de recursos: Memoria=${REDIS_MEM}, CPUs=${REDIS_CPUS}"
     
     docker run -d \
         --name vibevoice-redis \
         --network "${VIBE_DOCKER_NETWORK}" \
+        --memory="${REDIS_MEM}" \
+        --cpus="${REDIS_CPUS}" \
         -p "${VIBE_REDIS_PORT}:6379" \
         -v "${VIBE_DIR_DATOS}/redis:/data" \
         --restart unless-stopped \
