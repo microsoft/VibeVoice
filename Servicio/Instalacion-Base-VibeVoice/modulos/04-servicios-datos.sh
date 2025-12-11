@@ -63,11 +63,29 @@ crear_directorios_datos() {
 configurar_postgresql() {
     registrar_info "Configurando PostgreSQL..."
     
-    # Detener contenedor existente si hay
+    # Verificar si el contenedor existe
     if docker ps -a | grep -q "vibevoice-postgres"; then
-        registrar_info "Deteniendo contenedor PostgreSQL existente..."
-        docker stop vibevoice-postgres 2>/dev/null || true
-        docker rm vibevoice-postgres 2>/dev/null || true
+        local estado=$(docker inspect -f '{{.State.Status}}' vibevoice-postgres 2>/dev/null || echo "unknown")
+        
+        if [[ "${estado}" == "running" ]]; then
+            registrar_info "Contenedor PostgreSQL ya está en ejecución"
+            # Verificar si está saludable
+            if wait_for_postgres "vibevoice-postgres" 10; then
+                registrar_exito "PostgreSQL ya está configurado y funcionando"
+                return 0
+            else
+                registrar_advertencia "PostgreSQL está corriendo pero no responde. Recreando..."
+                docker stop vibevoice-postgres 2>/dev/null || true
+                docker rm vibevoice-postgres 2>/dev/null || true
+            fi
+        elif [[ "${estado}" == "exited" ]]; then
+            registrar_advertencia "Contenedor PostgreSQL existe pero está detenido. Eliminando y recreando..."
+            docker rm vibevoice-postgres 2>/dev/null || true
+        else
+            registrar_info "Eliminando contenedor PostgreSQL en estado: ${estado}"
+            docker stop vibevoice-postgres 2>/dev/null || true
+            docker rm vibevoice-postgres 2>/dev/null || true
+        fi
     fi
     
     # Crear contenedor PostgreSQL
@@ -117,11 +135,29 @@ configurar_postgresql() {
 configurar_redis() {
     registrar_info "Configurando Redis..."
     
-    # Detener contenedor existente si hay
+    # Verificar si el contenedor existe
     if docker ps -a | grep -q "vibevoice-redis"; then
-        registrar_info "Deteniendo contenedor Redis existente..."
-        docker stop vibevoice-redis 2>/dev/null || true
-        docker rm vibevoice-redis 2>/dev/null || true
+        local estado=$(docker inspect -f '{{.State.Status}}' vibevoice-redis 2>/dev/null || echo "unknown")
+        
+        if [[ "${estado}" == "running" ]]; then
+            registrar_info "Contenedor Redis ya está en ejecución"
+            # Verificar si está saludable
+            if wait_for_redis "vibevoice-redis" 10; then
+                registrar_exito "Redis ya está configurado y funcionando"
+                return 0
+            else
+                registrar_advertencia "Redis está corriendo pero no responde. Recreando..."
+                docker stop vibevoice-redis 2>/dev/null || true
+                docker rm vibevoice-redis 2>/dev/null || true
+            fi
+        elif [[ "${estado}" == "exited" ]]; then
+            registrar_advertencia "Contenedor Redis existe pero está detenido. Eliminando y recreando..."
+            docker rm vibevoice-redis 2>/dev/null || true
+        else
+            registrar_info "Eliminando contenedor Redis en estado: ${estado}"
+            docker stop vibevoice-redis 2>/dev/null || true
+            docker rm vibevoice-redis 2>/dev/null || true
+        fi
     fi
     
     # Crear contenedor Redis

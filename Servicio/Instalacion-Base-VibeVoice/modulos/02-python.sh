@@ -101,7 +101,17 @@ instalar_python() {
         }
         registrar_exito "Entorno virtual creado exitosamente"
     else
-        registrar_info "Entorno virtual ya existe"
+        # Verificar si el venv está corrupto
+        if [[ ! -f "${VIBE_VENV_DIR}/bin/python" ]] || [[ ! -f "${VIBE_VENV_DIR}/bin/activate" ]]; then
+            registrar_advertencia "Entorno virtual corrupto detectado. Eliminando y recreando..."
+            rm -rf "${VIBE_VENV_DIR}"
+            python3 -m venv "${VIBE_VENV_DIR}" || {
+                registrar_error_fatal "Error al recrear entorno virtual"
+            }
+            registrar_exito "Entorno virtual recreado exitosamente"
+        else
+            registrar_info "Entorno virtual ya existe y es válido"
+        fi
     fi
     
     # Activar entorno virtual e instalar paquetes base
