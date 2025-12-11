@@ -14,6 +14,19 @@ set -euo pipefail
 INSTALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALLER_VERSION="1.0.0"
 
+# Modo no interactivo por defecto (puede sobrescribirse con NONINTERACTIVE=0)
+export NONINTERACTIVE="${NONINTERACTIVE:-1}"
+
+# Configurar bitácora central
+export BITACORA="${INSTALLER_DIR}/bitacoras/instalacion-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "${INSTALLER_DIR}/bitacoras"
+
+# Redirigir toda salida a bitácora y terminal
+exec > >(tee -a "${BITACORA}") 2>&1
+
+# Trap para capturar errores
+trap 'ret=$?; echo "[ERROR] Fallo en instalador (código=$ret). Revisa ${BITACORA}" >&2; exit $ret' ERR
+
 # Cargar configuración y librerías
 source "${INSTALLER_DIR}/configuracion/stack-vibe.conf"
 source "${INSTALLER_DIR}/librerias/registrador.sh"

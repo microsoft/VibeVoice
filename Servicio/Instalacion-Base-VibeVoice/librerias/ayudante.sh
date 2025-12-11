@@ -30,11 +30,17 @@ verificar_root() {
 # Propósito: Solicitar confirmación del usuario antes de continuar
 # Parámetros:
 #   $1: Mensaje de confirmación
-# Retorno: 0 si confirma, 1 si rechaza
+# Retorno: 0 si confirma (o si NONINTERACTIVE=1), 1 si rechaza
 # ============================================================================
 solicitar_confirmacion() {
     local mensaje="${1:-¿Desea continuar?}"
     local respuesta
+    
+    # En modo NONINTERACTIVE, asumir 'sí' automáticamente
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
+        registrar_info "Modo NONINTERACTIVE: auto-confirmando: ${mensaje}"
+        return 0
+    fi
     
     echo ""
     echo -e "${COLOR_AMARILLO}${mensaje} (s/N)${COLOR_RESET}"
