@@ -161,6 +161,12 @@
             --card-glow: var(--auto-glow);
         }
 
+        .agent-card.viva {
+            --card-color: #8b5cf6;
+            --card-color-light: #a78bfa;
+            --card-glow: rgba(139, 92, 246, 0.4);
+        }
+
         .agent-icon {
             width: 80px;
             height: 80px;
@@ -298,6 +304,26 @@
                 </div>
                 <button class="start-btn">
                     Start Conversation →
+                </button>
+            </div>
+
+            <!-- Medical Viva Examiner -->
+            <div class="agent-card viva" onclick="selectAgent('viva')">
+                <div class="agent-icon">🎓</div>
+                <h2 class="agent-title">Medical Viva Examiner</h2>
+                <p class="agent-description">
+                    Simulated viva voce examination for medical students. 
+                    Practice your clinical reasoning and medical knowledge with 
+                    a professional AI examiner.
+                </p>
+                <div class="agent-features">
+                    <span class="feature-tag">Viva Practice</span>
+                    <span class="feature-tag">Clinical Reasoning</span>
+                    <span class="feature-tag">Case Discussion</span>
+                    <span class="feature-tag">Performance Feedback</span>
+                </div>
+                <button class="start-btn">
+                    Start Examination →
                 </button>
             </div>
         </div>
