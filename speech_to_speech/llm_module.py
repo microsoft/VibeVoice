@@ -563,6 +563,230 @@ class StreamingLLM:
         logger.info("Conversation history cleared")
 
 
+class PerplexityLLM:
+    """
+    Perplexity API-based LLM with real-time web search built-in.
+    
+    This replaces the local Qwen model with Perplexity's API for:
+    - Real-time web search (no separate tool needed)
+    - Faster responses via API
+    - Up-to-date knowledge
+    """
+    
+    def __init__(self, api_key: str, model: str = "sonar"):
+        """
+        Initialize Perplexity LLM.
+        
+        Args:
+            api_key: Perplexity API key
+            model: Model to use (sonar, sonar-pro, sonar-reasoning)
+        """
+        import os
+        self.api_key = api_key or os.environ.get("PERPLEXITY_API_KEY", "")
+        self.model = model
+        self.api_url = "https://api.perplexity.ai/chat/completions"
+        self.conversation_history = []
+        self.max_history_turns = 5
+        self._system_prompt = None
+        
+        logger.info(f"PerplexityLLM initialized: model={model}")
+    
+    def initialize(self) -> None:
+        """No initialization needed for API-based LLM"""
+        if not self.api_key:
+            logger.warning("PERPLEXITY_API_KEY not set - LLM will not work")
+        else:
+            logger.info("PerplexityLLM ready")
+    
+    def set_system_prompt(self, prompt: str) -> None:
+        """Set a custom system prompt"""
+        self._system_prompt = prompt
+        logger.info(f"System prompt updated ({len(prompt)} chars)")
+    
+    def get_system_prompt(self) -> str:
+        """Get current system prompt"""
+        return self._system_prompt or "You are VEMI AI, a helpful voice assistant."
+    
+    def respond(
+        self,
+        user_message: str,
+        include_history: bool = True
+    ) -> LLMResponse:
+        """
+        Generate a response using Perplexity API.
+        """
+        import requests
+        start_time = time.time()
+        
+        if not self.api_key:
+            return LLMResponse(
+                text="I'm sorry, I'm not configured properly. Please set up the API key.",
+                tokens_generated=0,
+                generation_time_ms=0,
+                tokens_per_second=0,
+                is_complete=True
+            )
+        
+        try:
+            # Build messages
+            messages = [{"role": "system", "content": self.get_system_prompt()}]
+            
+            # Add conversation history
+            if include_history:
+                for turn in self.conversation_history[-self.max_history_turns:]:
+                    messages.append({"role": "user", "content": turn["user"]})
+                    messages.append({"role": "assistant", "content": turn["assistant"]})
+            
+            # Add current message
+            messages.append({"role": "user", "content": user_message})
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": 200,
+                "temperature": 0.7
+            }
+            
+            response = requests.post(
+                self.api_url,
+                headers=headers,
+                json=payload,
+                timeout=15
+            )
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            tokens = data.get("usage", {}).get("completion_tokens", 0)
+            
+            gen_time = (time.time() - start_time) * 1000
+            
+            # Update history
+            self.conversation_history.append({
+                "user": user_message,
+                "assistant": answer
+            })
+            if len(self.conversation_history) > self.max_history_turns:
+                self.conversation_history = self.conversation_history[-self.max_history_turns:]
+            
+            return LLMResponse(
+                text=answer.strip(),
+                tokens_generated=tokens,
+                generation_time_ms=gen_time,
+                tokens_per_second=tokens / (gen_time / 1000) if gen_time > 0 else 0,
+                is_complete=True
+            )
+            
+        except Exception as e:
+            logger.error(f"Perplexity API error: {e}")
+            gen_time = (time.time() - start_time) * 1000
+            return LLMResponse(
+                text="I'm having trouble connecting right now. Please try again.",
+                tokens_generated=0,
+                generation_time_ms=gen_time,
+                tokens_per_second=0,
+                is_complete=False
+            )
+    
+    def respond_streaming(
+        self,
+        user_message: str,
+        include_history: bool = True
+    ) -> Generator[str, None, None]:
+        """
+        Stream response (Perplexity doesn't support streaming, so we yield full response).
+        """
+        response = self.respond(user_message, include_history)
+        yield response.text
+    
+    async def respond_streaming_async(
+        self,
+        user_message: str,
+        include_history: bool = True
+    ) -> AsyncGenerator[str, None]:
+        """
+        Async stream response.
+        """
+        import aiohttp
+        
+        if not self.api_key:
+            yield "I'm sorry, I'm not configured properly."
+            return
+        
+        try:
+            # Build messages
+            messages = [{"role": "system", "content": self.get_system_prompt()}]
+            
+            if include_history:
+                for turn in self.conversation_history[-self.max_history_turns:]:
+                    messages.append({"role": "user", "content": turn["user"]})
+                    messages.append({"role": "assistant", "content": turn["assistant"]})
+            
+            messages.append({"role": "user", "content": user_message})
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": 200,
+                "temperature": 0.7,
+                "stream": True
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=15)
+                ) as response:
+                    response.raise_for_status()
+                    
+                    full_response = ""
+                    async for line in response.content:
+                        line = line.decode('utf-8').strip()
+                        if line.startswith('data: '):
+                            data_str = line[6:]
+                            if data_str == '[DONE]':
+                                break
+                            try:
+                                import json
+                                data = json.loads(data_str)
+                                delta = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                if delta:
+                                    full_response += delta
+                                    yield delta
+                            except:
+                                pass
+                    
+                    # Update history
+                    self.conversation_history.append({
+                        "user": user_message,
+                        "assistant": full_response
+                    })
+                    if len(self.conversation_history) > self.max_history_turns:
+                        self.conversation_history = self.conversation_history[-self.max_history_turns:]
+                        
+        except Exception as e:
+            logger.error(f"Perplexity streaming error: {e}")
+            yield "I'm having trouble connecting. Please try again."
+    
+    def reset(self) -> None:
+        """Reset conversation history"""
+        self.conversation_history = []
+        logger.info("Conversation history cleared")
+
+
 # Convenience function
 def create_llm(
     model_name: str = "Qwen/Qwen2.5-1.5B-Instruct",
@@ -578,5 +802,15 @@ def create_llm(
         max_new_tokens=max_tokens
     )
     llm = StreamingLLM(config)
+    llm.initialize()
+    return llm
+
+
+def create_perplexity_llm(
+    api_key: str = None,
+    model: str = "sonar"
+) -> PerplexityLLM:
+    """Create a Perplexity API-based LLM instance"""
+    llm = PerplexityLLM(api_key=api_key, model=model)
     llm.initialize()
     return llm

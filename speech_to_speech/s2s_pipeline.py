@@ -174,6 +174,7 @@ class PipelineConfig:
     max_llm_tokens: int = 350  # Allow complete responses with lists and explanations
     llm_temperature: float = 0.7
     use_finetuned_model: bool = False  # Fine-tuned model learned ChatDoctor patterns from training data
+    use_perplexity_llm: bool = True  # Use Perplexity API for real-time knowledge (requires PERPLEXITY_API_KEY)
     
     # TTS settings
     tts_voice: str = "en-Carter_man"
@@ -360,44 +361,56 @@ class S2SPipeline:
         
         # Initialize LLM
         logger.info("Loading LLM...")
-        from .llm_module import StreamingLLM, LLMConfig
         
-        # Determine which model to load
-        llm_model_path = self.config.llm_model  # Default: HuggingFace base model
-        
-        # Only use fine-tuned models if explicitly enabled
-        # Note: Fine-tuned models may have learned patterns from training data (e.g., ChatDoctor)
-        # that override system prompts. Use base model with strong prompts for better control.
-        if self.config.use_finetuned_model:
+        # Check if Perplexity API should be used (real-time knowledge, faster responses)
+        if self.config.use_perplexity_llm:
             import os
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            local_models = {
-                "medical": os.path.join(script_dir, "models", "medical_llm"),
-                "automobile": os.path.join(script_dir, "models", "automobile_llm"),
-            }
+            perplexity_key = os.environ.get("PERPLEXITY_API_KEY", "")
+            if perplexity_key:
+                from .llm_module import PerplexityLLM
+                logger.info("Using Perplexity API for real-time LLM responses")
+                self._llm = PerplexityLLM(api_key=perplexity_key, model="sonar")
+                self._llm.initialize()
+                self._llm.set_system_prompt(SYSTEM_PROMPTS.get(self._agent_type, SYSTEM_PROMPTS["general"]))
+            else:
+                logger.warning("PERPLEXITY_API_KEY not set, falling back to local LLM")
+                self.config.use_perplexity_llm = False
+        
+        # Fall back to local Qwen model if Perplexity not configured
+        if not self.config.use_perplexity_llm:
+            from .llm_module import StreamingLLM, LLMConfig
             
-            # Check if we have a fine-tuned model for the current agent
-            if self._agent_type in local_models:
-                local_path = local_models[self._agent_type]
-                if os.path.exists(local_path) and os.path.isdir(local_path):
-                    if any(f.endswith(('.safetensors', '.bin')) for f in os.listdir(local_path)):
-                        llm_model_path = local_path
-                        logger.info(f"Using fine-tuned {self._agent_type} model: {local_path}")
-        else:
-            logger.info(f"Using base model (fine-tuned models disabled): {llm_model_path}")
-        
-        llm_config = LLMConfig(
-            model_name=llm_model_path,
-            device=self.config.device,
-            dtype=self.config.llm_dtype,
-            max_new_tokens=self.config.max_llm_tokens,
-            temperature=self.config.llm_temperature
-        )
-        self._llm = StreamingLLM(llm_config)
-        self._llm.initialize()
-        
-        # Set initial system prompt based on agent type
-        self._llm.set_system_prompt(SYSTEM_PROMPTS.get(self._agent_type, SYSTEM_PROMPTS["general"]))
+            # Determine which model to load
+            llm_model_path = self.config.llm_model  # Default: HuggingFace base model
+            
+            # Only use fine-tuned models if explicitly enabled
+            if self.config.use_finetuned_model:
+                import os
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                local_models = {
+                    "medical": os.path.join(script_dir, "models", "medical_llm"),
+                    "automobile": os.path.join(script_dir, "models", "automobile_llm"),
+                }
+                
+                if self._agent_type in local_models:
+                    local_path = local_models[self._agent_type]
+                    if os.path.exists(local_path) and os.path.isdir(local_path):
+                        if any(f.endswith(('.safetensors', '.bin')) for f in os.listdir(local_path)):
+                            llm_model_path = local_path
+                            logger.info(f"Using fine-tuned {self._agent_type} model: {local_path}")
+            else:
+                logger.info(f"Using local base model: {llm_model_path}")
+            
+            llm_config = LLMConfig(
+                model_name=llm_model_path,
+                device=self.config.device,
+                dtype=self.config.llm_dtype,
+                max_new_tokens=self.config.max_llm_tokens,
+                temperature=self.config.llm_temperature
+            )
+            self._llm = StreamingLLM(llm_config)
+            self._llm.initialize()
+            self._llm.set_system_prompt(SYSTEM_PROMPTS.get(self._agent_type, SYSTEM_PROMPTS["general"]))
         
         # Initialize TTS (connect to VibeVoice server)
         logger.info("Initializing TTS connection...")
@@ -580,21 +593,10 @@ class S2SPipeline:
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
             
-            # Check if tools are needed (web search, time queries)
-            from .tools_module import detect_and_execute_tool_async
-            tool_result = await detect_and_execute_tool_async(transcription.text)
-            
-            # LLM
+            # LLM (Perplexity has built-in web search, no separate tool needed)
             self.state = PipelineState.GENERATING
             llm_start = time.time()
-            
-            if tool_result and tool_result.success:
-                # Use tool result to augment LLM response
-                augmented_prompt = f"{transcription.text}\n\n[Tool Result: {tool_result.data}]\n\nBased on this information, provide a brief, conversational response."
-                llm_response = self._llm.respond(augmented_prompt)
-                logger.info(f"[TOOL] {tool_result.tool_name}: {tool_result.latency_ms:.0f}ms")
-            else:
-                llm_response = self._llm.respond(transcription.text)
+            llm_response = self._llm.respond(transcription.text)
             
             llm_time = (time.time() - llm_start) * 1000
             
@@ -698,18 +700,7 @@ class S2SPipeline:
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
             
-            # Check if tools are needed (web search, time queries)
-            from .tools_module import detect_and_execute_tool_async
-            tool_result = await detect_and_execute_tool_async(transcription.text)
-            
-            # Prepare the prompt (with or without tool result)
-            if tool_result and tool_result.success:
-                user_prompt = f"{transcription.text}\n\n[Tool Result: {tool_result.data}]\n\nBased on this information, provide a brief, conversational response."
-                logger.info(f"[TOOL] {tool_result.tool_name}: {tool_result.latency_ms:.0f}ms")
-            else:
-                user_prompt = transcription.text
-            
-            # LLM with sentence-level streaming
+            # LLM with sentence-level streaming (Perplexity has built-in web search)
             self.state = PipelineState.GENERATING
             llm_start = time.time()
             
@@ -720,7 +711,7 @@ class S2SPipeline:
             tts_first_time = 0
             tokens_count = 0
             
-            async for token in self._llm.respond_streaming_async(user_prompt):
+            async for token in self._llm.respond_streaming_async(transcription.text):
                 # Check for cancellation
                 if self._cancel_event.is_set():
                     logger.info("Cancelled during LLM generation")
