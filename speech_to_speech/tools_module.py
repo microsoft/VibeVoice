@@ -38,14 +38,15 @@ class ToolResult:
 class WebSearchTool:
     """DuckDuckGo web search tool for real-time information"""
     
-    def __init__(self, max_results: int = 3, timeout: int = 5):
+    def __init__(self, max_results: int = 3, timeout: int = 8, max_retries: int = 2):
         self.max_results = max_results
         self.timeout = timeout
+        self.max_retries = max_retries
         self._ddgs = None
     
-    def _get_ddgs(self):
+    def _get_ddgs(self, force_new: bool = False):
         """Lazy load DDGS to avoid import errors if not installed"""
-        if self._ddgs is None:
+        if self._ddgs is None or force_new:
             try:
                 from duckduckgo_search import DDGS
                 self._ddgs = DDGS(timeout=self.timeout)
@@ -56,7 +57,7 @@ class WebSearchTool:
     
     def search(self, query: str, max_results: Optional[int] = None) -> ToolResult:
         """
-        Perform a web search using DuckDuckGo.
+        Perform a web search using DuckDuckGo with retry logic.
         
         Args:
             query: Search query
@@ -65,60 +66,76 @@ class WebSearchTool:
         Returns:
             ToolResult with search results summary
         """
-        import time
-        start = time.time()
+        import time as time_module
+        start = time_module.time()
         
-        ddgs = self._get_ddgs()
-        if ddgs is None:
-            return ToolResult(
-                success=False,
-                data="Web search is not available.",
-                tool_name="web_search",
-                latency_ms=0
-            )
+        results = None
+        last_error = None
         
-        try:
-            results = list(ddgs.text(
-                query, 
-                max_results=max_results or self.max_results,
-                safesearch="moderate"
-            ))
-            
-            if not results:
+        # Try with retries for rate limiting
+        for attempt in range(self.max_retries + 1):
+            ddgs = self._get_ddgs(force_new=(attempt > 0))
+            if ddgs is None:
                 return ToolResult(
-                    success=True,
-                    data=f"No results found for '{query}'.",
+                    success=False,
+                    data="Web search is not available.",
                     tool_name="web_search",
-                    latency_ms=(time.time() - start) * 1000
+                    latency_ms=0
                 )
             
-            # Format results for LLM consumption
-            summary_parts = []
-            for i, r in enumerate(results[:self.max_results], 1):
-                title = r.get('title', 'No title')
-                body = r.get('body', '')[:200]  # Limit body length
-                summary_parts.append(f"{i}. {title}: {body}")
-            
-            summary = "\n".join(summary_parts)
-            
-            latency = (time.time() - start) * 1000
-            logger.info(f"Web search for '{query}' completed in {latency:.0f}ms")
-            
-            return ToolResult(
-                success=True,
-                data=summary,
-                tool_name="web_search",
-                latency_ms=latency
-            )
-            
-        except Exception as e:
-            logger.error(f"Web search error: {e}")
+            try:
+                results = list(ddgs.text(
+                    query, 
+                    max_results=max_results or self.max_results,
+                    safesearch="moderate"
+                ))
+                break  # Success, exit retry loop
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                if "ratelimit" in error_str or "202" in error_str:
+                    if attempt < self.max_retries:
+                        logger.warning(f"Rate limited, retrying ({attempt + 1}/{self.max_retries})...")
+                        time_module.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                        continue
+                else:
+                    break  # Non-rate-limit error, don't retry
+        
+        if results is None:
+            logger.error(f"Web search failed after {self.max_retries + 1} attempts: {last_error}")
             return ToolResult(
                 success=False,
-                data=f"Search failed: {str(e)}",
+                data="Search temporarily unavailable. Please try again.",
                 tool_name="web_search",
-                latency_ms=(time.time() - start) * 1000
+                latency_ms=(time_module.time() - start) * 1000
             )
+        
+        if not results:
+            return ToolResult(
+                success=True,
+                data=f"No results found for '{query}'.",
+                tool_name="web_search",
+                latency_ms=(time_module.time() - start) * 1000
+            )
+        
+        # Format results for LLM consumption
+        summary_parts = []
+        for i, r in enumerate(results[:self.max_results], 1):
+            title = r.get('title', 'No title')
+            body = r.get('body', '')[:200]  # Limit body length
+            summary_parts.append(f"{i}. {title}: {body}")
+        
+        summary = "\n".join(summary_parts)
+        
+        latency = (time_module.time() - start) * 1000
+        logger.info(f"Web search for '{query}' completed in {latency:.0f}ms")
+        
+        return ToolResult(
+            success=True,
+            data=summary,
+            tool_name="web_search",
+            latency_ms=latency
+        )
     
     async def search_async(self, query: str, max_results: Optional[int] = None) -> ToolResult:
         """Async version of search"""
@@ -239,12 +256,13 @@ class ToolManager:
         
         # Patterns for detecting tool needs
         self.time_patterns = [
-            r"what(?:'s| is) the time in (.+?)(?:\?|$)",
-            r"what time is it in (.+?)(?:\?|$)",
-            r"current time in (.+?)(?:\?|$)",
-            r"time in (.+?)(?:\?|$)",
-            r"what(?:'s| is) the time(?:\?|$)",
+            r"what(?:'s| is) the (?:current )?time (?:in|at) (.+?)(?:\?|$)",
+            r"what time is it (?:in|at) (.+?)(?:\?|$)",
+            r"current time (?:in|at) (.+?)(?:\?|$)",
+            r"time (?:in|at) (.+?)(?:\?|$)",
+            r"what(?:'s| is) the (?:current )?time(?:\?|$)",
             r"what time is it(?:\?|$)",
+            r"tell me the time (?:in|at) (.+?)(?:\?|$)",
         ]
         
         self.search_patterns = [
@@ -258,9 +276,9 @@ class ToolManager:
         
         # Keywords that indicate web search is needed
         self.search_keywords = [
-            "latest", "current", "today", "yesterday", "recent",
+            "latest", "today", "yesterday", "recent",
             "news", "update", "price", "stock", "weather",
-            "vivawise", "what is", "who is", "where is",
+            "vivawise", "viva wise", "viva vice",  # Common ASR variations
         ]
         
         # Keywords to exclude from search (handled by LLM)
@@ -268,6 +286,7 @@ class ToolManager:
             "your name", "who are you", "help me", "how to",
             "headache", "pain", "symptom", "medicine", "doctor",
             "car", "tire", "engine", "brake", "oil",
+            "time",  # Exclude time queries from web search
         ]
     
     def detect_tool_need(self, user_message: str) -> Optional[Dict[str, Any]]:
