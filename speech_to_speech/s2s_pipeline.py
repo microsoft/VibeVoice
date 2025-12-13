@@ -142,21 +142,27 @@ IDENTITY:
 - Be conversational, natural, and helpful
 - Keep responses concise (2-3 sentences)""",
 
-    "viva": """You are a Medical Viva Examiner. When the user says ANY medical subject, you MUST respond with a clinical scenario question.
+    "viva": """You are a Medical Viva Examiner conducting simulated examinations.
 
-EXAMPLE:
-User: "I want cardiology"
-You: "A 58-year-old man with diabetes and hypertension presents with severe chest pain for 1 hour, radiating to his left arm. He is sweating and nauseated. BP is 90/60, pulse 110. ECG shows ST elevation in leads II, III, and aVF. What is your diagnosis?"
+WHEN USER SAYS A MEDICAL SUBJECT (cardiology, nephrology, neurology, etc.):
+Give a clinical scenario question immediately. Example:
+"A 58-year-old diabetic man presents with chest pain for 1 hour, radiating to left arm, sweating, BP 90/60, ECG shows ST elevation in II, III, aVF. What is your diagnosis?"
 
-User: "I want nephrology"  
-You: "A 45-year-old diabetic woman presents with facial puffiness, decreased urine output, and bilateral pedal edema for 2 weeks. Her serum creatinine is 5.2 mg/dL and potassium is 6.1 mEq/L. What is your diagnosis and immediate management?"
+WHEN USER ANSWERS:
+- If CORRECT: Say "Correct!" briefly confirm key points, then IMMEDIATELY ask next question in same scenario
+- If WRONG: Say "Not quite. The answer is [correct answer]. Key points: [explain briefly]." Then ask next question
+- If PARTIAL: Say "Partly right. [what was correct]. But [what was missing]." Then ask next question
 
-RULES:
-1. When user mentions a subject - give a scenario question IMMEDIATELY
-2. Include: patient age, gender, symptoms, relevant findings
-3. End with a question about diagnosis or management
-4. After student answers: explain if wrong, confirm if correct, then ask next question
-5. NEVER say "Let's begin" or "Great choice" - go straight to the scenario"""
+AFTER 3-4 QUESTIONS on one scenario, automatically move to NEW scenario without asking permission.
+
+NEVER:
+- Ask for student name or details
+- Say "Let's begin" or "Great choice"
+- Ask "Should I continue?" or "Ready for next?"
+- Just keep giving scenarios and questions
+
+IF USER SAYS "disconnect", "end call", "stop", "goodbye", or "that's all":
+Say "Thank you for the viva session. Goodbye!" and end."""
 }
 
 
@@ -316,6 +322,7 @@ class S2SPipeline:
         # Cancellation support for barge-in
         self._cancel_event = asyncio.Event()
         self._is_generating = False
+        self._disconnect_requested = False
         
         # Echo suppression - track when TTS last played to avoid picking up speaker audio
         self._last_tts_end_time = 0.0
@@ -601,6 +608,16 @@ class S2SPipeline:
                 self.state = PipelineState.IDLE
                 return
             
+            # Check for disconnect request
+            if self.is_disconnect_request(transcription.text):
+                logger.info(f"Disconnect requested: '{transcription.text}'")
+                self._disconnect_requested = True
+                goodbye_text = "Thank you for the viva session. Goodbye!"
+                async for audio_chunk in self._tts_service.synthesize_streaming(goodbye_text):
+                    yield audio_chunk
+                self._last_tts_end_time = time.time()
+                return
+            
             # Check for cancellation after ASR
             if self._cancel_event.is_set():
                 logger.info("Cancelled after ASR")
@@ -819,6 +836,29 @@ class S2SPipeline:
                         return True
         
         return False
+    
+    def is_disconnect_request(self, transcription: str) -> bool:
+        """Check if user is requesting to disconnect/end the call"""
+        text_lower = transcription.lower().strip()
+        
+        disconnect_phrases = [
+            "disconnect", "end call", "end the call", "stop the call",
+            "goodbye", "bye bye", "that's all", "thats all", "i'm done",
+            "stop now", "end session", "close the call", "hang up"
+        ]
+        
+        for phrase in disconnect_phrases:
+            if phrase in text_lower:
+                return True
+        return False
+    
+    def is_disconnect_requested(self) -> bool:
+        """Check if disconnect was requested"""
+        return getattr(self, '_disconnect_requested', False)
+    
+    def clear_disconnect(self) -> None:
+        """Clear disconnect flag"""
+        self._disconnect_requested = False
     
     def cancel(self) -> None:
         """Cancel ongoing generation (for barge-in)"""
@@ -1243,6 +1283,14 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                             ):
                                 # Send audio chunk
                                 await ws.send_bytes(audio_chunk)
+                            
+                            # Check if disconnect was requested
+                            if pipeline.is_disconnect_requested():
+                                logger.info("Closing connection due to disconnect request")
+                                await ws.send_json({"type": "status", "state": "disconnecting"})
+                                pipeline.clear_disconnect()
+                                await ws.close()
+                                return
                             
                             # Send metrics
                             await ws.send_json({
