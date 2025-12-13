@@ -6,7 +6,7 @@ Provides web search and utility functions for VEMI AI voice assistant.
 Created by Alvion Global Solutions.
 
 Features:
-- DuckDuckGo web search for real-time information
+- Brave Search API for reliable web search (free tier: 2000 queries/month)
 - Time queries for any timezone
 - Fast, low-latency tool execution
 - Async support for non-blocking operations
@@ -14,6 +14,7 @@ Features:
 
 import logging
 import asyncio
+import os
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 # Thread pool for running blocking operations
 _executor = ThreadPoolExecutor(max_workers=3)
+
+# Brave Search API key - get free key at https://brave.com/search/api/
+BRAVE_API_KEY = os.environ.get("BRAVE_API_KEY", "")
 
 
 @dataclass
@@ -36,28 +40,21 @@ class ToolResult:
 
 
 class WebSearchTool:
-    """DuckDuckGo web search tool for real-time information"""
+    """
+    Web search tool using Brave Search API.
     
-    def __init__(self, max_results: int = 3, timeout: int = 8, max_retries: int = 2):
+    Brave Search is reliable from datacenter IPs (unlike DuckDuckGo which rate limits).
+    Free tier: 2000 queries/month. Get API key at https://brave.com/search/api/
+    """
+    
+    def __init__(self, max_results: int = 3, timeout: int = 8):
         self.max_results = max_results
         self.timeout = timeout
-        self.max_retries = max_retries
-        self._ddgs = None
-    
-    def _get_ddgs(self, force_new: bool = False):
-        """Lazy load DDGS to avoid import errors if not installed"""
-        if self._ddgs is None or force_new:
-            try:
-                from duckduckgo_search import DDGS
-                self._ddgs = DDGS(timeout=self.timeout)
-            except ImportError:
-                logger.error("duckduckgo-search not installed. Run: pip install duckduckgo-search")
-                return None
-        return self._ddgs
+        self.api_key = BRAVE_API_KEY
     
     def search(self, query: str, max_results: Optional[int] = None) -> ToolResult:
         """
-        Perform a web search using DuckDuckGo with retry logic.
+        Perform a web search using Brave Search API.
         
         Args:
             query: Search query
@@ -67,75 +64,106 @@ class WebSearchTool:
             ToolResult with search results summary
         """
         import time as time_module
+        import requests
+        
         start = time_module.time()
         
-        results = None
-        last_error = None
-        
-        # Try with retries for rate limiting
-        for attempt in range(self.max_retries + 1):
-            ddgs = self._get_ddgs(force_new=(attempt > 0))
-            if ddgs is None:
-                return ToolResult(
-                    success=False,
-                    data="Web search is not available.",
-                    tool_name="web_search",
-                    latency_ms=0
-                )
-            
-            try:
-                results = list(ddgs.text(
-                    query, 
-                    max_results=max_results or self.max_results,
-                    safesearch="moderate"
-                ))
-                break  # Success, exit retry loop
-            except Exception as e:
-                last_error = e
-                error_str = str(e).lower()
-                if "ratelimit" in error_str or "202" in error_str:
-                    if attempt < self.max_retries:
-                        logger.warning(f"Rate limited, retrying ({attempt + 1}/{self.max_retries})...")
-                        time_module.sleep(0.5 * (attempt + 1))  # Exponential backoff
-                        continue
-                else:
-                    break  # Non-rate-limit error, don't retry
-        
-        if results is None:
-            logger.error(f"Web search failed after {self.max_retries + 1} attempts: {last_error}")
+        if not self.api_key:
+            logger.warning("BRAVE_API_KEY not set - web search disabled")
             return ToolResult(
                 success=False,
-                data="Search temporarily unavailable. Please try again.",
+                data="Web search not configured. Please set BRAVE_API_KEY.",
                 tool_name="web_search",
-                latency_ms=(time_module.time() - start) * 1000
+                latency_ms=0
             )
         
-        if not results:
+        try:
+            headers = {
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+                "X-Subscription-Token": self.api_key
+            }
+            
+            params = {
+                "q": query,
+                "count": max_results or self.max_results,
+                "safesearch": "moderate"
+            }
+            
+            response = requests.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                headers=headers,
+                params=params,
+                timeout=self.timeout
+            )
+            
+            if response.status_code == 401:
+                logger.error("Invalid Brave API key")
+                return ToolResult(
+                    success=False,
+                    data="Search API authentication failed.",
+                    tool_name="web_search",
+                    latency_ms=(time_module.time() - start) * 1000
+                )
+            
+            if response.status_code == 429:
+                logger.warning("Brave API rate limited")
+                return ToolResult(
+                    success=False,
+                    data="Search rate limited. Please try again.",
+                    tool_name="web_search",
+                    latency_ms=(time_module.time() - start) * 1000
+                )
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract web results
+            web_results = data.get("web", {}).get("results", [])
+            
+            if not web_results:
+                return ToolResult(
+                    success=True,
+                    data=f"No results found for '{query}'.",
+                    tool_name="web_search",
+                    latency_ms=(time_module.time() - start) * 1000
+                )
+            
+            # Format results for LLM consumption
+            summary_parts = []
+            for i, r in enumerate(web_results[:self.max_results], 1):
+                title = r.get('title', 'No title')
+                description = r.get('description', '')[:200]
+                summary_parts.append(f"{i}. {title}: {description}")
+            
+            summary = "\n".join(summary_parts)
+            
+            latency = (time_module.time() - start) * 1000
+            logger.info(f"Web search for '{query}' completed in {latency:.0f}ms")
+            
             return ToolResult(
                 success=True,
-                data=f"No results found for '{query}'.",
+                data=summary,
+                tool_name="web_search",
+                latency_ms=latency
+            )
+            
+        except requests.exceptions.Timeout:
+            logger.error(f"Web search timeout for '{query}'")
+            return ToolResult(
+                success=False,
+                data="Search timed out. Please try again.",
                 tool_name="web_search",
                 latency_ms=(time_module.time() - start) * 1000
             )
-        
-        # Format results for LLM consumption
-        summary_parts = []
-        for i, r in enumerate(results[:self.max_results], 1):
-            title = r.get('title', 'No title')
-            body = r.get('body', '')[:200]  # Limit body length
-            summary_parts.append(f"{i}. {title}: {body}")
-        
-        summary = "\n".join(summary_parts)
-        
-        latency = (time_module.time() - start) * 1000
-        logger.info(f"Web search for '{query}' completed in {latency:.0f}ms")
-        
-        return ToolResult(
-            success=True,
-            data=summary,
-            tool_name="web_search",
-            latency_ms=latency
-        )
+        except Exception as e:
+            logger.error(f"Web search error: {e}")
+            return ToolResult(
+                success=False,
+                data=f"Search failed: {str(e)}",
+                tool_name="web_search",
+                latency_ms=(time_module.time() - start) * 1000
+            )
     
     async def search_async(self, query: str, max_results: Optional[int] = None) -> ToolResult:
         """Async version of search"""

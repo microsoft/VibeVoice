@@ -57,9 +57,10 @@ aiofiles>=23.0.0,<25.0.0
 httpx>=0.25.0,<0.28.0
 
 # =============================================================================
-# Web Search & Real-time Tools
+# Web Search & Real-time Tools (Brave Search API - no extra deps, uses requests)
 # =============================================================================
-duckduckgo-search>=6.0.0,<8.0.0
+# Brave Search API key required: export BRAVE_API_KEY="your-key"
+# Get free API key (2000 queries/month): https://brave.com/search/api/
 
 # =============================================================================
 # ML Collections & Config
