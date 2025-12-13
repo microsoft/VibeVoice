@@ -79,6 +79,10 @@ EXAMPLE RESPONSES:
 - If user asks about a condition: "[Condition] is... Let me explain briefly. Do you have any specific symptoms?"
 - If user describes symptoms: "I see. To help you better, can you tell me [specific question]?"
 
+TOOL RESULTS:
+- When you receive a [Tool Result: ...] in the message, use that information to answer the user's question
+- Present the information naturally as if you knew it - don't mention searching or tools
+
 IDENTITY:
 - You are VEMI AI Medical Assistant - NEVER say "Chat Doctor" or any other name
 - Be warm, empathetic, professional, and educational
@@ -108,6 +112,10 @@ EXAMPLE RESPONSES:
 - If user asks about a car part: "The [part] is responsible for... Here's what you should know."
 - If user describes a problem: "That sounds like it could be [cause]. Let me ask - [diagnostic question]?"
 
+TOOL RESULTS:
+- When you receive a [Tool Result: ...] in the message, use that information to answer the user's question
+- Present the information naturally as if you knew it - don't mention searching or tools
+
 IDENTITY:
 - You are VEMI AI Automobile Assistant - always identify as VEMI AI
 - Be helpful, knowledgeable, and educational
@@ -123,6 +131,11 @@ CRITICAL BEHAVIOR:
 - If you don't understand something, politely ask for clarification
 - Provide helpful explanations when answering questions
 - Remember conversation context and refer back to previous topics naturally
+
+TOOL RESULTS:
+- When you receive a [Tool Result: ...] in the message, use that information to answer the user's question
+- Present the tool information naturally in your response, as if you knew it
+- Don't mention that you used a tool or searched the web - just provide the answer naturally
 
 IDENTITY:
 - You are VEMI AI - always identify yourself as VEMI AI
@@ -567,10 +580,22 @@ class S2SPipeline:
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
             
+            # Check if tools are needed (web search, time queries)
+            from .tools_module import detect_and_execute_tool_async
+            tool_result = await detect_and_execute_tool_async(transcription.text)
+            
             # LLM
             self.state = PipelineState.GENERATING
             llm_start = time.time()
-            llm_response = self._llm.respond(transcription.text)
+            
+            if tool_result and tool_result.success:
+                # Use tool result to augment LLM response
+                augmented_prompt = f"{transcription.text}\n\n[Tool Result: {tool_result.data}]\n\nBased on this information, provide a brief, conversational response."
+                llm_response = self._llm.respond(augmented_prompt)
+                logger.info(f"[TOOL] {tool_result.tool_name}: {tool_result.latency_ms:.0f}ms")
+            else:
+                llm_response = self._llm.respond(transcription.text)
+            
             llm_time = (time.time() - llm_start) * 1000
             
             # Clean response to remove unwanted patterns and greetings
@@ -673,6 +698,17 @@ class S2SPipeline:
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
             
+            # Check if tools are needed (web search, time queries)
+            from .tools_module import detect_and_execute_tool_async
+            tool_result = await detect_and_execute_tool_async(transcription.text)
+            
+            # Prepare the prompt (with or without tool result)
+            if tool_result and tool_result.success:
+                user_prompt = f"{transcription.text}\n\n[Tool Result: {tool_result.data}]\n\nBased on this information, provide a brief, conversational response."
+                logger.info(f"[TOOL] {tool_result.tool_name}: {tool_result.latency_ms:.0f}ms")
+            else:
+                user_prompt = transcription.text
+            
             # LLM with sentence-level streaming
             self.state = PipelineState.GENERATING
             llm_start = time.time()
@@ -684,7 +720,7 @@ class S2SPipeline:
             tts_first_time = 0
             tokens_count = 0
             
-            async for token in self._llm.respond_streaming_async(transcription.text):
+            async for token in self._llm.respond_streaming_async(user_prompt):
                 # Check for cancellation
                 if self._cancel_event.is_set():
                     logger.info("Cancelled during LLM generation")
