@@ -46,7 +46,7 @@ class LLMConfig:
     dtype: str = "bfloat16"  # bfloat16, float16, float32, int8
     
     # Generation settings
-    max_new_tokens: int = 64  # Short responses for real-time
+    max_new_tokens: int = 400  # Increased for complete scenario questions
     min_new_tokens: int = 1
     temperature: float = 0.7
     top_p: float = 0.9
@@ -701,7 +701,7 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
         payload = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": 250,  # Balanced for educational responses while staying voice-friendly
+            "max_tokens": 400,  # Increased for complete scenario questions
             "temperature": 0.7
         }
         
@@ -816,7 +816,7 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
             payload = {
                 "model": self.model,
                 "messages": messages,
-                "max_tokens": 250,  # Balanced for educational responses
+                "max_tokens": 400,  # Increased for complete scenario questions
                 "temperature": 0.7
             }
             
@@ -862,7 +862,7 @@ def create_llm(
     model_name: str = "Qwen/Qwen2.5-1.5B-Instruct",
     device: str = "cuda",
     dtype: str = "bfloat16",
-    max_tokens: int = 64
+    max_tokens: int = 400
 ) -> StreamingLLM:
     """Create a configured streaming LLM instance"""
     config = LLMConfig(
