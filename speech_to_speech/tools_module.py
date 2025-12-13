@@ -6,7 +6,7 @@ Provides web search and utility functions for VEMI AI voice assistant.
 Created by Alvion Global Solutions.
 
 Features:
-- Brave Search API for reliable web search (free tier: 2000 queries/month)
+- Perplexity API for intelligent web search and real-time information
 - Time queries for any timezone
 - Fast, low-latency tool execution
 - Async support for non-blocking operations
@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # Thread pool for running blocking operations
 _executor = ThreadPoolExecutor(max_workers=3)
 
-# Brave Search API key - get free key at https://brave.com/search/api/
-BRAVE_API_KEY = os.environ.get("BRAVE_API_KEY", "")
+# Perplexity API key - get key at https://www.perplexity.ai/settings/api
+PERPLEXITY_API_KEY = os.environ.get("PERPLEXITY_API_KEY", "")
 
 
 @dataclass
@@ -41,27 +41,27 @@ class ToolResult:
 
 class WebSearchTool:
     """
-    Web search tool using Brave Search API.
+    Web search tool using Perplexity API.
     
-    Brave Search is reliable from datacenter IPs (unlike DuckDuckGo which rate limits).
-    Free tier: 2000 queries/month. Get API key at https://brave.com/search/api/
+    Perplexity provides intelligent, summarized answers with real-time web search.
+    Get API key at https://www.perplexity.ai/settings/api
     """
     
-    def __init__(self, max_results: int = 3, timeout: int = 8):
-        self.max_results = max_results
+    def __init__(self, timeout: int = 10):
         self.timeout = timeout
-        self.api_key = BRAVE_API_KEY
+        self.api_key = PERPLEXITY_API_KEY
+        self.api_url = "https://api.perplexity.ai/chat/completions"
     
     def search(self, query: str, max_results: Optional[int] = None) -> ToolResult:
         """
-        Perform a web search using Brave Search API.
+        Perform a web search using Perplexity API.
         
         Args:
             query: Search query
-            max_results: Maximum number of results (default: 3)
+            max_results: Not used (Perplexity returns summarized answer)
             
         Returns:
-            ToolResult with search results summary
+            ToolResult with Perplexity's summarized answer
         """
         import time as time_module
         import requests
@@ -69,36 +69,45 @@ class WebSearchTool:
         start = time_module.time()
         
         if not self.api_key:
-            logger.warning("BRAVE_API_KEY not set - web search disabled")
+            logger.warning("PERPLEXITY_API_KEY not set - web search disabled")
             return ToolResult(
                 success=False,
-                data="Web search not configured. Please set BRAVE_API_KEY.",
+                data="Web search not configured. Please set PERPLEXITY_API_KEY.",
                 tool_name="web_search",
                 latency_ms=0
             )
         
         try:
             headers = {
-                "Accept": "application/json",
-                "Accept-Encoding": "gzip",
-                "X-Subscription-Token": self.api_key
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
             }
             
-            params = {
-                "q": query,
-                "count": max_results or self.max_results,
-                "safesearch": "moderate"
+            payload = {
+                "model": "sonar",  # Fast online model with web search
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant. Provide a brief, factual answer based on current web information. Keep responses concise (2-3 sentences max)."
+                    },
+                    {
+                        "role": "user",
+                        "content": query
+                    }
+                ],
+                "max_tokens": 150,
+                "temperature": 0.1
             }
             
-            response = requests.get(
-                "https://api.search.brave.com/res/v1/web/search",
+            response = requests.post(
+                self.api_url,
                 headers=headers,
-                params=params,
+                json=payload,
                 timeout=self.timeout
             )
             
             if response.status_code == 401:
-                logger.error("Invalid Brave API key")
+                logger.error("Invalid Perplexity API key")
                 return ToolResult(
                     success=False,
                     data="Search API authentication failed.",
@@ -107,7 +116,7 @@ class WebSearchTool:
                 )
             
             if response.status_code == 429:
-                logger.warning("Brave API rate limited")
+                logger.warning("Perplexity API rate limited")
                 return ToolResult(
                     success=False,
                     data="Search rate limited. Please try again.",
@@ -118,38 +127,29 @@ class WebSearchTool:
             response.raise_for_status()
             data = response.json()
             
-            # Extract web results
-            web_results = data.get("web", {}).get("results", [])
+            # Extract the answer from Perplexity response
+            answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             
-            if not web_results:
+            if not answer:
                 return ToolResult(
                     success=True,
-                    data=f"No results found for '{query}'.",
+                    data=f"No information found for '{query}'.",
                     tool_name="web_search",
                     latency_ms=(time_module.time() - start) * 1000
                 )
             
-            # Format results for LLM consumption
-            summary_parts = []
-            for i, r in enumerate(web_results[:self.max_results], 1):
-                title = r.get('title', 'No title')
-                description = r.get('description', '')[:200]
-                summary_parts.append(f"{i}. {title}: {description}")
-            
-            summary = "\n".join(summary_parts)
-            
             latency = (time_module.time() - start) * 1000
-            logger.info(f"Web search for '{query}' completed in {latency:.0f}ms")
+            logger.info(f"Perplexity search for '{query}' completed in {latency:.0f}ms")
             
             return ToolResult(
                 success=True,
-                data=summary,
+                data=answer.strip(),
                 tool_name="web_search",
                 latency_ms=latency
             )
             
         except requests.exceptions.Timeout:
-            logger.error(f"Web search timeout for '{query}'")
+            logger.error(f"Perplexity search timeout for '{query}'")
             return ToolResult(
                 success=False,
                 data="Search timed out. Please try again.",
@@ -157,7 +157,7 @@ class WebSearchTool:
                 latency_ms=(time_module.time() - start) * 1000
             )
         except Exception as e:
-            logger.error(f"Web search error: {e}")
+            logger.error(f"Perplexity search error: {e}")
             return ToolResult(
                 success=False,
                 data=f"Search failed: {str(e)}",
@@ -279,7 +279,7 @@ class ToolManager:
     """
     
     def __init__(self):
-        self.web_search = WebSearchTool(max_results=3, timeout=5)
+        self.web_search = WebSearchTool(timeout=10)
         self.time_tool = TimeTool()
         
         # Patterns for detecting tool needs

@@ -98,9 +98,9 @@ export MODEL_PATH="${MODEL_PATH:-microsoft/VibeVoice-Realtime-0.5B}"
 export ASR_MODEL="${ASR_MODEL:-large-v3}"  # Best accuracy model for transcription
 export LLM_MODEL="${LLM_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 
-# Web Search API (Brave Search - free tier: 2000 queries/month)
-# Get your free API key at: https://brave.com/search/api/
-export BRAVE_API_KEY="${BRAVE_API_KEY:-}"
+# Web Search API (Perplexity - intelligent search with real-time info)
+# Get your API key at: https://www.perplexity.ai/settings/api
+export PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY:-}"
 
 # Server ports (avoid 8001, 8888 which are reserved by RunPod)
 export S2S_PORT="${S2S_PORT:-8005}"

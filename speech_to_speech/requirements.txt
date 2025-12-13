@@ -57,10 +57,10 @@ aiofiles>=23.0.0,<25.0.0
 httpx>=0.25.0,<0.28.0
 
 # =============================================================================
-# Web Search & Real-time Tools (Brave Search API - no extra deps, uses requests)
+# Web Search & Real-time Tools (Perplexity API - no extra deps, uses requests)
 # =============================================================================
-# Brave Search API key required: export BRAVE_API_KEY="your-key"
-# Get free API key (2000 queries/month): https://brave.com/search/api/
+# Perplexity API key required: export PERPLEXITY_API_KEY="your-key"
+# Get API key at: https://www.perplexity.ai/settings/api
 
 # =============================================================================
 # ML Collections & Config
