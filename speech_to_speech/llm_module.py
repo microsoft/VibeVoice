@@ -594,7 +594,7 @@ class PerplexityLLM:
         self.model = model
         self.api_url = "https://api.perplexity.ai/chat/completions"
         self.conversation_history = []
-        self.max_history_turns = 5
+        self.max_history_turns = 20  # Increased for viva examiner context retention
         self._system_prompt = None
         self.max_retries = 3
         self.retry_delay = 0.5  # seconds
@@ -697,11 +697,11 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
             "Content-Type": "application/json"
         }
         
-        # Optimized payload for voice (shorter responses = faster + cheaper)
+        # Payload for voice responses
         payload = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": 150,  # Reduced for faster voice responses
+            "max_tokens": 250,  # Balanced for educational responses while staying voice-friendly
             "temperature": 0.7
         }
         
@@ -816,7 +816,7 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
             payload = {
                 "model": self.model,
                 "messages": messages,
-                "max_tokens": 150,  # Reduced for faster voice responses
+                "max_tokens": 250,  # Balanced for educational responses
                 "temperature": 0.7
             }
             
@@ -825,7 +825,7 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
                     self.api_url,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=15)
+                    timeout=aiohttp.ClientTimeout(total=20)
                 ) as response:
                     response.raise_for_status()
                     
