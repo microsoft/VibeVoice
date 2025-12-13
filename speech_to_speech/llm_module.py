@@ -580,6 +580,14 @@ class PerplexityLLM:
         Args:
             api_key: Perplexity API key
             model: Model to use (sonar, sonar-pro, sonar-reasoning)
+        
+        Pricing (as of Dec 2024):
+        - sonar: $1/M input tokens, $1/M output tokens (cheapest, fastest)
+        - sonar-pro: $3/M input, $15/M output (better quality)
+        - sonar-reasoning: $5/M input, $5/M output (best for complex reasoning)
+        
+        With $2 budget using 'sonar':
+        - ~2M tokens total = ~10,000+ conversations (avg 200 tokens each)
         """
         import os
         self.api_key = api_key or os.environ.get("PERPLEXITY_API_KEY", "")
@@ -588,6 +596,8 @@ class PerplexityLLM:
         self.conversation_history = []
         self.max_history_turns = 5
         self._system_prompt = None
+        self.max_retries = 3
+        self.retry_delay = 0.5  # seconds
         
         logger.info(f"PerplexityLLM initialized: model={model}")
     
@@ -656,7 +666,7 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
         include_history: bool = True
     ) -> LLMResponse:
         """
-        Generate a response using Perplexity API.
+        Generate a response using Perplexity API with retry logic.
         """
         import requests
         start_time = time.time()
@@ -670,75 +680,97 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
                 is_complete=True
             )
         
-        try:
-            # Build messages
-            messages = [{"role": "system", "content": self.get_system_prompt()}]
-            
-            # Add conversation history
-            if include_history:
-                for turn in self.conversation_history[-self.max_history_turns:]:
-                    messages.append({"role": "user", "content": turn["user"]})
-                    messages.append({"role": "assistant", "content": turn["assistant"]})
-            
-            # Add current message
-            messages.append({"role": "user", "content": user_message})
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "max_tokens": 200,
-                "temperature": 0.7
-            }
-            
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload,
-                timeout=15
-            )
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            tokens = data.get("usage", {}).get("completion_tokens", 0)
-            
-            # Clean response for voice output
-            answer = self._clean_response_for_voice(answer)
-            
-            gen_time = (time.time() - start_time) * 1000
-            
-            # Update history
-            self.conversation_history.append({
-                "user": user_message,
-                "assistant": answer
-            })
-            if len(self.conversation_history) > self.max_history_turns:
-                self.conversation_history = self.conversation_history[-self.max_history_turns:]
-            
-            return LLMResponse(
-                text=answer,
-                tokens_generated=tokens,
-                generation_time_ms=gen_time,
-                tokens_per_second=tokens / (gen_time / 1000) if gen_time > 0 else 0,
-                is_complete=True
-            )
-            
-        except Exception as e:
-            logger.error(f"Perplexity API error: {e}")
-            gen_time = (time.time() - start_time) * 1000
-            return LLMResponse(
-                text="I'm having trouble connecting right now. Please try again.",
-                tokens_generated=0,
-                generation_time_ms=gen_time,
-                tokens_per_second=0,
-                is_complete=False
-            )
+        # Build messages
+        messages = [{"role": "system", "content": self.get_system_prompt()}]
+        
+        # Add conversation history
+        if include_history:
+            for turn in self.conversation_history[-self.max_history_turns:]:
+                messages.append({"role": "user", "content": turn["user"]})
+                messages.append({"role": "assistant", "content": turn["assistant"]})
+        
+        # Add current message
+        messages.append({"role": "user", "content": user_message})
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # Optimized payload for voice (shorter responses = faster + cheaper)
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": 150,  # Reduced for faster voice responses
+            "temperature": 0.7
+        }
+        
+        # Retry logic for network resilience
+        last_error = None
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.post(
+                    self.api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=12  # Slightly reduced timeout
+                )
+                
+                if response.status_code == 429:  # Rate limited
+                    logger.warning(f"Perplexity rate limited, attempt {attempt + 1}/{self.max_retries}")
+                    time.sleep(self.retry_delay * (attempt + 1))
+                    continue
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                tokens = data.get("usage", {}).get("completion_tokens", 0)
+                
+                # Clean response for voice output
+                answer = self._clean_response_for_voice(answer)
+                
+                gen_time = (time.time() - start_time) * 1000
+                
+                # Update history
+                self.conversation_history.append({
+                    "user": user_message,
+                    "assistant": answer
+                })
+                if len(self.conversation_history) > self.max_history_turns:
+                    self.conversation_history = self.conversation_history[-self.max_history_turns:]
+                
+                return LLMResponse(
+                    text=answer,
+                    tokens_generated=tokens,
+                    generation_time_ms=gen_time,
+                    tokens_per_second=tokens / (gen_time / 1000) if gen_time > 0 else 0,
+                    is_complete=True
+                )
+                
+            except requests.exceptions.Timeout:
+                last_error = "Request timed out"
+                logger.warning(f"Perplexity timeout, attempt {attempt + 1}/{self.max_retries}")
+                continue
+            except requests.exceptions.ConnectionError:
+                last_error = "Connection error"
+                logger.warning(f"Perplexity connection error, attempt {attempt + 1}/{self.max_retries}")
+                time.sleep(self.retry_delay)
+                continue
+            except Exception as e:
+                last_error = str(e)
+                logger.error(f"Perplexity API error: {e}")
+                break
+        
+        # All retries failed
+        gen_time = (time.time() - start_time) * 1000
+        return LLMResponse(
+            text="I'm having trouble connecting right now. Please try again.",
+            tokens_generated=0,
+            generation_time_ms=gen_time,
+            tokens_per_second=0,
+            is_complete=False
+        )
     
     def respond_streaming(
         self,
@@ -784,7 +816,7 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
             payload = {
                 "model": self.model,
                 "messages": messages,
-                "max_tokens": 200,
+                "max_tokens": 150,  # Reduced for faster voice responses
                 "temperature": 0.7
             }
             
@@ -793,7 +825,7 @@ CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
                     self.api_url,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=20)
+                    timeout=aiohttp.ClientTimeout(total=15)
                 ) as response:
                     response.raise_for_status()
                     
