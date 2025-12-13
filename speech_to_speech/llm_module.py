@@ -604,8 +604,51 @@ class PerplexityLLM:
         logger.info(f"System prompt updated ({len(prompt)} chars)")
     
     def get_system_prompt(self) -> str:
-        """Get current system prompt"""
-        return self._system_prompt or "You are VEMI AI, a helpful voice assistant."
+        """Get current system prompt with voice-specific instructions"""
+        base_prompt = self._system_prompt or "You are VEMI AI, a helpful voice assistant."
+        
+        # Add voice-specific instructions to prevent citations and markdown
+        voice_instructions = """
+
+CRITICAL VOICE OUTPUT RULES (ALWAYS FOLLOW):
+- This is a VOICE conversation - your response will be spoken aloud by TTS
+- NEVER use citations like [1], [2], [3] - they will be read aloud awkwardly
+- NEVER use markdown formatting like **bold** or *italic* - speak naturally
+- NEVER use bullet points, numbered lists, or special characters
+- Keep responses SHORT (2-3 sentences max) - this is voice, not text
+- Speak conversationally as if talking to a friend
+- Do NOT reference sources or say "according to" - just give the answer naturally"""
+        
+        return base_prompt + voice_instructions
+    
+    def _clean_response_for_voice(self, text: str) -> str:
+        """Clean response for voice output - remove citations, markdown, etc."""
+        import re
+        
+        # Remove citation brackets [1], [2][3], etc.
+        text = re.sub(r'\[\d+\]', '', text)
+        
+        # Remove markdown bold **text** and *text*
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)
+        
+        # Remove markdown headers # ## ###
+        text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+        
+        # Remove markdown links [text](url)
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        
+        # Remove bullet points and numbered lists at start of lines
+        text = re.sub(r'^\s*[-•*]\s*', '', text, flags=re.MULTILINE)
+        text = re.sub(r'^\s*\d+\.\s*', '', text, flags=re.MULTILINE)
+        
+        # Remove multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove multiple newlines
+        text = re.sub(r'\n+', ' ', text)
+        
+        return text.strip()
     
     def respond(
         self,
@@ -665,6 +708,9 @@ class PerplexityLLM:
             answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             tokens = data.get("usage", {}).get("completion_tokens", 0)
             
+            # Clean response for voice output
+            answer = self._clean_response_for_voice(answer)
+            
             gen_time = (time.time() - start_time) * 1000
             
             # Update history
@@ -676,7 +722,7 @@ class PerplexityLLM:
                 self.conversation_history = self.conversation_history[-self.max_history_turns:]
             
             return LLMResponse(
-                text=answer.strip(),
+                text=answer,
                 tokens_generated=tokens,
                 generation_time_ms=gen_time,
                 tokens_per_second=tokens / (gen_time / 1000) if gen_time > 0 else 0,
@@ -711,7 +757,7 @@ class PerplexityLLM:
         include_history: bool = True
     ) -> AsyncGenerator[str, None]:
         """
-        Async stream response.
+        Async response - uses non-streaming for reliable voice output cleaning.
         """
         import aiohttp
         
@@ -739,8 +785,7 @@ class PerplexityLLM:
                 "model": self.model,
                 "messages": messages,
                 "max_tokens": 200,
-                "temperature": 0.7,
-                "stream": True
+                "temperature": 0.7
             }
             
             async with aiohttp.ClientSession() as session:
@@ -748,34 +793,27 @@ class PerplexityLLM:
                     self.api_url,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=15)
+                    timeout=aiohttp.ClientTimeout(total=20)
                 ) as response:
                     response.raise_for_status()
                     
-                    full_response = ""
-                    async for line in response.content:
-                        line = line.decode('utf-8').strip()
-                        if line.startswith('data: '):
-                            data_str = line[6:]
-                            if data_str == '[DONE]':
-                                break
-                            try:
-                                import json
-                                data = json.loads(data_str)
-                                delta = data.get('choices', [{}])[0].get('delta', {}).get('content', '')
-                                if delta:
-                                    full_response += delta
-                                    yield delta
-                            except:
-                                pass
+                    import json
+                    data = await response.json()
+                    answer = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    
+                    # Clean response for voice output
+                    answer = self._clean_response_for_voice(answer)
                     
                     # Update history
                     self.conversation_history.append({
                         "user": user_message,
-                        "assistant": full_response
+                        "assistant": answer
                     })
                     if len(self.conversation_history) > self.max_history_turns:
                         self.conversation_history = self.conversation_history[-self.max_history_turns:]
+                    
+                    # Yield the cleaned response
+                    yield answer
                         
         except Exception as e:
             logger.error(f"Perplexity streaming error: {e}")

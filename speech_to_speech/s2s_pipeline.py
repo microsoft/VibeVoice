@@ -700,80 +700,57 @@ class S2SPipeline:
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
             
-            # LLM with sentence-level streaming (Perplexity has built-in web search)
+            # LLM response (Perplexity returns complete response with built-in web search)
             self.state = PipelineState.GENERATING
             llm_start = time.time()
             
-            sentence_buffer = ""
             full_response = ""
-            sentence_delimiters = {'.', '!', '?', '。', '！', '？'}
-            first_audio_chunk = True
-            tts_first_time = 0
-            tokens_count = 0
+            async for response_text in self._llm.respond_streaming_async(transcription.text):
+                full_response = response_text  # Perplexity yields full response
             
-            async for token in self._llm.respond_streaming_async(transcription.text):
-                # Check for cancellation
+            llm_time = (time.time() - llm_start) * 1000
+            
+            # Clean response for voice output
+            full_response = clean_llm_response(full_response, user_greeted)
+            
+            logger.info(f"[LLM] '{full_response}' ({llm_time:.0f}ms)")
+            
+            # Check for cancellation after LLM
+            if self._cancel_event.is_set():
+                logger.info("Cancelled after LLM")
+                return
+            
+            if not full_response:
+                logger.warning("Empty LLM response, skipping TTS")
+                return
+            
+            # TTS - synthesize the complete response
+            self.state = PipelineState.SYNTHESIZING
+            tts_start = time.time()
+            first_audio_chunk = True
+            
+            async for audio_chunk in self._tts_service.synthesize_streaming(full_response):
                 if self._cancel_event.is_set():
-                    logger.info("Cancelled during LLM generation")
+                    logger.info("Cancelled during TTS")
                     return
                 
-                sentence_buffer += token
-                full_response += token
-                tokens_count += 1
-                
-                # Check for sentence boundary
-                if any(sentence_buffer.rstrip().endswith(d) for d in sentence_delimiters):
-                    sentence = sentence_buffer.strip()
-                    # Clean the sentence to remove unwanted patterns
-                    sentence = clean_llm_response(sentence, user_greeted)
-                    if sentence:
-                        # Log first sentence timing
-                        if first_audio_chunk:
-                            llm_time = (time.time() - llm_start) * 1000
-                            logger.info(f"[LLM] First sentence: '{sentence[:50]}...' ({llm_time:.0f}ms)")
-                        
-                        # Stream this sentence to TTS
-                        self.state = PipelineState.SYNTHESIZING
-                        tts_start = time.time()
-                        
-                        async for audio_chunk in self._tts_service.synthesize_streaming(sentence):
-                            if self._cancel_event.is_set():
-                                logger.info("Cancelled during TTS")
-                                return
-                            
-                            if first_audio_chunk:
-                                tts_first_time = (time.time() - tts_start) * 1000
-                                total = (time.time() - pipeline_start) * 1000
-                                
-                                self.last_metrics = PipelineMetrics(
-                                    asr_latency_ms=asr_time,
-                                    llm_latency_ms=llm_time,
-                                    tts_first_chunk_ms=tts_first_time,
-                                    total_latency_ms=total,
-                                    tokens_generated=tokens_count
-                                )
-                                
-                                logger.info(f"[E2E] {total:.0f}ms (ASR:{asr_time:.0f} LLM:{llm_time:.0f} TTS:{tts_first_time:.0f})")
-                                first_audio_chunk = False
-                            
-                            self.state = PipelineState.SPEAKING
-                            yield audio_chunk
+                if first_audio_chunk:
+                    tts_first_time = (time.time() - tts_start) * 1000
+                    total = (time.time() - pipeline_start) * 1000
                     
-                    sentence_buffer = ""
-            
-            # Process any remaining text in buffer
-            remaining = sentence_buffer.strip()
-            remaining = clean_llm_response(remaining, user_greeted)  # Clean remaining text
-            if remaining and not self._cancel_event.is_set():
-                self.state = PipelineState.SYNTHESIZING
-                async for audio_chunk in self._tts_service.synthesize_streaming(remaining):
-                    if self._cancel_event.is_set():
-                        return
-                    self.state = PipelineState.SPEAKING
-                    yield audio_chunk
-            
-            # Log full response
-            logger.info(f"[LLM] Full: '{full_response}'")
+                    self.last_metrics = PipelineMetrics(
+                        asr_latency_ms=asr_time,
+                        llm_latency_ms=llm_time,
+                        tts_first_chunk_ms=tts_first_time,
+                        total_latency_ms=total,
+                        tokens_generated=len(full_response.split())
+                    )
+                    
+                    logger.info(f"[E2E] {total:.0f}ms (ASR:{asr_time:.0f} LLM:{llm_time:.0f} TTS:{tts_first_time:.0f})")
+                    first_audio_chunk = False
+                
+                self.state = PipelineState.SPEAKING
+                yield audio_chunk
             
             # Update echo suppression timestamp when TTS finishes
             self._last_tts_end_time = time.time()
