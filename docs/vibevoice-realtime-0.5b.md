@@ -15,6 +15,8 @@ VibeVoice-Realtime is a **lightweight real‑time** text-to-speech model support
 
 </div>
 
+> Note (multilingual exploration): Although the model is primarily built for English, we found that it still exhibits a certain level of multilingual capability—and even performs reasonably well in some languages. We provide nine additional languages (German, French, Italian, Japanese, Korean, Dutch, Polish, Portuguese, and Spanish) for users to explore. These multilingual behaviors have not been extensively tested; use with caution and share observations.
+
 The model uses an interleaved, windowed design: it incrementally encodes incoming text chunks while, in parallel, continuing diffusion-based acoustic latent generation from prior context. Unlike the full multi-speaker long-form variants, this streaming model removes the semantic tokenizer and relies solely on an efficient acoustic tokenizer operating at an ultra-low frame rate (7.5 Hz).
 
 <div align="center">
@@ -111,11 +113,11 @@ Due to network latency, the time when audio playback is heard may exceed the ~30
 python demo/vibevoice_realtime_demo.py --model_path microsoft/VibeVoice-Realtime-0.5B
 ```
 
-Tip: You can also deploy and run the real-time demo on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb).
+Tip: Just try it on [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb).
 
 ### Usage 2: Inference from files directly
 ```bash
-# We provide some LLM generated example scripts under demo/text_examples/ for demo
+# We provide some example scripts under demo/text_examples/ for demo
 python demo/realtime_model_inference_from_file.py --model_path microsoft/VibeVoice-Realtime-0.5B --txt_path demo/text_examples/1p_vibevoice.txt --speaker_name Carter
 ```
 
