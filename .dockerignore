@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+.eggs/
+*.egg-info/
+.pytest_cache/
+
+# Node.js (frontend build will handle these)
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+docs/
+Figures/
+
+# Other
+*.log
+.env
+.env.local
+

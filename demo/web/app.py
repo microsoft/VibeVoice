@@ -505,3 +505,33 @@ def get_config():
         "default_voice": service.default_voice_key,
     }
 
+
+# API endpoints with /api prefix for Docker/React setup
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint for Docker containers."""
+    try:
+        service: StreamingTTSService = app.state.tts_service
+        is_ready = service.model is not None and service.processor is not None
+        return {
+            "status": "healthy" if is_ready else "loading",
+            "model_loaded": is_ready,
+            "device": getattr(app.state, "device", "unknown"),
+        }
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
+@app.get("/api/config")
+def get_api_config():
+    """API config endpoint for React frontend."""
+    service: StreamingTTSService = app.state.tts_service
+    voices = sorted(service.voice_presets.keys())
+    return {
+        "voices": voices,
+        "default_voice": service.default_voice_key,
+        "sample_rate": SAMPLE_RATE,
+        "model_path": getattr(app.state, "model_path", "unknown"),
+        "device": getattr(app.state, "device", "unknown"),
+    }
+

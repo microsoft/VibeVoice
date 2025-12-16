@@ -1,0 +1,50 @@
+version: '3.8'
+
+# Development configuration for VibeVoice
+# Use with: docker compose -f docker-compose.dev.yml up
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: vibevoice-backend-dev
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - MODEL_PATH=${MODEL_PATH:-microsoft/VibeVoice-Realtime-0.5B}
+      - MODEL_DEVICE=${MODEL_DEVICE:-cuda}
+      - VOICE_PRESET=${VOICE_PRESET:-en-Carter_man}
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+      - ./demo/voices:/app/demo/voices:ro
+      - ./demo/web:/app/demo/web:ro
+      - ./vibevoice:/app/vibevoice:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - vibevoice-dev-network
+
+  # Frontend development uses host machine's npm/node
+  # Run separately: cd frontend && npm run dev
+
+volumes:
+  huggingface-cache:
+    driver: local
+
+networks:
+  vibevoice-dev-network:
+    driver: bridge
+

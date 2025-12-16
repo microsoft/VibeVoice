@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 250 250 250;
+    --foreground: 9 9 11;
+    --card: 255 255 255;
+    --card-foreground: 9 9 11;
+    --primary: 99 102 241;
+    --primary-foreground: 255 255 255;
+    --muted: 244 244 245;
+    --muted-foreground: 113 113 122;
+    --accent: 79 70 229;
+    --border: 228 228 231;
+  }
+
+  .dark {
+    --background: 9 9 11;
+    --foreground: 250 250 250;
+    --card: 24 24 27;
+    --card-foreground: 250 250 250;
+    --primary: 129 140 248;
+    --primary-foreground: 9 9 11;
+    --muted: 39 39 42;
+    --muted-foreground: 161 161 170;
+    --accent: 99 102 241;
+    --border: 39 39 42;
+  }
+
+  * {
+    @apply border-surface-200 dark:border-surface-700;
+  }
+
+  body {
+    @apply bg-surface-50 text-surface-900 dark:bg-surface-950 dark:text-surface-50;
+    font-family: 'Outfit', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 
+           bg-primary-600 hover:bg-primary-700 
+           text-white font-semibold rounded-xl
+           transition-all duration-200 
+           shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary-600;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5
+           bg-surface-100 hover:bg-surface-200 
+           dark:bg-surface-800 dark:hover:bg-surface-700
+           text-surface-700 dark:text-surface-200
+           font-medium rounded-xl
+           border border-surface-200 dark:border-surface-700
+           transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .card {
+    @apply bg-white dark:bg-surface-900 
+           rounded-2xl border border-surface-200 dark:border-surface-800
+           shadow-sm;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 
+           bg-surface-50 dark:bg-surface-800
+           border border-surface-200 dark:border-surface-700 
+           rounded-xl
+           text-surface-900 dark:text-surface-100
+           placeholder:text-surface-400 dark:placeholder:text-surface-500
+           focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500
+           transition-all duration-200;
+  }
+
+  .select-field {
+    @apply w-full px-4 py-3 
+           bg-surface-50 dark:bg-surface-800
+           border border-surface-200 dark:border-surface-700 
+           rounded-xl
+           text-surface-900 dark:text-surface-100
+           focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500
+           transition-all duration-200
+           cursor-pointer appearance-none
+           bg-no-repeat bg-right;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-surface-100 dark:bg-surface-800 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-surface-300 dark:bg-surface-600 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-surface-400 dark:bg-surface-500;
+}
+
+/* Range slider styling */
+input[type="range"] {
+  @apply appearance-none bg-transparent cursor-pointer;
+}
+
+input[type="range"]::-webkit-slider-track {
+  @apply h-2 rounded-full bg-surface-200 dark:bg-surface-700;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none w-5 h-5 rounded-full bg-primary-500 
+         shadow-lg shadow-primary-500/30
+         border-2 border-white dark:border-surface-900
+         -mt-1.5;
+}
+
+input[type="range"]::-moz-range-track {
+  @apply h-2 rounded-full bg-surface-200 dark:bg-surface-700;
+}
+
+input[type="range"]::-moz-range-thumb {
+  @apply appearance-none w-5 h-5 rounded-full bg-primary-500 
+         shadow-lg shadow-primary-500/30
+         border-2 border-white dark:border-surface-900;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Streaming text cursor */
+.streaming-cursor::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: currentColor;
+  margin-left: 2px;
+  animation: blink 0.8s step-end infinite;
+  vertical-align: bottom;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
