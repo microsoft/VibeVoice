@@ -167,6 +167,12 @@
             --card-glow: rgba(139, 92, 246, 0.4);
         }
 
+        .agent-card.aviation {
+            --card-color: #0ea5e9;
+            --card-color-light: #38bdf8;
+            --card-glow: rgba(14, 165, 233, 0.4);
+        }
+
         .agent-icon {
             width: 80px;
             height: 80px;
@@ -321,6 +327,26 @@
                     <span class="feature-tag">Clinical Reasoning</span>
                     <span class="feature-tag">Case Discussion</span>
                     <span class="feature-tag">Performance Feedback</span>
+                </div>
+                <button class="start-btn">
+                    Start Examination →
+                </button>
+            </div>
+
+            <!-- Aviation Viva Examiner -->
+            <div class="agent-card aviation" onclick="selectAgent('aviation')">
+                <div class="agent-icon">✈️</div>
+                <h2 class="agent-title">Aviation Viva Examiner</h2>
+                <p class="agent-description">
+                    Simulated viva voce examination for pilots and aviation students. 
+                    Practice emergency procedures, systems knowledge, and 
+                    decision-making with a professional AI examiner.
+                </p>
+                <div class="agent-features">
+                    <span class="feature-tag">4 Scenarios</span>
+                    <span class="feature-tag">Emergency Procedures</span>
+                    <span class="feature-tag">Systems Knowledge</span>
+                    <span class="feature-tag">CRM & Decision Making</span>
                 </div>
                 <button class="start-btn">
                     Start Examination →
