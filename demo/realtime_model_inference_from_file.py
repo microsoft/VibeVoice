@@ -6,6 +6,7 @@ from typing import List, Tuple, Union, Dict, Any
 import time
 import torch
 import copy
+import glob
 
 from vibevoice.modular.modeling_vibevoice_streaming_inference import VibeVoiceStreamingForConditionalGenerationInference
 from vibevoice.processor.vibevoice_streaming_processor import VibeVoiceStreamingProcessor
@@ -20,20 +21,8 @@ class VoiceMapper:
     
     def __init__(self):
         self.setup_voice_presets()
-
-        # change name according to our preset voice file
-        new_dict = {}
-        for name, path in self.voice_presets.items():
-            
-            if '_' in name:
-                name = name.split('_')[0]
-            
-            if '-' in name:
-                name = name.split('-')[-1]
-
-            new_dict[name] = path
-        self.voice_presets.update(new_dict)
-        # print(list(self.voice_presets.keys()))
+        # for k, v in self.voice_presets.items():
+        #     print(f"{k}: {v}")
 
     def setup_voice_presets(self):
         """Setup voice presets by scanning the voices directory."""
@@ -50,15 +39,13 @@ class VoiceMapper:
         self.voice_presets = {}
         
         # Get all .pt files in the voices directory
-        pt_files = [f for f in os.listdir(voices_dir) 
-                    if f.lower().endswith('.pt') and os.path.isfile(os.path.join(voices_dir, f))]
+        pt_files = glob.glob(os.path.join(voices_dir, "**", "*.pt"), recursive=True)
         
         # Create dictionary with filename (without extension) as key
         for pt_file in pt_files:
-            # Remove .pt extension to get the name
-            name = os.path.splitext(pt_file)[0]
-            # Create full path
-            full_path = os.path.join(voices_dir, pt_file)
+            # key: filename without extension
+            name = os.path.splitext(os.path.basename(pt_file))[0].lower()
+            full_path = os.path.abspath(pt_file)
             self.voice_presets[name] = full_path
         
         # Sort the voice presets alphabetically by name for better UI
@@ -76,14 +63,19 @@ class VoiceMapper:
     def get_voice_path(self, speaker_name: str) -> str:
         """Get voice file path for a given speaker name"""
         # First try exact match
+        speaker_name = speaker_name.lower()
         if speaker_name in self.voice_presets:
             return self.voice_presets[speaker_name]
         
         # Try partial matching (case insensitive)
-        speaker_lower = speaker_name.lower()
+        matched_path = None
         for preset_name, path in self.voice_presets.items():
-            if preset_name.lower() in speaker_lower or speaker_lower in preset_name.lower():
-                return path
+            if preset_name.lower() in speaker_name or speaker_name in preset_name.lower():
+                if matched_path is not None:
+                    raise ValueError(f"Multiple voice presets match the speaker name '{speaker_name}', please make the speaker_name more specific.")
+                matched_path = path
+        if matched_path is not None:
+            return matched_path
         
         # Default to first voice if no match found
         default_voice = list(self.voice_presets.values())[0]
@@ -229,6 +221,7 @@ def main():
     
     target_device = args.device if args.device != "cpu" else "cpu"
     voice_sample = voice_mapper.get_voice_path(args.speaker_name)
+    print(f"Using voice preset for {args.speaker_name}: {voice_sample}")
     all_prefilled_outputs = torch.load(voice_sample, map_location=target_device, weights_only=False)
 
     # Prepare inputs for the model
