@@ -1,0 +1,74 @@
+---
+title: Kubernetes SDK Usage
+description: Standard patterns and guidelines for using the Kubernetes SDK across AI Platform Backend services.
+globs: ai-platform-backend/**/*.py,ai-platform-backend/**/*.go
+alwaysApply: false
+---
+
+# AI Platform Backend Kubernetes SDK Usage
+
+## Purpose
+
+Standardize Kubernetes SDK usage across the AI Platform Backend and enforce reliable, reproducible patterns for initialization, usage, and error handling.
+
+> The full, detailed guide with code examples is documented in [Kubernetes SDK Usage Guide](../../ai-platform-backend/docs/kubernetes-sdk-usage-guide.md). This rule summarizes and codifies that document.
+
+## Scope
+
+- Python: All code using the `kubernetes` Python client
+- Go: All code using `client-go` and the dynamic client
+
+## Quick Guide
+
+- Environment variables
+  - `KUBECONFIG`: Path to kubeconfig (set for local development)
+  - `KUBE_SKIP_TLS_VERIFY`: Whether to disable TLS verification. Default is verification enabled. Allow `true` only in development.
+- Cluster/local auto fallback
+  - Prefer InClusterConfig → fallback to KUBECONFIG → finally default path (`~/.kube/config`).
+- SSL verification
+  - Disable only when `KUBE_SKIP_TLS_VERIFY=true`; log an explicit warning when disabled.
+
+## Required Patterns
+
+1. Client initialization order
+
+- InClusterConfig first; on failure, fall back to kubeconfig.
+- Adjust TLS verification based on `KUBE_SKIP_TLS_VERIFY`.
+
+2. Client reuse
+
+- Reuse a shared `ApiClient` (Python) or `*rest.Config`/`Clientset` (Go), preferably via a singleton, to avoid excessive connection/config creation.
+
+3. Watch/streaming usage
+
+- Set `timeout_seconds` and implement periodic reconnect with backoff.
+- Pod logs: use `follow=False` for completed Pods and `follow=True` only for running Pods.
+- Use label selectors to reduce the resource scope.
+
+4. Error handling
+
+- For Python `ApiException`, branch on status codes (404/403/409/5xx, etc.).
+- Wrap and propagate configuration errors (`ConfigException`) with clear, actionable messages.
+- Use safe delete semantics where 404 is treated as success when deleting.
+
+5. Logging and sensitive data protection
+
+- Log important operations (create/delete/retry/SSL disabled) with appropriate levels (`info`/`warning`/`error`).
+- Mask sensitive values (env vars/URLs) before logging.
+
+6. Performance and resilience
+
+- Use pagination for large listings (`limit` + `_continue`).
+- Set API timeouts (e.g., Python `Configuration.timeout`).
+
+## Do/Don't
+
+- Do: Initialize in order InCluster → KUBECONFIG → default path.
+- Do: Disable TLS strictly based on `KUBE_SKIP_TLS_VERIFY`, and only in development.
+- Do: Apply label selectors, pagination, timeouts, and backoff.
+- Don't: Swallow exceptions or use overly broad `except Exception` without handling.
+- Don't: Create a new client on every call.
+
+## Reference (must read)
+
+- Full guide and examples: [Kubernetes SDK Usage Guide](../../ai-platform-backend/docs/kubernetes-sdk-usage-guide.md)

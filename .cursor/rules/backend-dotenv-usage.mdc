@@ -1,0 +1,72 @@
+---
+title: AI Platform Backend Dotenv Usage Rules
+description: Standardize .env.template and .env usage for the AI Platform Backend; see ai-platform-backend/docs/dotenv-usage-guide.md for details.
+globs: ai-platform-backend/**
+alwaysApply: false
+---
+
+# AI Platform Backend Dotenv Usage Rules
+
+## Purpose
+
+Standardize how `.env.template` and `.env` are managed across the AI Platform Backend to improve security and operational stability.
+
+## Authoritative Document (Detailed Guide)
+
+All background, examples, and implementation patterns are defined here. Please refer to it:
+
+**[AI Platform Backend Dotenv Usage Guide](../../ai-platform-backend/docs/dotenv-usage-guide.md)**
+
+## Scope
+
+- All services under AI Platform Backend: `auth/`, `serverless/`, `finetune/`, `datasets/`, `storage/`, `resources/`, etc.
+
+## Key Principles (Summary)
+
+- Never commit `.env` to Git. Only version `.env.template`.
+- Always add new environment variables to each service's `.env.template` first, including comments/description/examples.
+- For local development, copy `.env.template` to `.env` and fill in required values.
+- Do not provide defaults for secrets (tokens/passwords/keys); clearly mark them as required in comments.
+- Use UPPER_SNAKE_CASE keys; consider service prefixes to avoid collisions.
+
+## Loading Patterns (Choose One)
+
+- Recommended: Pydantic `BaseSettings` schema-based loading (types/validation/defaults/caching).
+- Alternative: `python-dotenv` + `os.getenv` for simpler services with few options.
+- See the "Loading patterns" section in `ai-platform-backend/docs/dotenv-usage-guide.md` for details.
+
+## Types and Validation
+
+- Parse booleans/numbers/lists (e.g., CORS) into real types (not strings).
+- Expand user paths (`~`) for path values.
+
+## Security Rules
+
+- For local `.env`, restrict file permissions to the user (e.g., `chmod 600 .env`).
+- Never print secrets in logs or expose them in issues/PRs.
+- Prefer external secret managers (Kubernetes Secrets, Secret Manager) for production.
+
+## Change Process
+
+1. Add new keys to `.env.template` (with description/examples/comments).
+2. Reflect the key in code (defaults/types/validation).
+3. Update README/docs if needed.
+4. During PR review, ensure `.env.template` changes are included.
+
+## File Location and Lifecycle
+
+- Place `.env.template` and `.env` in each service root. Locally: `cp .env.template .env` then fill values.
+- In container/deploy environments, inject via Helm/Secrets/ConfigMap instead of shipping `.env` files.
+
+## Troubleshooting Guide
+
+- If a service cannot read env vars: verify `.env` exists and path/encoding (UTF-8), check Pydantic `env_file` settings, and verify injection paths in containers/Kubernetes. See the detailed guide for more.
+
+## References
+
+- Always consult [AI Platform Backend Dotenv Usage Guide](../../ai-platform-backend/docs/dotenv-usage-guide.md) for details and examples.
+- Related libraries: `python-dotenv`, `pydantic-settings`
+
+---
+
+Last Updated: 2025-10-28

@@ -1,0 +1,22 @@
+---
+title: AI Platform Go Backend Local Development
+description: Essential summary rules for developing the AI Platform Go backend locally.
+globs: ai-platform/backend/go/**/*
+alwaysApply: false
+---
+
+# AI Platform Go Backend Local Development Rules
+
+- Always refer to the original guide: [AI Platform Go Backend 로컬 개발 가이드](../../ai-platform/backend/go/docs/local_development_guide.md).
+- Required tooling: Go 1.25.3+, PostgreSQL 15+, Docker, Make.
+- Copy the project root `.env.template` to `.env`, keep secrets out of version control, and remember that `DATABASE_URL` takes precedence over individual DB variables.
+- Define every required environment variable and its default in `.env.template`. When adding a new variable, append its default value (and a brief note if needed), share the update, and mirror the variable in `internal/config/config.go`.
+- Install dependencies with `go mod download`.
+- Start the local database with the provided Docker command and verify status via `docker ps | grep ai-platform-database`.
+- Run the application with `make run` or `go run cmd/server/main.go`. Startup performs DB connectivity checks, verifies migration state, applies pending migrations, and serves on `http://localhost:3000`.
+- Build with `make build` or `go build -o tkai-platform-backend cmd/server/main.go`, then execute `./tkai-platform-backend`.
+- Prefer the Docker workflow `make docker-build` and `make docker-run`; when running containers manually against the host DB, use `host.docker.internal`.
+- Perform health checks using `curl -i http://localhost:3000/health`; a healthy response looks like `{"status":"ok"}`.
+- Maintain quality with `make test`, `make test-coverage`, `make fmt`, `make vet`, and `make lint`.
+- Troubleshooting: adjust `.env` `SERVER_PORT` for port conflicts; for DB issues, check container status (`docker ps`), port conflicts (`lsof -i :5432`), `.env` values, and `host.docker.internal` when accessing the host from Docker.
+- Documentation: Always consult and update `project_structure.md` for structure changes, `database_migrations_guide.md` for migrations, `database_schemas/` for schema changes, and `api/` for API specifications.

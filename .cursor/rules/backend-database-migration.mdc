@@ -1,0 +1,42 @@
+---
+title: AI Platform Database Migration Guidelines
+description: Guidelines for database migration and SQLAlchemy model management in AI Platform Backend
+globs: ai-platform-backend/**/models.py,ai-platform-backend/**/models/**/*.py,ai-platform-backend/**/database*.py,ai-platform-backend/**/database/**/*.py,ai-platform-backend/database-migration/**/*.py
+alwaysApply: false
+---
+
+# AI Platform Backend Database Migration Guidelines
+
+All rules and guidelines for database migration and SQLAlchemy model management in AI Platform Backend are documented in detail in the following document:
+
+**📄 [AI Platform Database Migration Guidelines](../ai-platform-backend/database-migration/GUIDELINES.md)**
+
+## Key Topics
+
+This guideline document includes the following content:
+
+1. **SQLAlchemy Model Writing Rules**
+   - Basic structure and column type selection
+   - Required index rules
+   - Relationship definitions
+
+2. **Alembic Migration Script Writing Rules**
+   - File naming conventions (`V{N}__{description}.py`)
+   - Idempotency guarantee patterns
+   - PostgreSQL compatibility handling
+   - Index and constraint management
+
+3. **Migration Workflow**
+   - Environment setup guide (`DATABASE_URL` configuration)
+   - New table addition process
+   - Existing table modification process
+   - Production deployment precautions
+
+4. **Checklists**
+   - Environment setup verification items
+   - Model writing verification items
+   - Migration script writing verification items
+
+## Usage
+
+When working on database-related tasks in AI Platform Backend, you must refer to the guideline document above.

@@ -1,0 +1,31 @@
+# ai-platform-webui Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2025-10-29
+
+## Active Technologies
+- Python 3.11 (FastAPI), TypeScript 5.x (React), Go 1.22 (MCP) + FastAPI, Pydantic, PostgreSQL, React, Zod, Zustand (issue/1054-prevent-duplicate-template-names)
+- Go 1.22+ (issue/1145-refactor-unified-mcp)
+- Go 1.25.3 (issue/1145-refactor-unified-mcp)
+- Python 3.11 (backend), TypeScript 4.9+ (frontend) (issue/1284-kfp-integration)
+- PostgreSQL database (existing `DATABASE_URL` from settings.py) (issue/1284-kfp-integration)
+
+## Project Structure
+```
+ai-platform-backend/
+ai-platform/frontend/
+tests/
+```
+
+## Commands
+cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] pytest [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] ruff check .
+
+## Code Style
+Python 3.11 (FastAPI), TypeScript 5.x (React), Go 1.22 (MCP): Follow standard conventions
+
+## Recent Changes
+- issue/1284-kfp-integration: Added Python 3.11 (backend), TypeScript 4.9+ (frontend)
+- issue/1145-refactor-unified-mcp: Added Go 1.25.3
+- issue/1145-refactor-unified-mcp: Added Go 1.22+
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

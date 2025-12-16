@@ -1,0 +1,124 @@
+---
+title: Frontend Directory Structure
+description: Defines the main frontend directory and deprecated legacy paths
+globs: ['**/*.tsx', '**/*.ts', '**/*.jsx', '**/*.js']
+alwaysApply: true
+---
+
+# Frontend Directory Structure
+
+## Primary Frontend Directory
+
+**Main Frontend**: `ai-platform/frontend/`
+
+This is the **ONLY** active frontend directory. All frontend development, components, hooks, stores, and UI work should reference this path.
+
+### Structure
+```
+ai-platform/frontend/
+├── src/
+│   ├── components/       # Reusable UI components
+│   ├── features/         # Feature-specific modules
+│   │   ├── dashboard/    # Dashboard feature
+│   │   ├── monitoring/   # Monitoring feature
+│   │   ├── workloads/    # Workloads feature
+│   │   ├── hub/          # Hub (datasets, models, etc.)
+│   │   ├── fine-tune/    # Fine-tuning feature
+│   │   └── ...
+│   ├── layouts/          # Page layouts
+│   ├── config/           # Configuration files
+│   ├── hooks/            # Custom React hooks
+│   ├── stores/           # State management
+│   └── lib/              # Utility libraries
+├── public/               # Static assets
+└── package.json          # Dependencies
+```
+
+### Key Technologies
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS
+- **UI Components**: Custom components in `@/components/ui` and `@/components/ui-legacy`
+- **State Management**: Zustand (in `stores/`)
+- **API Client**: Axios-based clients in `config/api.ts`
+- **i18n**: react-i18next for internationalization
+
+## Deprecated Legacy Directories
+
+### ❌ DO NOT USE: `apps/web/`
+- **Status**: DEPRECATED / LEGACY
+- **Reason**: Old frontend implementation that has been replaced
+- **Action**: Always ignore this directory when searching for frontend code
+
+### ❌ DO NOT USE: `packages/`
+- **Status**: DEPRECATED / LEGACY
+- **Reason**: Shared packages have been fully integrated into `ai-platform/frontend/`
+- **Previous Contents**:
+  - `packages/api-client/` → now in `ai-platform/frontend/src/config/`
+  - `packages/hooks/` → now in `ai-platform/frontend/src/hooks/`
+  - `packages/stores/` → now in `ai-platform/frontend/src/stores/`
+  - `packages/ui/` → now in `ai-platform/frontend/src/components/`
+- **Action**: Never reference or suggest code from `packages/`
+
+## AI Assistant Guidelines
+
+When working with frontend code:
+
+1. **Always search in**: `ai-platform/frontend/`
+2. **Never reference**: `apps/web/` or `packages/`
+3. **For component search**: Look in `ai-platform/frontend/src/components/` or feature-specific directories
+4. **For hooks**: Look in `ai-platform/frontend/src/hooks/`
+
+### Example Search Patterns
+
+❌ **WRONG**:
+```
+"Where is the Button component?" → apps/web/src/components/ui/Button.tsx
+```
+
+✅ **CORRECT**:
+```
+"Where is the Button component?" → ai-platform/frontend/src/components/ui/button.tsx
+```
+
+❌ **WRONG**:
+```
+"Find useAuth hook" → packages/hooks/src/useAuth.ts
+```
+
+✅ **CORRECT**:
+```
+"Find useAuth hook" → ai-platform/frontend/src/hooks/useAuth.ts
+```
+
+## Running the Frontend
+
+```bash
+# Navigate to the frontend directory
+cd ai-platform/frontend
+
+# Install dependencies
+pnpm install
+
+# Start development server (default: http://localhost:5174)
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Run E2E tests
+pnpm test:e2e
+```
+
+## Important Notes
+
+- The frontend runs on **port 5173** in development mode
+- Backend APIs are proxied through Vite configuration
+- All routes are defined in `src/App.tsx` using React Router
+- The dashboard is accessible at `/dashboard`
+- Authentication is handled by the auth service at `ai-platform-backend/auth/`
+
+---
+
+**Last Updated**: 2025-11-03
+**Status**: Active and enforced

@@ -1,0 +1,21 @@
+---
+title: AI Platform Go Backend Database Migrations
+description: Summary rules for creating, running, and maintaining database migrations in the AI Platform Go backend.
+globs: ai-platform/backend/go/**/*
+alwaysApply: false
+---
+
+# AI Platform Go Backend Database Migration Rules
+
+- Always consult the detailed reference: [AI Platform Go Backend 데이터베이스 마이그레이션 가이드](../../ai-platform/backend/go/docs/database_migrations_guide.md).
+- Maintain schema documents under `ai-platform/backend/go/docs/database_schemas/`. Keep this directory as the single source of truth for table definitions.
+- When adding a new table, first add its schema document to `ai-platform/backend/go/docs/database_schemas/`, then author the migration scripts according to the documented schema.
+- When modifying an existing table, update the corresponding schema document first (including the "last edited" timestamp), and write migrations based on the updated document.
+- PostgreSQL 15+ is required; use the documented Docker command to run the local database and verify it with `docker ps | grep ai-platform-database`.
+- Prepare environment variables via `.env.template` (copy to `.env`), ensuring `DATABASE_URL` or the `DATABASE_*` variables are configured before running migration commands.
+- Install the `golang-migrate` CLI with `make migrate-install` or `go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest`.
+- Prefer Make targets for migration lifecycle (`make migrate-create`, `make migrate-up`, `make migrate-down`, `make migrate-status`, `make migrate-force`, etc.) to keep workflows consistent.
+- Create migration files under `ai-platform/backend/go/migrations/` using the naming pattern `{VERSION}__{description}.up.sql` and `.down.sql`, with zero-padded version numbers, English snake_case descriptions, and both up/down scripts present.
+- Write idempotent SQL that safely handles existing schema elements (`IF NOT EXISTS` / `IF EXISTS`) and remains compatible with PostgreSQL 15+.
+- Validate migrations locally by running `make migrate-up` followed by `make migrate-down`, and ensure indexes, constraints, and data updates follow safe patterns.
+- Troubleshoot issues by checking container status, port conflicts (`lsof -i :5432`), `.env` correctness, and using `make migrate-force` to resolve dirty states when necessary.
