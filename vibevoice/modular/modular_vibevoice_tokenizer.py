@@ -813,8 +813,6 @@ class TokenizerEncoder(nn.Module):
         return x
 
 
-=======
->>>>>>> upstream/main
 class TokenizerDecoder(nn.Module):
     """
     Decoder component for the VibeVoice tokenizer that converts latent representations back to audio.
