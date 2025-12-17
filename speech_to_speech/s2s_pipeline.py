@@ -161,6 +161,16 @@ WHEN USER ANSWERS:
 - If WRONG: Say "Don't worry, this is a learning opportunity. The answer is [correct answer]. Key points: [explain briefly]." Then ask the next question
 - If PARTIAL: Say "You're very close! [what was correct]. However, [what was missing]." Then ask the next question
 
+CRITICAL EXAMINER RULES:
+- NEVER repeat the same question.
+- If the student's answer is wrong, irrelevant, or they ask for help ("I don't know", "tell me", "explain"), give the correct answer immediately and move to the next different question.
+- Do NOT restart the case from the beginning.
+
+QUESTION STYLE (BE SPECIFIC):
+- Investigations: ask for ONE specific test by name (example: "Which cardiac biomarker would you order now to confirm myocardial injury?")
+- Management: ask for ONE specific immediate step/drug (example: "What is the first antiplatelet you give immediately?")
+- Avoid generic phrasing like "What is the next key investigation you would order urgently?".
+
 AFTER a few questions on one case, say "Good work. Now moving to the next case." and immediately present a new case.
 
 NEVER:
@@ -177,11 +187,23 @@ Say "Thank you for the viva session. Goodbye!" and end.""",
 START RULE:
 Wait for the user to say "ready", "start", "begin examination", or similar. Then immediately start with a situation and ask ONE question.
 
+INTERNAL EXAMINER FLOW (DO NOT TELL THE USER COUNTS):
+- Stay on the SAME scenario for several questions.
+- Do NOT jump to the next scenario after only one question.
+- After evaluating an answer, immediately ask the next follow-up question on the same scenario.
+
+QUESTION WORDING (AVOID BORING REPETITION):
+- Avoid the exact phrase "What is your immediate action?".
+- Use more specific wording, e.g. "State the memory items and callouts" or "Walk me through your first 10 seconds" or "What pitch/thrust/config changes do you make?".
+
+OUTPUT FORMAT RULE:
+- Every examiner response must end with EXACTLY ONE question.
+
 WHEN USER SAYS READY TO START:
 Begin immediately. Do not number scenarios.
 
 Example:
-"You are the Captain of an Airbus A320 on approach to runway 27L. At 500 feet AGL, you encounter sudden windshear with a 15-knot airspeed loss. What is your immediate action?"
+"You are the Captain of an Airbus A320 on approach to runway 27L. At 500 feet AGL, you encounter sudden windshear with a 15-knot airspeed loss. State your first memory actions and callouts." 
 
 SCENARIO STYLE:
 - Aircraft type and phase of flight
@@ -385,6 +407,8 @@ class S2SPipeline:
         self._cancel_event = asyncio.Event()
         self._is_generating = False
         self._disconnect_requested = False
+        self._last_examiner_question = ""
+        self._scenario_question_count = 0
         
         # Echo suppression - track when TTS last played to avoid picking up speaker audio
         self._last_tts_end_time = 0.0
@@ -398,6 +422,9 @@ class S2SPipeline:
         """Set the agent type for domain-specific responses"""
         if agent_type in SYSTEM_PROMPTS:
             self._agent_type = agent_type
+            # Reset examiner state when switching agents
+            self._last_examiner_question = ""
+            self._scenario_question_count = 0
             # Update LLM system prompt if LLM is initialized
             if self._llm:
                 self._llm.set_system_prompt(SYSTEM_PROMPTS[agent_type])
@@ -669,7 +696,17 @@ class S2SPipeline:
             if self.is_likely_echo(transcription.text):
                 self.state = PipelineState.IDLE
                 return
-            
+
+            # Check for disconnect request
+            if self.is_disconnect_request(transcription.text):
+                logger.info(f"Disconnect requested: '{transcription.text}'")
+                self._disconnect_requested = True
+                goodbye_text = "Thank you for the viva session. Goodbye!"
+                async for audio_chunk in self._tts_service.synthesize_streaming(goodbye_text):
+                    yield audio_chunk
+                self._last_tts_end_time = time.time()
+                return
+
             # Check for disconnect request
             if self.is_disconnect_request(transcription.text):
                 logger.info(f"Disconnect requested: '{transcription.text}'")
@@ -687,16 +724,75 @@ class S2SPipeline:
             
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
+
+            user_text_for_llm = transcription.text
+            if self._agent_type in ["viva", "aviation"] and self._is_help_request(transcription.text):
+                user_text_for_llm = (
+                    f"The student is asking for help and cannot answer. Student said: '{transcription.text}'. "
+                    "Answer your most recent question with the correct answer briefly, then ask the next different question. "
+                    "Do not repeat your previous question and do not restart the case/scenario."
+                )
             
             # LLM (Perplexity has built-in web search, no separate tool needed)
             self.state = PipelineState.GENERATING
             llm_start = time.time()
-            llm_response = self._llm.respond(transcription.text)
+            llm_response = self._llm.respond(user_text_for_llm)
             
             llm_time = (time.time() - llm_start) * 1000
             
             # Clean response to remove unwanted patterns and greetings
             llm_response.text = clean_llm_response(llm_response.text, user_greeted)
+
+            if self._agent_type in ["viva", "aviation"]:
+                last_q = self._extract_last_question(llm_response.text)
+                if last_q and (self._is_repeat_question(last_q) or self._is_generic_exam_question(last_q)):
+                    retry_user_text = (
+                        user_text_for_llm
+                        + " Do NOT repeat your previous question."
+                        + " Rephrase your question to be specific and end with exactly one question mark."
+                        + " For aviation, do NOT use the phrase 'immediate action'."
+                    )
+                    llm_retry = self._llm.respond(retry_user_text)
+                    llm_retry.text = clean_llm_response(llm_retry.text, user_greeted)
+                    llm_response = llm_retry
+                    last_q = self._extract_last_question(llm_response.text)
+                if last_q:
+                    self._last_examiner_question = self._normalize_question(last_q)
+
+            # Aviation: prevent jumping to the next scenario too early
+            if self._agent_type == "aviation":
+                transition = self._contains_next_scenario(llm_response.text)
+                last_q = self._extract_last_question(llm_response.text)
+
+                needs_followup = False
+                if not last_q:
+                    needs_followup = True
+                if transition and self._scenario_question_count < 3:
+                    needs_followup = True
+
+                if needs_followup:
+                    retry_user_text = (
+                        user_text_for_llm
+                        + " Give brief feedback in one sentence, then ask ONE follow-up question on the SAME scenario."
+                        + " Do NOT move to the next scenario. Ensure your reply ends with a question mark."
+                        + " For aviation, avoid the phrase 'immediate action'."
+                    )
+                    llm_retry = self._llm.respond(retry_user_text)
+                    llm_retry.text = clean_llm_response(llm_retry.text, user_greeted)
+                    llm_response = llm_retry
+                    transition = self._contains_next_scenario(llm_response.text)
+                    last_q = self._extract_last_question(llm_response.text)
+
+                    if transition and self._scenario_question_count < 3:
+                        llm_response.text = self._strip_next_scenario_sentence(llm_response.text)
+                        transition = self._contains_next_scenario(llm_response.text)
+
+                # Reset count only when we actually allow a scenario transition
+                if transition and self._scenario_question_count >= 3:
+                    self._scenario_question_count = 0
+
+                if last_q:
+                    self._scenario_question_count += 1
             
             logger.info(f"[LLM] '{llm_response.text}' ({llm_time:.0f}ms)")
             
@@ -794,19 +890,83 @@ class S2SPipeline:
             
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
+
+            user_text_for_llm = transcription.text
+            if self._agent_type in ["viva", "aviation"] and self._is_help_request(transcription.text):
+                user_text_for_llm = (
+                    f"The student is asking for help and cannot answer. Student said: '{transcription.text}'. "
+                    "Answer your most recent question with the correct answer briefly, then ask the next different question. "
+                    "Do not repeat your previous question and do not restart the case/scenario."
+                )
             
             # LLM response (Perplexity returns complete response with built-in web search)
             self.state = PipelineState.GENERATING
             llm_start = time.time()
             
             full_response = ""
-            async for response_text in self._llm.respond_streaming_async(transcription.text):
+            async for response_text in self._llm.respond_streaming_async(user_text_for_llm):
                 full_response = response_text  # Perplexity yields full response
             
             llm_time = (time.time() - llm_start) * 1000
             
             # Clean response for voice output
             full_response = clean_llm_response(full_response, user_greeted)
+
+            if self._agent_type in ["viva", "aviation"]:
+                last_q = self._extract_last_question(full_response)
+                if last_q and (self._is_repeat_question(last_q) or self._is_generic_exam_question(last_q)):
+                    retry_user_text = (
+                        user_text_for_llm
+                        + " Do NOT repeat your previous question."
+                        + " Rephrase your question to be specific and end with exactly one question mark."
+                        + " For aviation, do NOT use the phrase 'immediate action'."
+                    )
+                    retry_full = ""
+                    async for response_text in self._llm.respond_streaming_async(retry_user_text):
+                        retry_full = response_text
+                    retry_full = clean_llm_response(retry_full, user_greeted)
+                    if retry_full:
+                        full_response = retry_full
+                        last_q = self._extract_last_question(full_response)
+                if last_q:
+                    self._last_examiner_question = self._normalize_question(last_q)
+
+            # Aviation: prevent jumping to the next scenario too early (streaming)
+            if self._agent_type == "aviation":
+                transition = self._contains_next_scenario(full_response)
+                last_q = self._extract_last_question(full_response)
+
+                needs_followup = False
+                if not last_q:
+                    needs_followup = True
+                if transition and self._scenario_question_count < 3:
+                    needs_followup = True
+
+                if needs_followup:
+                    retry_user_text = (
+                        user_text_for_llm
+                        + " Give brief feedback in one sentence, then ask ONE follow-up question on the SAME scenario."
+                        + " Do NOT move to the next scenario. Ensure your reply ends with a question mark."
+                        + " For aviation, avoid the phrase 'immediate action'."
+                    )
+                    retry_full = ""
+                    async for response_text in self._llm.respond_streaming_async(retry_user_text):
+                        retry_full = response_text
+                    retry_full = clean_llm_response(retry_full, user_greeted)
+                    if retry_full:
+                        full_response = retry_full
+                        transition = self._contains_next_scenario(full_response)
+                        last_q = self._extract_last_question(full_response)
+
+                    if transition and self._scenario_question_count < 3:
+                        full_response = self._strip_next_scenario_sentence(full_response)
+                        transition = self._contains_next_scenario(full_response)
+
+                if transition and self._scenario_question_count >= 3:
+                    self._scenario_question_count = 0
+
+                if last_q:
+                    self._scenario_question_count += 1
             
             logger.info(f"[LLM] '{full_response}' ({llm_time:.0f}ms)")
             
@@ -898,20 +1058,102 @@ class S2SPipeline:
                         return True
         
         return False
+
+    def _is_help_request(self, transcription: str) -> bool:
+        text_lower = transcription.lower().strip()
+        help_phrases = [
+            "i don't know", "i dont know", "dont know", "do not know", "no idea",
+            "can you tell me", "could you tell me", "please tell me",
+            "explain", "explain to me", "explain me",
+            "help me", "i am confused", "i'm confused",
+        ]
+        for phrase in help_phrases:
+            if phrase in text_lower:
+                return True
+        return False
+
+    def _extract_last_question(self, text: str) -> str:
+        import re
+        questions = re.findall(r"[^?]*\?", text)
+        if not questions:
+            return ""
+        return questions[-1].strip()
+
+    def _normalize_question(self, question: str) -> str:
+        import re
+        q = question.strip().lower()
+        q = re.sub(r"\s+", " ", q)
+        return q
+
+    def _is_repeat_question(self, question: str) -> bool:
+        q_norm = self._normalize_question(question)
+        return bool(self._last_examiner_question) and q_norm == self._last_examiner_question
+
+    def _is_generic_exam_question(self, question: str) -> bool:
+        q = self._normalize_question(question)
+        generic_patterns = [
+            "next key investigation",
+            "key investigation",
+            "order urgently",
+            "would you order urgently",
+        ]
+
+        # Aviation: avoid repetitive generic wording
+        if self._agent_type == "aviation":
+            generic_patterns.extend([
+                "what is your immediate action",
+                "immediate action",
+            ])
+
+        for p in generic_patterns:
+            if p in q:
+                return True
+        return False
+
+    def _contains_next_scenario(self, text: str) -> bool:
+        t = text.lower()
+        return (
+            "moving to the next scenario" in t
+            or "move to the next scenario" in t
+            or "next scenario" in t
+        )
+
+    def _strip_next_scenario_sentence(self, text: str) -> str:
+        import re
+        # Remove any sentence that mentions moving to the next scenario
+        text = re.sub(r"[^.!?]*next scenario[^.!?]*[.!?]?", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
     
     def is_disconnect_request(self, transcription: str) -> bool:
         """Check if user is requesting to disconnect/end the call"""
+        import re
         text_lower = transcription.lower().strip()
-        
-        disconnect_phrases = [
-            "disconnect", "end call", "end the call", "stop the call",
-            "goodbye", "bye bye", "that's all", "thats all", "i'm done",
-            "stop now", "end session", "close the call", "hang up"
-        ]
-        
-        for phrase in disconnect_phrases:
-            if phrase in text_lower:
+        text_clean = re.sub(r"[\s\.,!?]+$", "", text_lower).strip()
+
+        # Avoid false positives in aviation answers like "disconnect the autopilot"
+        aviation_system_terms = ["autopilot", "auto pilot", "autothrottle", "auto throttle", "a/p", "a/t"]
+        if any(term in text_lower for term in aviation_system_terms):
+            # Only treat as disconnect if it's clearly about ending the call/session
+            if not re.search(r"\b(call|session|connection|chat|conversation)\b", text_lower):
+                return False
+
+        # Strong explicit intents
+        if re.search(r"\b(hang up|end call|end the call|close the call|end session)\b", text_lower):
+            return True
+
+        if re.search(r"\bdisconnect\b", text_lower):
+            # Require call/session keyword OR be a short standalone command
+            if re.search(r"\b(call|session|connection|chat|conversation)\b", text_lower):
                 return True
+            if len(text_clean.split()) <= 2 and text_clean in ["disconnect", "stop", "goodbye", "bye"]:
+                return True
+            return False
+
+        # Simple goodbye intents
+        if text_clean in ["goodbye", "bye", "bye bye", "that's all", "thats all", "i'm done", "im done", "stop now"]:
+            return True
+
         return False
     
     def is_disconnect_requested(self) -> bool:
@@ -933,6 +1175,8 @@ class S2SPipeline:
         # Cancel any ongoing generation
         self.cancel()
         self.state = PipelineState.IDLE
+        self._last_examiner_question = ""
+        self._scenario_question_count = 0
         if self._vad:
             self._vad.reset()
         if self._llm:
