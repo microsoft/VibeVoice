@@ -121,7 +121,11 @@ Tip: Just try it on [Colab](https://colab.research.google.com/github/microsoft/V
 python demo/realtime_model_inference_from_file.py --model_path microsoft/VibeVoice-Realtime-0.5B --txt_path demo/text_examples/1p_vibevoice.txt --speaker_name Carter
 ```
 
-
+### [Optional] More experimental voices 
+Download additional experimental multi-lingual speakers before launching demo or inference from files.
+```bash
+bash demo/download_experimental_voices.sh
+```
 ## Risks and limitations
 
 While efforts have been made to optimize it through various techniques, it may still produce outputs that are unexpected, biased, or inaccurate. VibeVoice inherits any biases, errors, or omissions produced by its base model (specifically, Qwen2.5 0.5b in this release).
