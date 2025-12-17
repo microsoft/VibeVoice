@@ -157,9 +157,18 @@ Example:
 "A 58-year-old diabetic man presents with chest pain for 1 hour, radiating to left arm, sweating, BP 90/60, ECG shows ST elevation in II, III, aVF. What is your diagnosis?"
 
 WHEN USER ANSWERS:
-- If CORRECT: Say "Correct!" briefly confirm key points, then IMMEDIATELY ask the next question in the same case
-- If WRONG: Say "Don't worry, this is a learning opportunity. The answer is [correct answer]. Key points: [explain briefly]." Then ask the next question
-- If PARTIAL: Say "You're very close! [what was correct]. However, [what was missing]." Then ask the next question
+- You MUST provide feedback in natural language based on the student's performance.
+- If the answer is completely correct: "That's exactly right. [brief confirmation]. Let me explain the key points..." then provide the model answer naturally.
+- If partially correct: "You're on the right track with [what was correct]. However, you missed [what was missing]. The complete approach would be..." then provide the model answer naturally.
+- If incorrect: "Not quite. The correct approach is..." then provide the model answer naturally.
+- ALWAYS provide the complete model answer, even when the student is correct.
+- Then IMMEDIATELY ask ONE follow-up question.
+
+FEEDBACK STYLE:
+- Use natural, encouraging language
+- Avoid rigid templates like "Correct / Partially correct / Incorrect. Model answer:"
+- Provide educational feedback that helps the student learn
+- Always sound professional and supportive, not robotic
 
 CRITICAL EXAMINER RULES:
 - NEVER repeat the same question.
@@ -171,7 +180,7 @@ QUESTION STYLE (BE SPECIFIC):
 - Management: ask for ONE specific immediate step/drug (example: "What is the first antiplatelet you give immediately?")
 - Avoid generic phrasing like "What is the next key investigation you would order urgently?".
 
-AFTER a few questions on one case, say "Good work. Now moving to the next case." and immediately present a new case.
+AFTER a few questions on one scenario, say "Good work. Now moving to the next scenario." and in the SAME message immediately present a new case vignette and ask ONE question.
 
 NEVER:
 - Ask for student name or details
@@ -188,9 +197,12 @@ START RULE:
 Wait for the user to say "ready", "start", "begin examination", or similar. Then immediately start with a situation and ask ONE question.
 
 INTERNAL EXAMINER FLOW (DO NOT TELL THE USER COUNTS):
-- Stay on the SAME scenario for several questions.
+- Stay on the SAME scenario for 3-5 questions to explore depth.
 - Do NOT jump to the next scenario after only one question.
 - After evaluating an answer, immediately ask the next follow-up question on the same scenario.
+- After 3-5 questions on one scenario, transition to the next scenario.
+- Support multiple scenarios (3-5 scenarios total) like medical viva.
+- Vary scenario topics to cover different aviation domains.
 
 QUESTION WORDING (AVOID BORING REPETITION):
 - Avoid the exact phrase "What is your immediate action?".
@@ -217,10 +229,16 @@ QUESTION FLOW:
 3. Limitations/regulations
 4. Decision-making/alternatives
 
+FEEDBACK STYLE:
+- Be professional and educational, not overly casual
+- Avoid excessive praise like "Excellent!" - use measured feedback
+- Focus on learning and improvement
+- Keep feedback concise and constructive
+
 WHEN USER ANSWERS:
-- If CORRECT: "Excellent! That's absolutely right. [confirm key points]. Moving to the next question..."
-- If PARTIAL: "You're very close! [what was correct]. However, [what was missing]. The complete answer includes: [explain]. Next question..."
-- If WRONG: "Don't worry, this is a learning opportunity. The correct answer is: [explain clearly]. Remember this for your actual exam. Next question..."
+- If CORRECT: "That's correct. [confirm key points briefly]. Next question..."
+- If PARTIAL: "You're on the right track. [what was correct]. However, [what was missing]. Next question..."
+- If WRONG: "Not quite. The correct approach is: [explain clearly]. Next question..."
 
 AFTER EACH SCENARIO:
 Say "Good work. Now moving to the next scenario." and present the next scenario.
@@ -706,16 +724,6 @@ class S2SPipeline:
                     yield audio_chunk
                 self._last_tts_end_time = time.time()
                 return
-
-            # Check for disconnect request
-            if self.is_disconnect_request(transcription.text):
-                logger.info(f"Disconnect requested: '{transcription.text}'")
-                self._disconnect_requested = True
-                goodbye_text = "Thank you for the viva session. Goodbye!"
-                async for audio_chunk in self._tts_service.synthesize_streaming(goodbye_text):
-                    yield audio_chunk
-                self._last_tts_end_time = time.time()
-                return
             
             # Check for cancellation after ASR
             if self._cancel_event.is_set():
@@ -724,6 +732,8 @@ class S2SPipeline:
             
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
+
+            prev_examiner_question = self._last_examiner_question
 
             user_text_for_llm = transcription.text
             if self._agent_type in ["viva", "aviation"] and self._is_help_request(transcription.text):
@@ -743,6 +753,15 @@ class S2SPipeline:
             # Clean response to remove unwanted patterns and greetings
             llm_response.text = clean_llm_response(llm_response.text, user_greeted)
 
+            if self._agent_type == "viva":
+                llm_response.text = llm_response.text.replace("moving to the next case", "moving to the next scenario")
+                llm_response.text = llm_response.text.replace("Move to the next case", "Move to the next scenario")
+                llm_response.text = llm_response.text.replace("next case", "next scenario")
+                llm_response.text = llm_response.text.replace(
+                    "Good work. Now moving to the next scenario:",
+                    "Good work. Now moving to the next scenario."
+                )
+
             if self._agent_type in ["viva", "aviation"]:
                 last_q = self._extract_last_question(llm_response.text)
                 if last_q and (self._is_repeat_question(last_q) or self._is_generic_exam_question(last_q)):
@@ -758,6 +777,96 @@ class S2SPipeline:
                     last_q = self._extract_last_question(llm_response.text)
                 if last_q:
                     self._last_examiner_question = self._normalize_question(last_q)
+
+            # Medical viva: always grade the answer + give model answer; prevent premature new case
+            if self._agent_type == "viva":
+                # Only enforce verdict/model answer when the student is responding to a prior question.
+                if not prev_examiner_question:
+                    transition = self._contains_viva_transition_phrase(llm_response.text)
+                    new_case = self._contains_new_case_vignette(llm_response.text)
+                    last_q = self._extract_last_question(llm_response.text)
+
+                    if transition or new_case:
+                        self._scenario_question_count = 0
+                    if last_q:
+                        self._scenario_question_count += 1
+                else:
+                    transition = self._contains_viva_transition_phrase(llm_response.text)
+                    new_case = self._contains_new_case_vignette(llm_response.text)
+                    last_q = self._extract_last_question(llm_response.text)
+
+                    needs_retry = False
+                    if not self._viva_has_verdict_and_model_answer(llm_response.text):
+                        needs_retry = True
+                    if (transition or new_case) and self._scenario_question_count < 3:
+                        needs_retry = True
+                    if (new_case and not transition) and self._scenario_question_count >= 3:
+                        needs_retry = True
+                    if transition and not new_case:
+                        needs_retry = True
+
+                    if needs_retry:
+                        retry_user_text = (
+                            user_text_for_llm
+                            + " Start with Correct / Partially correct / Incorrect."
+                            + " Then say 'Model answer:' and give the concise correct answer."
+                            + " Then ask ONE follow-up question."
+                            + " If changing to a new scenario, first say 'Good work. Now moving to the next scenario.'"
+                            + " and in the SAME message present the new case vignette and ask ONE question."
+                            + " Do NOT ask for permission to continue."
+                        )
+                        if self._scenario_question_count < 3:
+                            retry_user_text += " Stay on the same scenario; do NOT start a new case yet."
+                        llm_retry = self._llm.respond(retry_user_text)
+                        llm_retry.text = clean_llm_response(llm_retry.text, user_greeted)
+                        llm_response = llm_retry
+                        llm_response.text = llm_response.text.replace(
+                            "Good work. Now moving to the next scenario:",
+                            "Good work. Now moving to the next scenario."
+                        )
+                        transition = self._contains_viva_transition_phrase(llm_response.text)
+                        new_case = self._contains_new_case_vignette(llm_response.text)
+                        last_q = self._extract_last_question(llm_response.text)
+
+                        needs_retry_2 = False
+                        if not self._viva_has_verdict_and_model_answer(llm_response.text):
+                            needs_retry_2 = True
+                        if (transition or new_case) and self._scenario_question_count < 3:
+                            needs_retry_2 = True
+                        if (new_case and not transition) and self._scenario_question_count >= 3:
+                            needs_retry_2 = True
+                        if transition and not new_case:
+                            needs_retry_2 = True
+
+                        if needs_retry_2:
+                            retry_user_text_2 = (
+                                user_text_for_llm
+                                + " OUTPUT FORMAT MUST BE EXACT."
+                                + " First word must be Correct or Partially correct or Incorrect."
+                                + " Then include a line starting exactly with 'Model answer:'"
+                                + " Then ask exactly ONE follow-up question."
+                                + " If transitioning, include the sentence 'Good work. Now moving to the next scenario.'"
+                                + " and immediately after it include a new patient vignette (age + year-old + presents...) and ONE question."
+                            )
+                            if self._scenario_question_count < 3:
+                                retry_user_text_2 += " Do NOT transition scenarios yet."
+                            llm_retry_2 = self._llm.respond(retry_user_text_2)
+                            llm_retry_2.text = clean_llm_response(llm_retry_2.text, user_greeted)
+                            llm_retry_2.text = llm_retry_2.text.replace(
+                                "Good work. Now moving to the next scenario:",
+                                "Good work. Now moving to the next scenario."
+                            )
+                            llm_response = llm_retry_2
+                            transition = self._contains_viva_transition_phrase(llm_response.text)
+                            new_case = self._contains_new_case_vignette(llm_response.text)
+                            last_q = self._extract_last_question(llm_response.text)
+
+                    # Reset count when a new scenario/case begins
+                    if transition or (new_case and self._scenario_question_count >= 3):
+                        self._scenario_question_count = 0
+
+                    if last_q:
+                        self._scenario_question_count += 1
 
             # Aviation: prevent jumping to the next scenario too early
             if self._agent_type == "aviation":
@@ -882,6 +991,16 @@ class S2SPipeline:
             if self.is_likely_echo(transcription.text):
                 self.state = PipelineState.IDLE
                 return
+
+            # Check for disconnect request
+            if self.is_disconnect_request(transcription.text):
+                logger.info(f"Disconnect requested: '{transcription.text}'")
+                self._disconnect_requested = True
+                goodbye_text = "Thank you for the viva session. Goodbye!"
+                async for audio_chunk in self._tts_service.synthesize_streaming(goodbye_text):
+                    yield audio_chunk
+                self._last_tts_end_time = time.time()
+                return
             
             # Check for cancellation
             if self._cancel_event.is_set():
@@ -890,6 +1009,8 @@ class S2SPipeline:
             
             # Check if user greeted
             user_greeted = user_is_greeting(transcription.text)
+
+            prev_examiner_question = self._last_examiner_question
 
             user_text_for_llm = transcription.text
             if self._agent_type in ["viva", "aviation"] and self._is_help_request(transcription.text):
@@ -912,6 +1033,15 @@ class S2SPipeline:
             # Clean response for voice output
             full_response = clean_llm_response(full_response, user_greeted)
 
+            if self._agent_type == "viva":
+                full_response = full_response.replace("moving to the next case", "moving to the next scenario")
+                full_response = full_response.replace("Move to the next case", "Move to the next scenario")
+                full_response = full_response.replace("next case", "next scenario")
+                full_response = full_response.replace(
+                    "Good work. Now moving to the next scenario:",
+                    "Good work. Now moving to the next scenario."
+                )
+
             if self._agent_type in ["viva", "aviation"]:
                 last_q = self._extract_last_question(full_response)
                 if last_q and (self._is_repeat_question(last_q) or self._is_generic_exam_question(last_q)):
@@ -930,6 +1060,98 @@ class S2SPipeline:
                         last_q = self._extract_last_question(full_response)
                 if last_q:
                     self._last_examiner_question = self._normalize_question(last_q)
+
+            # Medical viva: always grade the answer + give model answer; prevent premature new case (streaming)
+            if self._agent_type == "viva":
+                transition = self._contains_viva_transition_phrase(full_response)
+                new_case = self._contains_new_case_vignette(full_response)
+                last_q = self._extract_last_question(full_response)
+
+                # Only enforce verdict/model answer when the student is responding to a prior question.
+                if not prev_examiner_question:
+                    if transition or new_case:
+                        self._scenario_question_count = 0
+                    if last_q:
+                        self._scenario_question_count += 1
+                else:
+                    needs_retry = False
+                    if not self._viva_has_verdict_and_model_answer(full_response):
+                        needs_retry = True
+                    if (transition or new_case) and self._scenario_question_count < 3:
+                        needs_retry = True
+                    if (new_case and not transition) and self._scenario_question_count >= 3:
+                        needs_retry = True
+                    if transition and not new_case:
+                        needs_retry = True
+
+                    if needs_retry:
+                        retry_user_text = (
+                            user_text_for_llm
+                            + " Start with Correct / Partially correct / Incorrect."
+                            + " Then say 'Model answer:' and give the concise correct answer."
+                            + " Then ask ONE follow-up question."
+                            + " If changing to a new scenario, first say 'Good work. Now moving to the next scenario.'"
+                            + " and in the SAME message present the new case vignette and ask ONE question."
+                            + " Do NOT ask for permission to continue."
+                        )
+                        if self._scenario_question_count < 3:
+                            retry_user_text += " Stay on the same scenario; do NOT start a new case yet."
+
+                        retry_full = ""
+                        async for response_text in self._llm.respond_streaming_async(retry_user_text):
+                            retry_full = response_text
+                        retry_full = clean_llm_response(retry_full, user_greeted)
+                        if retry_full:
+                            full_response = retry_full
+                            full_response = full_response.replace(
+                                "Good work. Now moving to the next scenario:",
+                                "Good work. Now moving to the next scenario."
+                            )
+                            transition = self._contains_viva_transition_phrase(full_response)
+                            new_case = self._contains_new_case_vignette(full_response)
+                            last_q = self._extract_last_question(full_response)
+
+                            needs_retry_2 = False
+                            if not self._viva_has_verdict_and_model_answer(full_response):
+                                needs_retry_2 = True
+                            if (transition or new_case) and self._scenario_question_count < 3:
+                                needs_retry_2 = True
+                            if (new_case and not transition) and self._scenario_question_count >= 3:
+                                needs_retry_2 = True
+                            if transition and not new_case:
+                                needs_retry_2 = True
+
+                            if needs_retry_2:
+                                retry_user_text_2 = (
+                                    user_text_for_llm
+                                    + " OUTPUT FORMAT MUST BE EXACT."
+                                    + " First word must be Correct or Partially correct or Incorrect."
+                                    + " Then include a line starting exactly with 'Model answer:'"
+                                    + " Then ask exactly ONE follow-up question."
+                                    + " If transitioning, include the sentence 'Good work. Now moving to the next scenario.'"
+                                    + " and immediately after it include a new patient vignette (age + year-old + presents...) and ONE question."
+                                )
+                                if self._scenario_question_count < 3:
+                                    retry_user_text_2 += " Do NOT transition scenarios yet."
+                                retry_full_2 = ""
+                                async for response_text in self._llm.respond_streaming_async(retry_user_text_2):
+                                    retry_full_2 = response_text
+                                retry_full_2 = clean_llm_response(retry_full_2, user_greeted)
+                                if retry_full_2:
+                                    full_response = retry_full_2
+                                    full_response = full_response.replace(
+                                        "Good work. Now moving to the next scenario:",
+                                        "Good work. Now moving to the next scenario."
+                                    )
+                                    transition = self._contains_viva_transition_phrase(full_response)
+                                    new_case = self._contains_new_case_vignette(full_response)
+                                    last_q = self._extract_last_question(full_response)
+
+                    if transition or (new_case and self._scenario_question_count >= 3):
+                        self._scenario_question_count = 0
+
+                    if last_q:
+                        self._scenario_question_count += 1
 
             # Aviation: prevent jumping to the next scenario too early (streaming)
             if self._agent_type == "aviation":
@@ -1029,7 +1251,9 @@ class S2SPipeline:
         # Pure acknowledgment phrases - these rarely need a response
         pure_acknowledgments = [
             "thank you", "thanks", "okay", "ok", "alright", "got it",
-            "understood", "i see", "fine", "good", "great", "perfect"
+            "understood", "i see", "fine", "good", "great", "perfect",
+            "mm-hmm", "mmhmm", "mhm", "uh-huh", "uhuh", "hmm", "mm",
+            "yeah", "yep", "yes", "yup", "uh huh", "mm hmm"
         ]
         
         # Echo patterns from TTS output
@@ -1037,7 +1261,8 @@ class S2SPipeline:
             "thank you", "thanks", "okay", "ok", "bye", "goodbye",
             "have a", "take care", "you're welcome", "welcome",
             "hello", "hi", "hey", "yes", "no", "sure", "right",
-            "safe travels", "stay safe", "good luck"
+            "safe travels", "stay safe", "good luck", "mm-hmm", "mmhmm",
+            "mhm", "uh-huh", "uhuh", "hmm", "mm", "yeah", "yep", "yup"
         ]
         
         # Check 1: Echo detection - short phrase within echo window
@@ -1116,14 +1341,44 @@ class S2SPipeline:
             "moving to the next scenario" in t
             or "move to the next scenario" in t
             or "next scenario" in t
+            or "moving to the next case" in t
+            or "move to the next case" in t
+            or "next case" in t
         )
+
+    def _contains_viva_transition_phrase(self, text: str) -> bool:
+        import re
+        t = (text or "").lower()
+        if not t:
+            return False
+        return re.search(r"\bgood work\.\s*now moving to the next scenario\b", t) is not None
 
     def _strip_next_scenario_sentence(self, text: str) -> str:
         import re
-        # Remove any sentence that mentions moving to the next scenario
-        text = re.sub(r"[^.!?]*next scenario[^.!?]*[.!?]?", "", text, flags=re.IGNORECASE)
+        # Remove any sentence that mentions moving to the next scenario/case
+        text = re.sub(r"[^.!?]*(next scenario|next case)[^.!?]*[.!?]?", "", text, flags=re.IGNORECASE)
         text = re.sub(r"\s+", " ", text).strip()
         return text
+
+    def _viva_has_verdict_and_model_answer(self, text: str) -> bool:
+        import re
+        t = (text or "").strip().lower()
+        if not t:
+            return False
+        if not re.match(r"^(correct|partially correct|incorrect)\b", t):
+            return False
+        return "model answer" in t
+
+    def _contains_new_case_vignette(self, text: str) -> bool:
+        import re
+        t = (text or "").lower()
+        if not t:
+            return False
+        # Heuristic: new vignette often begins with age + 'year-old' + 'presents'
+        age_pat = re.search(r"\b\d{1,3}\s*-?\s*year\s*-?\s*old\b", t)
+        if not age_pat:
+            return False
+        return "presents" in t
     
     def is_disconnect_request(self, transcription: str) -> bool:
         """Check if user is requesting to disconnect/end the call"""
