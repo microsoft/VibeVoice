@@ -808,8 +808,10 @@ class S2SPipeline:
                     if needs_retry:
                         retry_user_text = (
                             user_text_for_llm
-                            + " Start with Correct / Partially correct / Incorrect."
-                            + " Then say 'Model answer:' and give the concise correct answer."
+                            + " Provide natural feedback based on the student's answer."
+                            + " If correct: 'That's exactly right. [brief confirmation]. The key points are...' then the correct answer naturally."
+                            + " If partially correct: 'You're on the right track with [what was correct]. However, [what was missing]. The complete approach would be...' then the correct answer naturally."
+                            + " If incorrect: 'Not quite. The correct approach is...' then the correct answer naturally."
                             + " Then ask ONE follow-up question."
                             + " If changing to a new scenario, first say 'Good work. Now moving to the next scenario.'"
                             + " and in the SAME message present the new case vignette and ask ONE question."
@@ -841,9 +843,9 @@ class S2SPipeline:
                         if needs_retry_2:
                             retry_user_text_2 = (
                                 user_text_for_llm
-                                + " OUTPUT FORMAT MUST BE EXACT."
-                                + " First word must be Correct or Partially correct or Incorrect."
-                                + " Then include a line starting exactly with 'Model answer:'"
+                                + " OUTPUT FORMAT MUST BE NATURAL LANGUAGE."
+                                + " Start with natural feedback: 'That's exactly right.' or 'You're on the right track.' or 'Not quite.'"
+                                + " Then provide the correct answer naturally without saying 'Model answer:'."
                                 + " Then ask exactly ONE follow-up question."
                                 + " If transitioning, include the sentence 'Good work. Now moving to the next scenario.'"
                                 + " and immediately after it include a new patient vignette (age + year-old + presents...) and ONE question."
@@ -1087,8 +1089,10 @@ class S2SPipeline:
                     if needs_retry:
                         retry_user_text = (
                             user_text_for_llm
-                            + " Start with Correct / Partially correct / Incorrect."
-                            + " Then say 'Model answer:' and give the concise correct answer."
+                            + " Provide natural feedback based on the student's answer."
+                            + " If correct: 'That's exactly right. [brief confirmation]. The key points are...' then the correct answer naturally."
+                            + " If partially correct: 'You're on the right track with [what was correct]. However, [what was missing]. The complete approach would be...' then the correct answer naturally."
+                            + " If incorrect: 'Not quite. The correct approach is...' then the correct answer naturally."
                             + " Then ask ONE follow-up question."
                             + " If changing to a new scenario, first say 'Good work. Now moving to the next scenario.'"
                             + " and in the SAME message present the new case vignette and ask ONE question."
@@ -1124,9 +1128,9 @@ class S2SPipeline:
                             if needs_retry_2:
                                 retry_user_text_2 = (
                                     user_text_for_llm
-                                    + " OUTPUT FORMAT MUST BE EXACT."
-                                    + " First word must be Correct or Partially correct or Incorrect."
-                                    + " Then include a line starting exactly with 'Model answer:'"
+                                    + " OUTPUT FORMAT MUST BE NATURAL LANGUAGE."
+                                    + " Start with natural feedback: 'That's exactly right.' or 'You're on the right track.' or 'Not quite.'"
+                                    + " Then provide the correct answer naturally without saying 'Model answer:'."
                                     + " Then ask exactly ONE follow-up question."
                                     + " If transitioning, include the sentence 'Good work. Now moving to the next scenario.'"
                                     + " and immediately after it include a new patient vignette (age + year-old + presents...) and ONE question."
@@ -1365,9 +1369,23 @@ class S2SPipeline:
         t = (text or "").strip().lower()
         if not t:
             return False
-        if not re.match(r"^(correct|partially correct|incorrect)\b", t):
-            return False
-        return "model answer" in t
+        # Check for natural feedback patterns instead of rigid verdict
+        feedback_patterns = [
+            r"^(that's exactly right|that's correct|you're on the right track|not quite)",
+            r"^(partially correct|correct|incorrect)",
+            r"^(the correct approach is|the complete approach would be)"
+        ]
+        has_feedback = any(re.match(pattern, t) for pattern in feedback_patterns)
+        # Check if it contains the actual answer/explanation
+        has_answer = (
+            "the correct" in t or 
+            "the answer" in t or 
+            "the approach" in t or
+            "the key points" in t or
+            "should have" in t or
+            "would be" in t
+        )
+        return has_feedback and has_answer
 
     def _contains_new_case_vignette(self, text: str) -> bool:
         import re
