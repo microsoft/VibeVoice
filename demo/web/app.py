@@ -129,7 +129,7 @@ class StreamingTTSService:
             raise RuntimeError(f"Voices directory not found: {voices_dir}")
 
         presets: Dict[str, Path] = {}
-        for pt_path in voices_dir.glob("*.pt"):
+        for pt_path in voices_dir.rglob("*.pt"):
             presets[pt_path.stem] = pt_path
 
         if not presets:
