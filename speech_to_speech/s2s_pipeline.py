@@ -144,8 +144,13 @@ IDENTITY:
 
     "viva": """You are a Medical Viva Examiner conducting simulated examinations.
 
+EXAMINATION STRUCTURE:
+- You will conduct EXACTLY 4 scenarios
+- Each scenario has EXACTLY 3 questions
+- After all 4 scenarios (12 questions total), you MUST end the examination
+
 WHEN USER SAYS A MEDICAL SUBJECT (cardiology, nephrology, neurology, etc.):
-Immediately present a clinical case vignette and ask ONE question. Do not add any opener like "Great" or "Let's begin".
+Immediately present Scenario 1 with a clinical case vignette and ask the FIRST question. Do not add any opener like "Great" or "Let's begin".
 
 CASE VIGNETTE STYLE:
 - Age, sex, relevant history
@@ -162,7 +167,7 @@ WHEN USER ANSWERS:
 - If partially correct: "You're on the right track with [what was correct]. However, you missed [what was missing]. The complete approach would be..." then provide the model answer naturally.
 - If incorrect: "Not quite. The correct approach is..." then provide the model answer naturally.
 - ALWAYS provide the complete model answer, even when the student is correct.
-- Then IMMEDIATELY ask ONE follow-up question.
+- Then IMMEDIATELY ask the NEXT question in the same scenario.
 
 FEEDBACK STYLE:
 - Use natural, encouraging language
@@ -180,7 +185,12 @@ QUESTION STYLE (BE SPECIFIC):
 - Management: ask for ONE specific immediate step/drug (example: "What is the first antiplatelet you give immediately?")
 - Avoid generic phrasing like "What is the next key investigation you would order urgently?".
 
-AFTER a few questions on one scenario, say "Good work. Now moving to the next scenario." and in the SAME message immediately present a new case vignette and ask ONE question.
+SCENARIO TRANSITIONS:
+- After the 3rd question of a scenario, say "Good work. Now moving to the next scenario." and in the SAME message immediately present a new case vignette and ask the FIRST question of the new scenario.
+- Do this for Scenario 2, Scenario 3, and Scenario 4.
+
+AFTER COMPLETING ALL 4 SCENARIOS (12 questions total):
+Say "Thank you for attending the viva voce examination. I am disconnecting the call. Bye bye!"
 
 NEVER:
 - Ask for student name or details
@@ -188,34 +198,18 @@ NEVER:
 - Mention how many cases/scenarios or how many questions you will ask
 - Ask "Should I continue?" or "Ready for next?" (just continue automatically)
 
-IF USER SAYS "disconnect", "end call", "stop", "goodbye", or "that's all":
+IF USER SAYS "disconnect", "end call", "stop", "goodbye", or "that's all" BEFORE completing all scenarios:
 Say "Thank you for the viva session. Goodbye!" and end.""",
 
     "aviation": """You are an Aviation Viva Examiner conducting simulated pilot/aviation examinations.
 
+EXAMINATION STRUCTURE:
+- You will conduct EXACTLY 4 scenarios
+- Each scenario has EXACTLY 3 questions
+- After all 4 scenarios (12 questions total), you MUST end the examination
+
 START RULE:
-Wait for the user to say "ready", "start", "begin examination", or similar. Then immediately start with a situation and ask ONE question.
-
-INTERNAL EXAMINER FLOW (DO NOT TELL THE USER COUNTS):
-- Stay on the SAME scenario for 3-5 questions to explore depth.
-- Do NOT jump to the next scenario after only one question.
-- After evaluating an answer, immediately ask the next follow-up question on the same scenario.
-- After 3-5 questions on one scenario, transition to the next scenario.
-- Support multiple scenarios (3-5 scenarios total) like medical viva.
-- Vary scenario topics to cover different aviation domains.
-
-QUESTION WORDING (AVOID BORING REPETITION):
-- Avoid the exact phrase "What is your immediate action?".
-- Use more specific wording, e.g. "State the memory items and callouts" or "Walk me through your first 10 seconds" or "What pitch/thrust/config changes do you make?".
-
-OUTPUT FORMAT RULE:
-- Every examiner response must end with EXACTLY ONE question.
-
-WHEN USER SAYS READY TO START:
-Begin immediately. Do not number scenarios.
-
-Example:
-"You are the Captain of an Airbus A320 on approach to runway 27L. At 500 feet AGL, you encounter sudden windshear with a 15-knot airspeed loss. State your first memory actions and callouts." 
+Wait for the user to say "ready", "start", "begin examination", or similar. Then immediately present Scenario 1 with a situation and ask the FIRST question.
 
 SCENARIO STYLE:
 - Aircraft type and phase of flight
@@ -223,11 +217,17 @@ SCENARIO STYLE:
 - Key indications (warnings/parameters)
 - End with ONE question
 
-QUESTION FLOW:
+Example:
+"You are the Captain of an Airbus A320 on approach to runway 27L. At 500 feet AGL, you encounter sudden windshear with a 15-knot airspeed loss. State your first memory actions and callouts." 
+
+QUESTION WORDING (AVOID BORING REPETITION):
+- Avoid the exact phrase "What is your immediate action?".
+- Use more specific wording, e.g. "State the memory items and callouts" or "Walk me through your first 10 seconds" or "What pitch/thrust/config changes do you make?".
+
+QUESTION FLOW PER SCENARIO:
 1. Immediate action
 2. Procedure/checklist
-3. Limitations/regulations
-4. Decision-making/alternatives
+3. Limitations/regulations or decision-making
 
 FEEDBACK STYLE:
 - Be professional and educational, not overly casual
@@ -236,17 +236,18 @@ FEEDBACK STYLE:
 - Keep feedback concise and constructive
 
 WHEN USER ANSWERS:
-- If CORRECT: "That's correct. [confirm key points briefly]. Next question..."
-- If PARTIAL: "You're on the right track. [what was correct]. However, [what was missing]. Next question..."
-- If WRONG: "Not quite. The correct approach is: [explain clearly]. Next question..."
+- Provide natural feedback: "That's correct. [confirm key points briefly]..." or "You're on the right track. [what was correct]. However, [what was missing]..." or "Not quite. The correct approach is: [explain clearly]..."
+- ALWAYS provide the complete correct answer/explanation
+- Then IMMEDIATELY ask the NEXT question in the same scenario
 
-AFTER EACH SCENARIO:
-Say "Good work. Now moving to the next scenario." and present the next scenario.
+SCENARIO TRANSITIONS:
+- After the 3rd question of a scenario, say "Good work. Now moving to the next scenario." and in the SAME message immediately present a new scenario and ask the FIRST question of the new scenario.
+- Do this for Scenario 2, Scenario 3, and Scenario 4.
 
-AFTER ALL SCENARIOS COMPLETE:
-Say "Congratulations! You have completed the examination. Thank you for attending this aviation viva session. I am now disconnecting the call. Best of luck with your examinations. Goodbye!"
+AFTER COMPLETING ALL 4 SCENARIOS (12 questions total):
+Say "Thank you for attending the viva voce examination. I am disconnecting the call. Bye bye!"
 
-SCENARIO TOPICS (vary these):
+SCENARIO TOPICS (vary these across the 4 scenarios):
 - Emergency procedures (engine failure, fire, depressurization)
 - Weather decisions (windshear, thunderstorms, icing)
 - Systems knowledge (hydraulics, electrical, fuel)
@@ -260,7 +261,7 @@ NEVER:
 - Number scenarios
 - Ask "Should I continue?" - just proceed automatically
 
-IF USER SAYS "disconnect", "end call", "stop", or "goodbye" BEFORE the examination is complete:
+IF USER SAYS "disconnect", "end call", "stop", or "goodbye" BEFORE completing all scenarios:
 Say "Thank you for participating in this aviation viva session. Goodbye!" and end."""
 }
 
@@ -427,6 +428,7 @@ class S2SPipeline:
         self._disconnect_requested = False
         self._last_examiner_question = ""
         self._scenario_question_count = 0
+        self._scenario_count = 0  # Track number of scenarios completed
         
         # Echo suppression - track when TTS last played to avoid picking up speaker audio
         self._last_tts_end_time = 0.0
@@ -443,6 +445,7 @@ class S2SPipeline:
             # Reset examiner state when switching agents
             self._last_examiner_question = ""
             self._scenario_question_count = 0
+            self._scenario_count = 0
             # Update LLM system prompt if LLM is initialized
             if self._llm:
                 self._llm.set_system_prompt(SYSTEM_PROMPTS[agent_type])
@@ -819,6 +822,13 @@ class S2SPipeline:
                         )
                         if self._scenario_question_count < 3:
                             retry_user_text += " Stay on the same scenario; do NOT start a new case yet."
+                        elif self._scenario_question_count == 3:
+                            retry_user_text += " You MUST transition to the next scenario now. Say 'Good work. Now moving to the next scenario.' and present a new case."
+                        
+                        # Check if we've completed 4 scenarios
+                        if self._scenario_count >= 4:
+                            retry_user_text = "Say: 'Thank you for attending the viva voce examination. I am disconnecting the call. Bye bye!'"
+                        
                         llm_retry = self._llm.respond(retry_user_text)
                         llm_retry.text = clean_llm_response(llm_retry.text, user_greeted)
                         llm_response = llm_retry
@@ -866,9 +876,14 @@ class S2SPipeline:
                     # Reset count when a new scenario/case begins
                     if transition or (new_case and self._scenario_question_count >= 3):
                         self._scenario_question_count = 0
+                        self._scenario_count += 1  # Increment scenario counter
 
                     if last_q:
                         self._scenario_question_count += 1
+                    
+                    # Check if examination is complete (4 scenarios done)
+                    if self._scenario_count >= 4 and self._scenario_question_count >= 3:
+                        self._disconnect_requested = True
 
             # Aviation: prevent jumping to the next scenario too early
             if self._agent_type == "aviation":
@@ -888,6 +903,18 @@ class S2SPipeline:
                         + " Do NOT move to the next scenario. Ensure your reply ends with a question mark."
                         + " For aviation, avoid the phrase 'immediate action'."
                     )
+                    # Force transition after 3 questions
+                    if self._scenario_question_count == 3:
+                        retry_user_text = (
+                            user_text_for_llm
+                            + " You MUST transition to the next scenario now."
+                            + " Say 'Good work. Now moving to the next scenario.' and present a new aviation scenario with ONE question."
+                        )
+                    
+                    # Check if we've completed 4 scenarios
+                    if self._scenario_count >= 4:
+                        retry_user_text = "Say: 'Thank you for attending the viva voce examination. I am disconnecting the call. Bye bye!'"
+                    
                     llm_retry = self._llm.respond(retry_user_text)
                     llm_retry.text = clean_llm_response(llm_retry.text, user_greeted)
                     llm_response = llm_retry
@@ -901,9 +928,14 @@ class S2SPipeline:
                 # Reset count only when we actually allow a scenario transition
                 if transition and self._scenario_question_count >= 3:
                     self._scenario_question_count = 0
+                    self._scenario_count += 1  # Increment scenario counter
 
                 if last_q:
                     self._scenario_question_count += 1
+                
+                # Check if examination is complete (4 scenarios done)
+                if self._scenario_count >= 4 and self._scenario_question_count >= 3:
+                    self._disconnect_requested = True
             
             logger.info(f"[LLM] '{llm_response.text}' ({llm_time:.0f}ms)")
             
@@ -1100,6 +1132,12 @@ class S2SPipeline:
                         )
                         if self._scenario_question_count < 3:
                             retry_user_text += " Stay on the same scenario; do NOT start a new case yet."
+                        elif self._scenario_question_count == 3:
+                            retry_user_text += " You MUST transition to the next scenario now. Say 'Good work. Now moving to the next scenario.' and present a new case."
+                        
+                        # Check if we've completed 4 scenarios
+                        if self._scenario_count >= 4:
+                            retry_user_text = "Say: 'Thank you for attending the viva voce examination. I am disconnecting the call. Bye bye!'"
 
                         retry_full = ""
                         async for response_text in self._llm.respond_streaming_async(retry_user_text):
@@ -1153,9 +1191,14 @@ class S2SPipeline:
 
                     if transition or (new_case and self._scenario_question_count >= 3):
                         self._scenario_question_count = 0
+                        self._scenario_count += 1  # Increment scenario counter
 
                     if last_q:
                         self._scenario_question_count += 1
+                    
+                    # Check if examination is complete (4 scenarios done)
+                    if self._scenario_count >= 4 and self._scenario_question_count >= 3:
+                        self._disconnect_requested = True
 
             # Aviation: prevent jumping to the next scenario too early (streaming)
             if self._agent_type == "aviation":
@@ -1175,6 +1218,18 @@ class S2SPipeline:
                         + " Do NOT move to the next scenario. Ensure your reply ends with a question mark."
                         + " For aviation, avoid the phrase 'immediate action'."
                     )
+                    # Force transition after 3 questions
+                    if self._scenario_question_count == 3:
+                        retry_user_text = (
+                            user_text_for_llm
+                            + " You MUST transition to the next scenario now."
+                            + " Say 'Good work. Now moving to the next scenario.' and present a new aviation scenario with ONE question."
+                        )
+                    
+                    # Check if we've completed 4 scenarios
+                    if self._scenario_count >= 4:
+                        retry_user_text = "Say: 'Thank you for attending the viva voce examination. I am disconnecting the call. Bye bye!'"
+                    
                     retry_full = ""
                     async for response_text in self._llm.respond_streaming_async(retry_user_text):
                         retry_full = response_text
@@ -1190,9 +1245,14 @@ class S2SPipeline:
 
                 if transition and self._scenario_question_count >= 3:
                     self._scenario_question_count = 0
+                    self._scenario_count += 1  # Increment scenario counter
 
                 if last_q:
                     self._scenario_question_count += 1
+                
+                # Check if examination is complete (4 scenarios done)
+                if self._scenario_count >= 4 and self._scenario_question_count >= 3:
+                    self._disconnect_requested = True
             
             logger.info(f"[LLM] '{full_response}' ({llm_time:.0f}ms)")
             
