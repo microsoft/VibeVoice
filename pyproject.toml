@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A model for speech generation with an AR + diffusion architecture."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     # "License :: OSI Approved :: MIT License",
@@ -33,7 +33,8 @@ dependencies = [
     "av",
     "aiortc",
     "uvicorn[standard]",
-    "fastapi"
+    "fastapi",
+    "flyte>=2.0.0b40",
 ]
 
 
