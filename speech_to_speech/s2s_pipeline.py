@@ -353,7 +353,7 @@ Say "Thank you for participating in this aviation viva session. Goodbye!" and en
 class PipelineConfig:
     """Configuration for S2S Pipeline"""
     # Component settings
-    asr_model: str = "large-v3"  # Best accuracy model for transcription
+    asr_model: str = "large-v3-turbo"  # Fast and accurate model for transcription (Whisper large-v3-turbo)
     llm_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     tts_model: str = "microsoft/VibeVoice-Realtime-0.5B"
     
@@ -366,10 +366,11 @@ class PipelineConfig:
     input_sample_rate: int = 16000
     output_sample_rate: int = 24000
     
-    # VAD settings - balanced for natural conversation
+    # VAD settings - MANDATORY for all audio processing
     vad_threshold: float = 0.4  # Lower = more sensitive to speech (better barge-in)
     min_speech_ms: int = 250  # Minimum speech duration to trigger
     min_silence_ms: int = 1000  # Wait 1 second of silence before considering speech ended (allows natural pauses)
+    vad_enabled: bool = True  # VAD is always mandatory - cannot be disabled
     
     # Echo suppression settings
     echo_suppression_ms: int = 1000  # Ignore echo phrases for 1 second after TTS ends
@@ -516,6 +517,9 @@ class S2SPipeline:
         # Echo suppression - track when TTS last played to avoid picking up speaker audio
         self._last_tts_end_time = 0.0
         
+        # Store last LLM response for frontend display
+        self._last_llm_response = ""
+        
         # Agent type for domain-specific responses
         self._agent_type = self.config.default_agent
         
@@ -553,8 +557,12 @@ class S2SPipeline:
         logger.info("Initializing S2S Pipeline components...")
         start_time = time.time()
         
-        # Initialize VAD
-        logger.info("Loading VAD...")
+        # Initialize VAD (MANDATORY - always enabled)
+        if not self.config.vad_enabled:
+            logger.warning("VAD cannot be disabled - forcing VAD enabled for proper operation")
+            self.config.vad_enabled = True
+        
+        logger.info("Loading VAD (mandatory for all audio processing)...")
         from .vad_module import StreamingVAD, VADConfig
         vad_config = VADConfig(
             threshold=self.config.vad_threshold,
@@ -563,6 +571,7 @@ class S2SPipeline:
         )
         self._vad = StreamingVAD(vad_config)
         self._vad.initialize()
+        logger.info("VAD initialized and mandatory")
         
         # Initialize ASR
         logger.info("Loading ASR...")
@@ -722,6 +731,7 @@ class S2SPipeline:
             llm_response.text = cleaned_response
             
             logger.info(f"Assistant: {llm_response.text}")
+            self._last_llm_response = llm_response.text  # Store for frontend display
             self.state = PipelineState.SYNTHESIZING
             
             # Step 4: TTS - Synthesize speech
@@ -1149,6 +1159,7 @@ class S2SPipeline:
             
             # Clean response for voice output
             full_response = clean_llm_response(full_response, user_greeted)
+            self._last_llm_response = full_response  # Store for frontend display
 
             if self._agent_type == "viva":
                 full_response = full_response.replace("moving to the next case", "moving to the next scenario")
@@ -1593,6 +1604,8 @@ class S2SPipeline:
         self.state = PipelineState.IDLE
         self._last_examiner_question = ""
         self._scenario_question_count = 0
+        self._scenario_count = 0
+        self._last_llm_response = ""  # Clear stored response
         if self._vad:
             self._vad.reset()
         if self._llm:
@@ -1998,13 +2011,33 @@ def create_app(config: Optional[PipelineConfig] = None) -> FastAPI:
                                 "state": "processing"
                             })
                             
-                            # Process through pipeline (with cancellation support)
-                            async for audio_chunk in pipeline.process_speech_segment(
-                                speech_audio,
-                                pipeline_config.input_sample_rate
-                            ):
-                                # Send audio chunk
-                                await ws.send_bytes(audio_chunk)
+                            # Get transcription first
+                            transcription = pipeline._asr.transcribe_segment(speech_audio, pipeline_config.input_sample_rate)
+                            if transcription and transcription.text.strip():
+                                # Send transcription to frontend
+                                await ws.send_json({
+                                    "type": "transcription",
+                                    "text": transcription.text,
+                                    "role": "user"
+                                })
+                                
+                                # Process through pipeline to get LLM response
+                                llm_response = None
+                                async for audio_chunk in pipeline.process_speech_segment(
+                                    speech_audio,
+                                    pipeline_config.input_sample_rate
+                                ):
+                                    # Capture LLM response from pipeline metrics
+                                    if hasattr(pipeline, '_last_llm_response') and not llm_response:
+                                        llm_response = pipeline._last_llm_response
+                                        await ws.send_json({
+                                            "type": "response",
+                                            "text": llm_response,
+                                            "role": "assistant"
+                                        })
+                                    
+                                    # Send audio chunk
+                                    await ws.send_bytes(audio_chunk)
                             
                             # Check if disconnect was requested
                             if pipeline.is_disconnect_requested():
