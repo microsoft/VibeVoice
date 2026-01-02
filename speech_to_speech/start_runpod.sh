@@ -91,11 +91,11 @@ fi
 
 # Model configurations
 # NOTE: ASR_MODEL must be a faster-whisper compatible model:
-#   - Built-in: tiny, tiny.en, base, base.en, small, small.en, medium, medium.en, large-v2, large-v3
+#   - Built-in: tiny, tiny.en, base, base.en, small, small.en, medium, medium.en, large-v2, large-v3, large-v3-turbo
 #   - CTranslate2: Systran/faster-distil-whisper-small.en, Systran/faster-distil-whisper-medium.en
 # Do NOT use distil-whisper/distil-small.en (wrong format)
 export MODEL_PATH="${MODEL_PATH:-microsoft/VibeVoice-Realtime-0.5B}"
-export ASR_MODEL="${ASR_MODEL:-large-v3}"  # Best accuracy model for transcription
+export ASR_MODEL="${ASR_MODEL:-large-v3-turbo}"  # Fast and accurate model for transcription (Whisper large-v3-turbo)
 export LLM_MODEL="${LLM_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 
 # Web Search API (Perplexity - intelligent search with real-time info)
@@ -122,7 +122,7 @@ echo ""
 echo "Model Configuration:"
 echo "-------------------"
 echo "TTS Model: $MODEL_PATH"
-echo "ASR Model: $ASR_MODEL"
+echo "ASR Model: $ASR_MODEL (Whisper large-v3-turbo - Fast & Accurate)"
 echo "LLM Model: $LLM_MODEL"
 echo ""
 echo "Library Path (LD_LIBRARY_PATH):"
@@ -179,6 +179,7 @@ echo "Starting S2S Pipeline Server"
 echo "========================================"
 echo "S2S API: http://0.0.0.0:$S2S_PORT"
 echo "WebSocket: ws://0.0.0.0:$S2S_PORT/stream"
+echo "Features: VAD (Mandatory), Conversation Display, Perplexity LLM"
 echo ""
 echo "RunPod Proxy URLs will be:"
 echo "  https://<pod-id>-$S2S_PORT.proxy.runpod.net/"
