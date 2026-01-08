@@ -121,6 +121,28 @@ Tip: Just try it on [Colab](https://colab.research.google.com/github/microsoft/V
 python demo/realtime_model_inference_from_file.py --model_path microsoft/VibeVoice-Realtime-0.5B --txt_path demo/text_examples/1p_vibevoice.txt --speaker_name Carter
 ```
 
+### Usage 3: List available voices
+A voice listing utility is available to help you discover and browse all available voice presets:
+
+```bash
+# List all voices in table format (default)
+python demo/list_voices.py
+
+# List only English voices
+python demo/list_voices.py --lang en
+
+# Show statistics about available voices
+python demo/list_voices.py --stats
+
+# Output as JSON for programmatic use
+python demo/list_voices.py --format json
+
+# Simple list of voice names only
+python demo/list_voices.py --format simple
+```
+
+The utility provides detailed information including speaker name, language, gender, and file size for each available voice preset.
+
 
 ## Risks and limitations
 
