@@ -1,4 +1,4 @@
-# VibeVoice-ASR: Long-Form Rich Transcription with User Prompts
+# VibeVoice-ASR
 
 **VibeVoice-ASR** is the latest addition to the **VibeVoice** family. While the original VibeVoice / VibeVoice-Realtime focused on expressive TTS, **VibeVoice-ASR** focuses on understanding long-form speech with high precision and rich metadata.
 
