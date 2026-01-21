@@ -274,6 +274,7 @@ def load_dataset_and_concatenate(
 ) -> Optional[List[np.ndarray]]:
     """
     Load a HuggingFace dataset and concatenate audio samples into long audio chunks.
+    (Note, just for demo purpose, not for benchmark evaluation)
     
     Args:
         dataset_name: HuggingFace dataset name (e.g., 'openslr/librispeech_asr')

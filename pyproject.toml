@@ -41,7 +41,8 @@ tts = [
 ]
 
 asr = [
-  "transformers>=4.51.3" # the versions after 4.51.3 are all support
+  "transformers>=4.51.3", # the versions after 4.51.3 are all support
+  "pydub" # for visualization
 ]
 
 [project.urls]

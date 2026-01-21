@@ -284,10 +284,15 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
                             yield start, end
                 
                 # Process each segment for both acoustic and semantic tokenizers
-                for start, end in _iter_segments(total_samples, segment_samples):
+                segments = list(_iter_segments(total_samples, segment_samples))
+                num_segments = len(segments)
+                for seg_idx, (start, end) in enumerate(segments):
                     chunk = speech_tensors[:, start:end].contiguous()
                     if chunk.numel() == 0:
                         continue
+                    
+                    # Check if this is the final segment
+                    is_final = (seg_idx == num_segments - 1)
                     
                     # Encode chunk for acoustic tokenizer (don't sample yet)
                     acoustic_encoder_output = self.model.acoustic_tokenizer.encode(
@@ -295,6 +300,7 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
                         cache=acoustic_encoder_cache,
                         sample_indices=sample_indices,
                         use_cache=True,
+                        is_final_chunk=is_final,
                     )
                     acoustic_mean_segments.append(acoustic_encoder_output.mean)
                     
@@ -304,6 +310,7 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
                         cache=semantic_encoder_cache,
                         sample_indices=sample_indices,
                         use_cache=True,
+                        is_final_chunk=is_final,
                     )
                     semantic_mean_segments.append(semantic_encoder_output.mean)
                 
