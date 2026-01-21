@@ -17,7 +17,7 @@ from transformers.utils import logging
 from transformers.modeling_utils import PreTrainedModel
 from transformers.activations import ACT2FN
 
-from .configuration_vibevoice import VibeVoiceAcousticTokenizerConfig
+from .configuration_vibevoice import VibeVoiceAcousticTokenizerConfig, VibeVoiceSemanticTokenizerConfig
 
 logger = logging.get_logger(__name__)
 
@@ -26,14 +26,13 @@ import os
 try:
     from apex.normalization.fused_layer_norm import fused_rms_norm_affine
     APEX_AVAILABLE = True
-    logger.info("APEX FusedRMSNorm is available and will be used for optimization")
+    # logger.info("APEX FusedRMSNorm is available and will be used for optimization")
     if int(os.getenv("OPTIMIZE_FOR_SPEED", "0")) == 0:
         APEX_AVAILABLE = False
-        logger.warning("APEX FusedRMSNorm is disabled by environment variable OPTIMIZE_FOR_SPEED=0")
+        # logger.warning("APEX FusedRMSNorm is disabled by environment variable OPTIMIZE_FOR_SPEED=0")
 except ImportError:
     APEX_AVAILABLE = False
-    logger.warning("APEX FusedRMSNorm not available, using native implementation")
-# APEX_AVAILABLE=False
+    # logger.warning("APEX FusedRMSNorm not available, using native implementation")
 
 # Normalization modules
 class ConvLayerNorm(nn.LayerNorm):
@@ -684,6 +683,135 @@ class Block1D(nn.Module):
         return x
 
 
+class TokenizerEncoder(nn.Module):
+    """
+    Encoder component for the VibeVoice tokenizer that converts audio to latent representations.
+    
+    Args:
+        config: Configuration object with model parameters
+    """
+    def __init__(self, config):
+        super().__init__()
+        
+        # Extract parameters from config
+        self.channels = config.channels
+        self.dimension = config.dimension
+        self.n_filters = config.n_filters
+        self.ratios = list(reversed(config.ratios))
+        self.depths = config.depths
+        self.n_residual_layers = getattr(config, "n_residual_layers", 1)
+        self.hop_length = np.prod(self.ratios)
+        self.causal = config.causal
+        
+        # Additional config parameters with defaults
+        kernel_size = getattr(config, "kernel_size", 7)
+        last_kernel_size = getattr(config, "last_kernel_size", 7)
+        norm = getattr(config, "norm", "none")
+        norm_params = getattr(config, "norm_params", {})
+        pad_mode = getattr(config, "pad_mode", "reflect")
+        bias = getattr(config, "bias", True)
+        layernorm = getattr(config, "layernorm", "LN")
+        layernorm_eps = getattr(config, "layernorm_eps", 1e-6)
+        layernorm_elementwise_affine = getattr(config, "layernorm_elementwise_affine", True)
+        drop_path_rate = getattr(config, "drop_path_rate", 0.0)
+        mixer_layer = getattr(config, "mixer_layer", "conv")
+        layer_scale_init_value = getattr(config, "layer_scale_init_value", 0)
+        disable_last_norm = getattr(config, "disable_last_norm", False)
+        
+        # determine the norm type based on layernorm
+        if layernorm == 'LN':
+            norm_type = ConvLayerNorm
+        elif layernorm == 'RMSNorm':
+            norm_type = partial(ConvRMSNorm, elementwise_affine=layernorm_elementwise_affine)
+        else:
+            raise ValueError(f"Unsupported norm type: {layernorm}")
+        
+        # stem and intermediate downsampling conv layers
+        stem = nn.Sequential(
+                SConv1d(self.channels, self.n_filters, kernel_size, norm=norm, norm_kwargs=norm_params, causal=self.causal, pad_mode=pad_mode, bias=bias),
+            )
+        
+        self.downsample_layers = nn.ModuleList()
+        self.downsample_layers.append(stem)
+        for i in range(len(self.ratios)):
+            in_ch = self.n_filters * (2 ** i)
+            out_ch = self.n_filters * (2 ** (i + 1))
+            downsample_layer = nn.Sequential(
+                SConv1d(in_ch, out_ch, kernel_size=self.ratios[i] * 2, stride=self.ratios[i], causal=self.causal, pad_mode=pad_mode, norm=norm, bias=bias)
+            )
+            self.downsample_layers.append(downsample_layer)
+
+        # configure the transformer blocks
+        layer_type = partial(
+            Block1D,
+            mixer_layer=mixer_layer,
+            layernorm=layernorm,
+            eps=layernorm_eps,
+            causal=self.causal,
+            pad_mode=pad_mode,
+            norm=norm,
+            bias=bias,
+            layer_scale_init_value=layer_scale_init_value,
+        )
+        
+        self.stages = nn.ModuleList()
+        dp_rates = [x.item() for x in torch.linspace(0, drop_path_rate, sum(self.depths))] 
+        cur = 0
+
+        for i in range(len(self.depths)):
+            in_ch = self.n_filters * (2 ** i)
+            stage = nn.Sequential(
+                *[layer_type(dim=in_ch, drop_path=dp_rates[cur + j]) for j in range(self.depths[i])]
+            )
+            self.stages.append(stage)
+            cur += self.depths[i]
+        
+        if not disable_last_norm:
+            self.norm = norm_type(in_ch, eps=layernorm_eps)
+        else:
+            self.norm = nn.Identity()
+        self.head = SConv1d(in_ch, self.dimension, kernel_size=last_kernel_size, causal=self.causal, pad_mode=pad_mode, norm=norm, bias=bias)
+
+    def forward_features(self, x, cache=None, sample_indices=None, use_cache=False, debug=False):
+        for i in range(len(self.depths)):
+            # Apply downsampling
+            for layer in self.downsample_layers[i]:
+                if isinstance(layer, SConv1d):
+                    x = layer(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+                else:
+                    x = layer(x)
+            
+            # Apply stage (Block1D contains Convlayer which contains SConv1d)
+            for block in self.stages[i]:
+                if hasattr(block, 'mixer') and hasattr(block.mixer, 'conv') and isinstance(block.mixer.conv, SConv1d):
+                    # Block1D forward with cache support
+                    residual = x
+                    x = block.norm(x)
+                    x = block.mixer.conv(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+                    if block.gamma is not None:
+                        x = x * block.gamma.unsqueeze(-1)
+                    x = residual + x
+                    
+                    # FFN part
+                    residual = x
+                    x = block.ffn_norm(x)
+                    x = x.permute(0, 2, 1)
+                    x = block.ffn(x)
+                    x = x.permute(0, 2, 1)
+                    if block.ffn_gamma is not None:
+                        x = x * block.ffn_gamma.unsqueeze(-1)
+                    x = residual + x
+                else:
+                    x = block(x)
+
+        return self.norm(x)
+
+    def forward(self, x, cache=None, sample_indices=None, use_cache=False, debug=False):
+        x = self.forward_features(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+        x = self.head(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+        return x
+
+
 class TokenizerDecoder(nn.Module):
     """
     Decoder component for the VibeVoice tokenizer that converts latent representations back to audio.
@@ -821,15 +949,63 @@ class TokenizerDecoder(nn.Module):
         x = self.head(x, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
         return x
     
+
+@dataclass
+class VibeVoiceTokenizerEncoderOutput:
+    """
+    Output of VibeVoice tokenizer encoder, representing a Gaussian distribution with fixed variance.
+    
+    Args:
+        mean (`torch.FloatTensor`): The mean parameters of the distribution.
+        std (`float` or `torch.FloatTensor`): Fixed standard deviation value.
+    """
+    mean: torch.Tensor
+    std: Optional[Union[float, torch.Tensor]] = None
+    
+    def sample(self, dist_type='fix'):
+        """
+        Sample from the distribution.
+        
+        Args:
+            dist_type (`str`): Sampling method, either 'fix' or 'gaussian'.
+                
+        Returns:
+            `torch.FloatTensor`: Sampled values.
+            `torch.FloatTensor` (optional): Standard deviation used (only when dist_type='gaussian').
+        """
+        if dist_type == 'fix':
+            x = self.mean + self.std * torch.randn_like(self.mean)
+            return x, self.std
+        elif dist_type == 'gaussian':
+            batch_size = self.mean.size(0)
+            value = self.std / 0.8
+            std = torch.randn(batch_size, device=self.mean.device, dtype=self.mean.dtype) * value
+
+            while std.dim() < self.mean.dim():
+                std = std.unsqueeze(-1)
+
+            x = self.mean + std * torch.randn_like(self.mean)
+            return x, std
+        else:
+            return self.mean, self.std
+
+    def kl(self):
+        """Compute KL divergence between this distribution and a standard normal."""
+        target = torch.zeros_like(self.mean)
+        return F.mse_loss(self.mean, target, reduction='none')
+
+    def mode(self):
+        """Return the distribution mode (which is the mean for Gaussian)."""
+        return self.mean
     
 class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
-    """VibeVoice speech tokenizer model (only decoder) for acoustic tokens"""
+    """VibeVoice speech tokenizer model combining encoder and decoder for acoustic tokens"""
     
     config_class = VibeVoiceAcousticTokenizerConfig
     base_model_prefix = "vibevoice_acoustic_tokenizer"
     _supports_flash_attn_2 = True  
     _supports_sdpa = True  
-    _no_split_modules = ["TokenizerDecoder"]
+    _no_split_modules = ["TokenizerEncoder", "TokenizerDecoder"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -850,6 +1026,21 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
             # Default: use reversed encoder depths if decoder_depths is None
             decoder_depths = list(reversed(encoder_depths))
         
+        # Create encoder config
+        encoder_config = copy.deepcopy(config)
+        encoder_config.dimension = config.vae_dim
+        encoder_config.n_filters = config.encoder_n_filters
+        encoder_config.ratios = config.encoder_ratios
+        encoder_config.depths = encoder_depths
+        encoder_config.norm = config.conv_norm
+        encoder_config.pad_mode = config.pad_mode
+        encoder_config.bias = config.conv_bias
+        encoder_config.layernorm_eps = config.layernorm_eps
+        encoder_config.layernorm_elementwise_affine = config.layernorm_elementwise_affine
+        encoder_config.mixer_layer = config.mixer_layer
+        encoder_config.layer_scale_init_value = config.layer_scale_init_value
+        encoder_config.disable_last_norm = config.disable_last_norm
+        
         # Create decoder config
         decoder_config = copy.deepcopy(config)
         decoder_config.dimension = config.vae_dim
@@ -865,6 +1056,8 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
         decoder_config.layer_scale_init_value = config.layer_scale_init_value
         decoder_config.disable_last_norm = config.disable_last_norm
         
+        # Initialize encoder and decoder
+        self.encoder = TokenizerEncoder(encoder_config)
         self.decoder = TokenizerDecoder(decoder_config)
         
         # Initialize weights
@@ -885,6 +1078,24 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
                 nn.init.zeros_(module.bias)
     
     @torch.no_grad()
+    def encode(self, audio, cache=None, sample_indices=None, use_cache=False, debug=False):
+        """Convert audio to latent representations"""
+        latents = self.encoder(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+        return VibeVoiceTokenizerEncoderOutput(mean=latents.permute(0, 2, 1), std=self.fix_std)
+    
+    @torch.no_grad()
+    def sampling(self, encoder_output, dist_type=None):
+        """Sample from the encoder output distribution"""
+        dist_type = dist_type or self.std_dist_type
+    
+        if dist_type == 'fix':
+            return encoder_output.sample(dist_type='fix')
+        elif dist_type == 'gaussian':
+            return encoder_output.sample(dist_type='gaussian')
+        else:
+            raise ValueError(f"Unsupported dist_type: {dist_type}, expected 'fix' or 'gaussian'")
+    
+    @torch.no_grad()
     def decode(self, latents, cache=None, sample_indices=None, use_cache=False, debug=False):
         """Convert latent representations back to audio"""
         if latents.shape[1] == self.config.vae_dim:
@@ -895,10 +1106,89 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
         audio = self.decoder(latents, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
         return audio
 
+    def forward(self, audio, cache=None, sample_indices=None, use_cache=False, debug=False):
+        """Full forward pass: encode audio to latents, then decode back to audio"""
+        encoder_output = self.encode(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+        sampled_latents, _ = self.sampling(encoder_output)
+        reconstructed = self.decode(sampled_latents, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+        return reconstructed, sampled_latents
+
+
+class VibeVoiceSemanticTokenizerModel(PreTrainedModel):
+    """VibeVoice speech tokenizer model with only encoder for semantic tokens"""
+    
+    config_class = VibeVoiceSemanticTokenizerConfig
+    base_model_prefix = "vibevoice_semantic_tokenizer"
+    _supports_flash_attn_2 = True  
+    _supports_sdpa = True  
+    _no_split_modules = ["TokenizerEncoder"]
+    
+    def __init__(self, config):
+        super().__init__(config)
+        
+        # Parse encoder depths
+        if isinstance(config.encoder_depths, str):
+            encoder_depths = [int(d) for d in config.encoder_depths.split('-')]
+        else:
+            encoder_depths = config.encoder_depths
+        
+        # Create encoder config
+        encoder_config = copy.deepcopy(config)
+        encoder_config.dimension = config.vae_dim
+        encoder_config.n_filters = config.encoder_n_filters
+        encoder_config.ratios = config.encoder_ratios
+        encoder_config.depths = encoder_depths
+        encoder_config.norm = config.conv_norm
+        encoder_config.pad_mode = config.pad_mode
+        encoder_config.bias = config.conv_bias
+        encoder_config.layernorm_eps = config.layernorm_eps
+        encoder_config.layernorm_elementwise_affine = config.layernorm_elementwise_affine
+        encoder_config.mixer_layer = config.mixer_layer
+        encoder_config.layer_scale_init_value = config.layer_scale_init_value
+        encoder_config.disable_last_norm = config.disable_last_norm
+        
+        # Initialize encoder and decoder
+        self.encoder = TokenizerEncoder(encoder_config)
+        
+        # Initialize weights
+        self.apply(self._init_weights)
+    
+    def _init_weights(self, module):
+        """Initialize weights for the model"""
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, std=self.config.weight_init_value)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Conv1d):
+            nn.init.normal_(module.weight, std=self.config.weight_init_value)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+    
+    @torch.no_grad()
+    def encode(self, audio, cache=None, sample_indices=None, use_cache=False, debug=False):
+        """Convert audio to latent representations"""
+        latents = self.encoder(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+        return VibeVoiceTokenizerEncoderOutput(mean=latents.permute(0, 2, 1))
+    
+    @torch.no_grad()
+    def sampling(self, encoder_output, dist_type=None):
+        """Sample from the encoder output distribution"""
+        return encoder_output.sample(dist_type='none')
+
+    def forward(self, audio, cache=None, sample_indices=None, use_cache=False, debug=False):
+        """Full forward pass: encode audio to latents, then decode back to audio"""
+        encoder_output = self.encode(audio, cache=cache, sample_indices=sample_indices, use_cache=use_cache, debug=debug)
+        sampled_latents, _ = self.sampling(encoder_output, dist_type='none')
+        return None, sampled_latents
 
 AutoModel.register(VibeVoiceAcousticTokenizerConfig, VibeVoiceAcousticTokenizerModel)
+AutoModel.register(VibeVoiceSemanticTokenizerConfig, VibeVoiceSemanticTokenizerModel)
 
 __all__ = [
     "VibeVoiceTokenizerStreamingCache",
     "VibeVoiceAcousticTokenizerModel",
+    "VibeVoiceSemanticTokenizerModel",
 ]
