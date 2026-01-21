@@ -2,7 +2,7 @@
 
 **VibeVoice ASR** is the latest addition to the **VibeVoice** family. While the original VibeVoice / VibeVoice-Realtime focused on expressive TTS, **VibeVoice ASR** focuses on understanding long-form speech with high precision and rich metadata.
 
-It is a unified speech-to-text model designed to handle **1-hour long-form audio** in a single pass, generating structured transcriptions containing **Who (Speaker), When (Timestamps), and What (Content)**, with support for **User-Defined Context**.
+It is a unified speech-to-text model designed to handle **1-hour long-form audio** in a single pass, generating structured transcriptions containing **Who (Speaker), When (Timestamps), and What (Content)**, with support for **User-Customized Context**.
 
 ## 🔥 Key Features
 
@@ -10,7 +10,7 @@ It is a unified speech-to-text model designed to handle **1-hour long-form audio
   Unlike conventional ASR models that slice audio into short chunks (often losing global context), VibeVoice ASR accepts up to **60 minutes** of continuous audio input within 64K length. This ensures consistent speaker tracking and semantic coherence across the entire hour.
 
 - **👤 Optional Context Injection**:
-  Users can provide customized prompts (e.g., specific names, technical terms, or background info) to guide the recognition process, significantly improving accuracy on domain-specific content.
+  Users can provide customized context (e.g., specific names, technical terms, or background info) to guide the recognition process, significantly improving accuracy on domain-specific content.
 
 - **📝 Rich Transcription (Who, When, What)**:
   The model performs ASR, Diarization, and Timestamping simultaneously. The output is a structured sequence indicating *who* said *what* at *which time*.
@@ -36,11 +36,11 @@ sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulim
 ```
 
 2. Install from github 
-\`\`\`bash
+```bash
 git clone https://github.com/microsoft/VibeVoice.git
 cd VibeVoice
 pip install -e .[asr]
-\`\`\`
+```
 
 ## Usages
 
