@@ -1,6 +1,6 @@
-# VibeVoice ASR: Long-Form Rich Transcription with User Prompts
+# VibeVoice-ASR: Long-Form Rich Transcription with User Prompts
 
-**VibeVoice ASR** is the latest addition to the **VibeVoice** family. While the original VibeVoice / VibeVoice-Realtime focused on expressive TTS, **VibeVoice ASR** focuses on understanding long-form speech with high precision and rich metadata.
+**VibeVoice-ASR** is the latest addition to the **VibeVoice** family. While the original VibeVoice / VibeVoice-Realtime focused on expressive TTS, **VibeVoice-ASR** focuses on understanding long-form speech with high precision and rich metadata.
 
 It is a unified speech-to-text model designed to handle **1-hour long-form audio** in a single pass, generating structured transcriptions containing **Who (Speaker), When (Timestamps), and What (Content)**, with support for **User-Customized Context**.
 
