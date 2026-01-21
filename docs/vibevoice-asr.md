@@ -21,6 +21,13 @@ It is a unified speech-to-text model designed to handle **1-hour long-form audio
   <img src="../Figures/VibeVoice_ASR_archi.png" alt="VibeVoice ASR Architecture" width="80%">
 </p>
 
+## Evaluation
+<p align="center">
+  <img src="../Figures/DER.jpg" alt="DER" width="80%">
+  <img src="../Figures/cpWER.jpg" alt="cpWER" width="80%">
+  <img src="../Figures/tcpWER.jpg" alt="tcpWER" width="80%">
+</p>
+
 ## Installation
 We recommend to use NVIDIA Deep Learning Container to manage the CUDA environment. 
 
