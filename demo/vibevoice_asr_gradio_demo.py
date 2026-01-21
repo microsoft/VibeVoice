@@ -27,13 +27,11 @@ from transformers import TextIteratorStreamer, StoppingCriteria, StoppingCriteri
 try:
     from liger_kernel.transformers import apply_liger_kernel_to_qwen2
     # Only apply RoPE, RMSNorm, SwiGLU patches (these affect the underlying Qwen2 layers)
-    # fused_linear_cross_entropy=False because our custom model handles this itself
     apply_liger_kernel_to_qwen2(
         rope=True,
         rms_norm=True,
         swiglu=True,
         cross_entropy=False,
-        fused_linear_cross_entropy=False,  # Handled in VibeVoiceForASRTraining.forward()
     )
     print("✅ Liger Kernel applied to Qwen2 components (RoPE, RMSNorm, SwiGLU)")
 except Exception as e:
@@ -1128,7 +1126,7 @@ def main():
         "--max_new_tokens",
         type=int,
         default=32768,
-        help="Default max new tokens for generation (default: 8192)"
+        help="Default max new tokens for generation (default: 32768)"
     )
     parser.add_argument(
         "--host",
