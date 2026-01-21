@@ -3,22 +3,20 @@
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Collection-orange?logo=huggingface)](https://huggingface.co/microsoft/VibeVoice-ASR)
 [![Live Playground](https://img.shields.io/badge/Live-Playground-green?logo=gradio)](https://aka.ms/vibevoice-asr)
 
-**VibeVoice-ASR** is the latest addition to the **VibeVoice** family. While the original VibeVoice / VibeVoice-Realtime focused on expressive TTS, **VibeVoice-ASR** focuses on understanding long-form speech with high precision and rich metadata.
-
-It is a unified speech-to-text model designed to handle **1-hour long-form audio** in a single pass, generating structured transcriptions containing **Who (Speaker), When (Timestamps), and What (Content)**, with support for **User-Customized Context**.
+**VibeVoice-ASR** is a unified speech-to-text model designed to handle **60-minute long-form audio** in a single pass, generating structured transcriptions containing **Who (Speaker), When (Timestamps), and What (Content)**, with support for **Customized Hotwords**.
 
 ## 🔥 Key Features
 
-- **🕒 60-min Single-Pass Processing**:
-  Unlike conventional ASR models that slice audio into short chunks (often losing global context), VibeVoice ASR accepts up to **60 minutes** of continuous audio input within 64K length. This ensures consistent speaker tracking and semantic coherence across the entire hour.
+- **🕒 60-minute Single-Pass Processing**:
+  Unlike conventional ASR models that slice audio into short chunks (often losing global context), VibeVoice ASR accepts up to **60 minutes** of continuous audio input within 64K token length. This ensures consistent speaker tracking and semantic coherence across the entire hour.
 
-- **👤 Optional Context Injection**:
-  Users can provide customized context (e.g., specific names, technical terms, or background info) to guide the recognition process, significantly improving accuracy on domain-specific content.
+- **👤 Customized Hotwords**:
+  Users can provide customized hotwords (e.g., specific names, technical terms, or background info) to guide the recognition process, significantly improving accuracy on domain-specific content.
 
 - **📝 Rich Transcription (Who, When, What)**:
-  The model performs ASR, Diarization, and Timestamping simultaneously. The output is a structured sequence indicating *who* said *what* at *which time*.
+  The model jointly performs ASR, diarization, and timestamping, producing a structured output that indicates *who* said *what* and *when*.
 
-[Try it here.](https://aka.ms/vibevoice-asr)
+**Demo:** [VibeVoice-ASR-Demo](https://aka.ms/vibevoice-asr)
 
 ## 🏗️ Model Architecture
 
@@ -28,9 +26,9 @@ It is a unified speech-to-text model designed to handle **1-hour long-form audio
 
 ## Evaluation
 <p align="center">
-  <img src="../Figures/DER.jpg" alt="DER" width="80%">
-  <img src="../Figures/cpWER.jpg" alt="cpWER" width="80%">
-  <img src="../Figures/tcpWER.jpg" alt="tcpWER" width="80%">
+  <img src="../Figures/DER.jpg" alt="DER" width="50%">
+  <img src="../Figures/cpWER.jpg" alt="cpWER" width="50%">
+  <img src="../Figures/tcpWER.jpg" alt="tcpWER" width="50%">
 </p>
 
 ## Installation
