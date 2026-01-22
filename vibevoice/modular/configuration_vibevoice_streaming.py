@@ -80,6 +80,69 @@ class VibeVoiceStreamingConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    def get_text_config(self, decoder: bool = False):
+        """Return the text (decoder) config for generation."""
+        return self.decoder_config
+
+    def _get_decoder_attr(self, name: str, fallback_names=None, default=None):
+        fallback_names = fallback_names or []
+        if hasattr(self.decoder_config, name):
+            return getattr(self.decoder_config, name)
+        for fallback in fallback_names:
+            if hasattr(self.decoder_config, fallback):
+                return getattr(self.decoder_config, fallback)
+        return default
+
+    @property
+    def vocab_size(self):
+        """Return vocab_size from decoder config for generation compatibility."""
+        return self._get_decoder_attr("vocab_size")
+
+    @property
+    def num_attention_heads(self):
+        """Return num_attention_heads from decoder config for generation compatibility."""
+        return self._get_decoder_attr("num_attention_heads")
+
+    @property
+    def num_key_value_heads(self):
+        """Return num_key_value_heads from decoder config for generation compatibility."""
+        return self._get_decoder_attr("num_key_value_heads")
+
+    @property
+    def hidden_size(self):
+        """Return hidden_size from decoder config for generation compatibility."""
+        return self._get_decoder_attr("hidden_size")
+
+    @property
+    def num_hidden_layers(self):
+        """Return num_hidden_layers from decoder config for generation compatibility."""
+        return self._get_decoder_attr(
+            "num_hidden_layers",
+            fallback_names=["n_layer", "num_layers"],
+            default=self.tts_backbone_num_hidden_layers,
+        )
+
+    @property
+    def head_dim(self):
+        """Return head_dim from decoder config for generation compatibility."""
+        head_dim = self._get_decoder_attr("head_dim")
+        if head_dim is not None:
+            return head_dim
+        if self.hidden_size is None or self.num_attention_heads in (None, 0):
+            return None
+        return self.hidden_size // self.num_attention_heads
+
+    @property
+    def tie_word_embeddings(self):
+        """Return tie_word_embeddings from decoder config when available."""
+        if hasattr(self, "_tie_word_embeddings"):
+            return self._tie_word_embeddings
+        return bool(self._get_decoder_attr("tie_word_embeddings", default=False))
+
+    @tie_word_embeddings.setter
+    def tie_word_embeddings(self, value):
+        self._tie_word_embeddings = bool(value)
+
 __all__ = [
     "VibeVoiceStreamingConfig"
 ]

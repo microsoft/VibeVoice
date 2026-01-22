@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import builtins
 import asyncio
@@ -7,7 +9,7 @@ import threading
 import traceback
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Any, Callable, Dict, Iterator, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Iterator, Optional, Tuple, TYPE_CHECKING, cast
 
 import numpy as np
 import torch
@@ -16,13 +18,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
-from vibevoice.modular.modeling_vibevoice_streaming_inference import (
-    VibeVoiceStreamingForConditionalGenerationInference,
-)
-from vibevoice.processor.vibevoice_streaming_processor import (
-    VibeVoiceStreamingProcessor,
-)
-from vibevoice.modular.streamer import AudioStreamer
+if TYPE_CHECKING:
+    from vibevoice.modular.modeling_vibevoice_streaming_inference import (
+        VibeVoiceStreamingForConditionalGenerationInference,
+    )
+    from vibevoice.processor.vibevoice_streaming_processor import (
+        VibeVoiceStreamingProcessor,
+    )
+    from vibevoice.modular.streamer import AudioStreamer
 
 import copy
 
@@ -50,29 +53,59 @@ class StreamingTTSService:
         self.inference_steps = inference_steps
         self.sample_rate = SAMPLE_RATE
 
-        self.processor: Optional[VibeVoiceStreamingProcessor] = None
-        self.model: Optional[VibeVoiceStreamingForConditionalGenerationInference] = None
+        self.processor: Optional["VibeVoiceStreamingProcessor"] = None
+        self.model: Optional["VibeVoiceStreamingForConditionalGenerationInference"] = None
         self.voice_presets: Dict[str, Path] = {}
         self.default_voice_key: Optional[str] = None
         self._voice_cache: Dict[str, Tuple[object, Path, str]] = {}
 
-        if device == "mpx":
+        self.device = self._select_device(device)
+        self._torch_device = torch.device(self.device)
+
+    def _select_device(self, device: str) -> str:
+        requested = device
+        if requested == "mpx":
             print("Note: device 'mpx' detected, treating it as 'mps'.")
-            device = "mps"        
-        if device == "mps" and not torch.backends.mps.is_available():
+            requested = "mps"
+        if requested in ("auto", "cuda"):
+            if torch.cuda.is_available():
+                return "cuda"
+            if torch.backends.mps.is_available():
+                return "mps"
+            return "cpu"
+        if requested == "mps":
+            if torch.backends.mps.is_available():
+                return "mps"
             print("Warning: MPS not available. Falling back to CPU.")
-            device = "cpu"
-        self.device = device
-        self._torch_device = torch.device(device)
+            return "cpu"
+        if requested == "cpu":
+            return "cpu"
+        print(f"Warning: Unrecognized device '{requested}', falling back to CPU.")
+        return "cpu"
 
     def load(self) -> None:
+        try:
+            from vibevoice.modular.modeling_vibevoice_streaming_inference import (
+                VibeVoiceStreamingForConditionalGenerationInference,
+            )
+            from vibevoice.processor.vibevoice_streaming_processor import (
+                VibeVoiceStreamingProcessor,
+            )
+        except ImportError as exc:
+            if "triton" in str(exc).lower():
+                raise RuntimeError(
+                    "Optional dependency 'triton' is missing. It is required for flash_attention_2 on CUDA. "
+                    "On macOS/MPS, set MODEL_DEVICE=mps (or auto) and use SDPA."
+                ) from exc
+            raise
+
         print(f"[startup] Loading processor from {self.model_path}")
         self.processor = VibeVoiceStreamingProcessor.from_pretrained(self.model_path)
 
         
         # Decide dtype & attention
         if self.device == "mps":
-            load_dtype = torch.float32
+            load_dtype = torch.float16
             device_map = None
             attn_impl_primary = "sdpa"
         elif self.device == "cuda":
@@ -83,7 +116,7 @@ class StreamingTTSService:
             load_dtype = torch.float32
             device_map = 'cpu'
             attn_impl_primary = "sdpa"
-        print(f"Using device: {device_map}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
+        print(f"Using device: {self.device}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
         # Load model
         try:
             self.model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
@@ -92,13 +125,12 @@ class StreamingTTSService:
                 device_map=device_map,
                 attn_implementation=attn_impl_primary,
             )
-            
-            if self.device == "mps":
-                self.model.to("mps")
         except Exception as e:
             if attn_impl_primary == 'flash_attention_2':
                 print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
-                
+                if self.device == "mps" and load_dtype != torch.float32:
+                    print("MPS float16 load failed. Retrying with float32. You can also set PYTORCH_ENABLE_MPS_FALLBACK=1 for unsupported ops.")
+                    load_dtype = torch.float32
                 self.model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
                     self.model_path,
                     torch_dtype=load_dtype,
@@ -107,7 +139,19 @@ class StreamingTTSService:
                 )
                 print("Load model with SDPA successfully ")
             else:
-                raise e
+                if self.device == "mps" and load_dtype != torch.float32:
+                    print("MPS float16 load failed. Retrying with float32. You can also set PYTORCH_ENABLE_MPS_FALLBACK=1 for unsupported ops.")
+                    self.model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
+                        self.model_path,
+                        torch_dtype=torch.float32,
+                        device_map=self.device,
+                        attn_implementation=attn_impl_primary,
+                    )
+                else:
+                    raise e
+
+        if self.device == "mps":
+            self.model.to("mps")
 
         self.model.eval()
 
@@ -269,6 +313,7 @@ class StreamingTTSService:
         self.inference_steps = steps_to_use
 
         inputs = self._prepare_inputs(text, prefilled_outputs)
+        from vibevoice.modular.streamer import AudioStreamer
         audio_streamer = AudioStreamer(batch_size=1, stop_signal=None, timeout=None)
         errors: list = []
         stop_signal = stop_event or threading.Event()
@@ -504,4 +549,3 @@ def get_config():
         "voices": voices,
         "default_voice": service.default_voice_key,
     }
-

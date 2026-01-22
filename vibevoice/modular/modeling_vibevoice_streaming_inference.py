@@ -350,8 +350,11 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
         device = self.device
         
         self._prepare_special_tokens(generation_config, True, device=device)
-        generation_config.use_cache = True
-        model_kwargs["use_cache"] = generation_config.use_cache
+        use_cache = True
+        if getattr(self.config, "num_hidden_layers", None) in (None, 0):
+            use_cache = False
+        generation_config.use_cache = use_cache
+        model_kwargs["use_cache"] = use_cache
         input_ids = inputs_tensor.to(self.device)
 
         input_ids_length = input_ids.shape[1]
