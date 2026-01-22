@@ -104,7 +104,9 @@ https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 [📖 Documentation](docs/vibevoice-tts.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-1.5B)  |  [📊 Paper](https://arxiv.org/pdf/2508.19205)
 
-
+<div align="center">
+  <img src="Figures/VibeVoice-TTS-results.jpg" alt="VibeVoice Results" width="80%">
+</div>
 
 **English**
 <div align="center">
