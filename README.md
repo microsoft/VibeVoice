@@ -79,8 +79,8 @@ https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 </div>
 <p align="center">
-  <img src="Figures/DER.jpg" alt="DER" height="200">
-  <img src="Figures/cpWER.jpg" alt="cpWER" height="200">
+  <img src="Figures/DER.jpg" alt="DER" height="200"><br>
+  <img src="Figures/cpWER.jpg" alt="cpWER" height="200"><br>
   <img src="Figures/tcpWER.jpg" alt="tcpWER" height="200">
 </p>
 
