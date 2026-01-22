@@ -5,6 +5,9 @@
 
 **VibeVoice-ASR** is a unified speech-to-text model designed to handle **60-minute long-form audio** in a single pass, generating structured transcriptions containing **Who (Speaker), When (Timestamps), and What (Content)**, with support for **Customized Hotwords**.
 
+**Model:** [VibeVoice-ASR-7B](https://huggingface.co/microsoft/VibeVoice-ASR)<br>
+**Demo:** [VibeVoice-ASR-Demo](https://aka.ms/vibevoice-asr)<br>
+
 ## 🔥 Key Features
 
 - **🕒 60-minute Single-Pass Processing**:
@@ -16,7 +19,6 @@
 - **📝 Rich Transcription (Who, When, What)**:
   The model jointly performs ASR, diarization, and timestamping, producing a structured output that indicates *who* said *what* and *when*.
 
-**Demo:** [VibeVoice-ASR-Demo](https://aka.ms/vibevoice-asr)
 
 ## 🏗️ Model Architecture
 
@@ -24,12 +26,22 @@
   <img src="../Figures/VibeVoice_ASR_archi.png" alt="VibeVoice ASR Architecture" width="80%">
 </p>
 
+# Demo
+
+<div align="center" id="vibevoice-asr">
+
+https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
+
+</div>
+
 ## Evaluation
 <p align="center">
   <img src="../Figures/DER.jpg" alt="DER" width="50%">
   <img src="../Figures/cpWER.jpg" alt="cpWER" width="50%">
   <img src="../Figures/tcpWER.jpg" alt="tcpWER" width="50%">
 </p>
+
+
 
 ## Installation
 We recommend to use NVIDIA Deep Learning Container to manage the CUDA environment. 

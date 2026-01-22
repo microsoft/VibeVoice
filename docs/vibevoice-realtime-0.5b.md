@@ -5,15 +5,12 @@
 [![Colab](https://img.shields.io/badge/Run-Colab-orange?logo=googlecolab)](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb)
 </div>
 
-VibeVoice-Realtime is a **lightweight real‑time** text-to-speech model supporting **streaming text input** and **robust long-form speech generation**. It can be used to build real-time TTS services, narrate live data streams, and let different LLMs start speaking from their very first tokens (plug in your preferred model) long before a full answer is generated. It produces initial audible speech in **~300 milliseconds** (hardware dependent).
+VibeVoice-Realtime is a **lightweight real‑time** text-to-speech model supporting **streaming text input** and **robust long-form speech generation**. It can be used to build real-time TTS services, narrate live data streams, and let different LLMs start speaking from their very first tokens (plug in your preferred model) long before a full answer is generated. It produces initial audible speech in **~200 milliseconds** (hardware dependent).
 
-<div align="center">
 
-| Model | Context Length | Generation Length |  Weight |
-|-------|----------------|----------|----------|
-| VibeVoice-Realtime-0.5B | 8K | ~10 min | [HF link](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B) |
+**Model:** [VibeVoice-Realtime-0.5B](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B)<br>
+**Colab:** [Link](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb)<br>
 
-</div>
 
 > Note (multilingual exploration): Although the model is primarily built for English, we found that it still exhibits a certain level of multilingual capability—and even performs reasonably well in some languages. We provide nine additional languages (German, French, Italian, Japanese, Korean, Dutch, Polish, Portuguese, and Spanish) for users to explore. These multilingual behaviors have not been extensively tested; use with caution and share observations.
 
@@ -30,9 +27,10 @@ The model uses an interleaved, windowed design: it incrementally encodes incomin
 
 Key features:
 - Parameter size: 0.5B (deployment-friendly)
-- Real-time TTS (~300 milliseconds first audible latency)
+- Real-time TTS (~200 milliseconds first audible latency)
 - Streaming text input
 - Robust long-form speech generation
+- 8k context window( ~10 minutes audio generation)
 
 This real-time variant supports only a single speaker. For multi‑speaker conversational speech generation, please use other VibeVoice models (long‑form multi‑speaker variants). The model is currently intended for English speech only; other languages may produce unpredictable results.
 
@@ -41,7 +39,7 @@ To mitigate deepfake risks and ensure low latency for the first speech chunk, vo
 
 ### 📋 TODO
 
-- [ ] Add more voices (expand available speakers/voice timbres)
+- [√] Add more voices (expand available speakers/voice timbres)
 - [ ] Implement streaming text input function to feed new tokens while audio is still being generated
 - [ ] Merge models into official HuggingFace's `transformers` repository 
 
