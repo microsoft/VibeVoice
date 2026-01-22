@@ -25,9 +25,9 @@
 https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 <p align="center">
-  <img src="Figures/DER.jpg" alt="DER" height="120">
-  <img src="Figures/cpWER.jpg" alt="cpWER" height="120">
-  <img src="Figures/tcpWER.jpg" alt="tcpWER" height="120">
+  <img src="Figures/DER.jpg" alt="DER" height="200">
+  <img src="Figures/cpWER.jpg" alt="cpWER" height="200">
+  <img src="Figures/tcpWER.jpg" alt="tcpWER" height="200">
 </p>
 
 2025-12-16: 📣 We added more experimental speakers for exploration, including multilingual voices and 11 distinct English style voices. [Try it](docs/vibevoice-realtime-0.5b.md#optional-more-experimental-voices). More speaker types will be added over time.
