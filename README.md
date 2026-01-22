@@ -48,9 +48,9 @@ For more information, demos, and examples, please visit our [Project Page](https
 
 | Model |   Weight | Quick Try |
 |-------|--------------|---------|
+| VibeVoice-ASR-7B | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR) |  [Playground](https://aka.ms/vibevoice-asr) |
 | VibeVoice-TTS-1.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-1.5B) | Disabled |
 | VibeVoice-Realtime-0.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B) | [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb) |
-| VibeVoice-ASR-7B | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR) |  [Playground](https://aka.ms/vibevoice-asr) |
 
 </div>
 
@@ -78,7 +78,11 @@ For more information, demos, and examples, please visit our [Project Page](https
 https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 </div>
-
+<p align="center">
+  <img src="Figures/DER.jpg" alt="DER" height="200">
+  <img src="Figures/cpWER.jpg" alt="cpWER" height="200">
+  <img src="Figures/tcpWER.jpg" alt="tcpWER" height="200">
+</p>
 
 ### 2. 🎙️ [VibeVoice-TTS](docs/vibevoice-tts.md) - Long-form Multi-speaker TTS
 
