@@ -79,10 +79,11 @@ https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 </div>
 <p align="center">
-  <img src="Figures/DER.jpg" alt="DER" height="200"><br>
-  <img src="Figures/cpWER.jpg" alt="cpWER" height="200"><br>
-  <img src="Figures/tcpWER.jpg" alt="tcpWER" height="200">
+  <img src="../Figures/DER.jpg" alt="DER" width="50%"><br>
+  <img src="../Figures/cpWER.jpg" alt="cpWER" width="50%"><br>
+  <img src="../Figures/tcpWER.jpg" alt="tcpWER" width="50%">
 </p>
+
 
 ### 2. 🎙️ [VibeVoice-TTS](docs/vibevoice-tts.md) - Long-form Multi-speaker TTS
 
