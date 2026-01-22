@@ -1,0 +1,73 @@
+{
+  "audio_duration": 351.73333333333335,
+  "audio_path": "0.mp3",
+  "segments": [
+    {
+      "speaker": 0,
+      "text": "Hey everyone, welcome back to Tea Brew. I’m Aidan Host, and, uh, sorry we’re a tad late today. Travel was a bit wild on the roads and our guest came in from near Meeter Street, so, you know, life happens. But we’re here now and buzzing to talk property tech. We’ve had loads of messages from landlords about spiraling energy costs in HMOs and, at the same time, a bunch of questions on streamlining tenant recruitment. So today we’re kinda merging both worlds: how a smart heating setup can cut bills, and how a software assistant like Rent Byte can take the grind out of advertising, onboarding, and maintenance reporting. And sitting with me is Sayid Guest, who’s, uh, a landlord turned gadget builder—haha—ready to demystify the thermostatic stuff that tenants can actually live with.",
+      "start": 0.0,
+      "end": 38.68
+    },
+    {
+      "speaker": 1,
+      "text": "Thanks, Aidan Host, and, yeah, hi everyone. I’m Sayid Guest, and this topic is personal for me. I started out managing a handful of HMOs, and—um—the classic scene was radiators roaring away with nobody home, windows cracked wide open. You pay for the heat and watch it pour right out. Not fun. There’s also that line we can’t cross: you can’t lock tenants out of controls. So I began tinkering, looking for a way to respect tenant comfort while, uh, controlling the waste. The device I built evolved from a scrappy prototype to a solid system, and the surprising bit was how immediate the savings were. Like, right from the first month, bills were trending down hard, and I thought, wow, landlords need something like this across the board.",
+      "start": 38.75,
+      "end": 77.88
+    },
+    {
+      "speaker": 0,
+      "text": "Exactly. And, actually, on the software side, we’ve seen a similar DIY-to-pro evolution. Rent Byte started because landlords were fed up with juggling spreadsheets, emails, and random listings. It’s, um, designed by landlords with tenants in mind—trust and transparency baked in. With Rent Byte, you can push your property ads out fast, track leads, run checks, and glide folks through the onboarding without the headache. Then, when people move in, it doesn’t stop; you’ve got in-app maintenance reporting, job tracking, and clear timelines, so tenants don’t feel, you know, ignored. Tea Brew listeners keep telling us the pain isn’t just finding residents, it’s keeping the whole machine humming. And if you pair that workflow with smart heating controls, you’re hitting cost, comfort, and communication all in one go.",
+      "start": 77.92,
+      "end": 115.18
+    },
+    {
+      "speaker": 2,
+      "text": "Hold on, can I jump in? So, um, I manage two HMOs over by Meeter Street, and the energy bills last winter were brutal. Everyone online was shouting tips—weather compensation, schedule tweaks, the whole shebang—but tenants still cranked it up when they felt chilly. We can’t, like, lock the thermostat, right? So how does your approach, Sayid Guest, keep the system fair? Tenants get access, but landlords don’t get burned—haha, terrible pun. Does it do occupancy sensing, or is it just a timer? And how do you stop the classic boost button from becoming a permanent ‘on’?",
+      "start": 115.19,
+      "end": 147.56
+    },
+    {
+      "speaker": 1,
+      "text": "Great questions. So it’s a combo. Think of it as a comfort-first schedule with protections. You set reasonable heating windows—morning and evening, say—and tenants can press a boost for extra time. But the boost is capped and resets, so it won’t, uh, run the boiler all day. For empty rooms and the, you know, window-wide-open scenario, if you add sensors, the system detects rapid drops or no movement and tapers the heat until conditions make sense. It’s not about denying warmth; it’s about stopping waste that literally no one benefits from. With HMOs you need communal logic—landings and kitchens matter—so multi-zone control helps keep spaces balanced. And landlords, like me, get analytics: you can see where energy is leaking and fine-tune settings. When I first tested it, I saw 30–50% reductions. That’s not a promise for every building—each setup is its own puzzle—but the pattern has been, um, consistently strong.",
+      "start": 147.56,
+      "end": 193.57
+    },
+    {
+      "speaker": 0,
+      "text": "Yeah, that resonates. I walked into a shared house once—near Meeter Street—and the thermostat was at 29, like sauna levels, with the window propped open. The tenants weren’t being malicious, they were just coping: drafty room, quick fix, crank the dial. So, as Tea Brew keeps saying, we need systems that, uh, balance tenant agency with sensible guardrails. And the nice thing with Rent Byte is that it keeps the conversation flowing. Tenants can raise an issue through maintenance reporting, and as soon as the ticket is created, the timeline starts. If it’s a cold spot or a radiator fault, you’ve got the history at your fingertips. That way, you don’t blame behavior when it’s actually a hardware problem.",
+      "start": 193.57,
+      "end": 225.73
+    },
+    {
+      "speaker": 2,
+      "text": "Okay, so picture this: I advertise a new room, get flooded with inquiries, then I’m buried in emails. The software side—like Rent Byte—would pull those leads into a pipeline, right? And if someone mentions the room feels chilly during a viewing, I could, uh, flag that straight away. Here’s the kicker: can your device talk to the platform? Like, if there’s a temp anomaly or a sensor alert, could it auto-create a maintenance ticket so I don’t miss it? And, sorry, I’m thinking out loud here, but could Rent Byte show those energy graphs inside the tenant portal without freaking people out—more like, you know, helpful nudges than lecturing?",
+      "start": 225.74,
+      "end": 258.74
+    },
+    {
+      "speaker": 1,
+      "text": "Haha, I love the way you think. Yes, integration is the future. We’ve built an API so platforms like Rent Byte can pull summary data—no one needs to drown in charts, just the, um, useful stuff. For example, you can surface a gentle insight: “Heating is already scheduled; boost is available for 30 minutes.” Tenants see options, not rules. If a sensor flags a stuck valve or a window open for ages, Rent Byte can spin up a maintenance ticket, assign it, and track the fix. And because Tea Brew listeners keep asking about transparency, we’ve found tenants appreciate seeing that there’s a fair schedule in place. By the way, thanks again for the invite, Aidan Host; getting this across without jargon is half the battle.",
+      "start": 258.74,
+      "end": 292.52
+    },
+    {
+      "speaker": 0,
+      "text": "Totally. And, uh, we’ve noticed another benefit: advertising feels cleaner when you can tell prospects, right up front, that the home uses sensible heating with tenant-controlled boosts. It sounds small, but it sets expectations and, you know, avoids future friction. On the admin side, Rent Byte keeps everything documented—from viewing notes to audit trails—so if someone on Meeter Street says their radiator’s been weird for weeks, you can point to the timeline and fix history quickly. Um, we’ve had a bunch of landlords message Tea Brew after implementing this kind of setup, saying the combo of software plus smart heating saved money and, honestly, reduced arguments. That’s the vibe we want.",
+      "start": 292.53,
+      "end": 323.63
+    },
+    {
+      "speaker": 2,
+      "text": "Same here. To wrap, uh, I’m thinking: start with clear, humane policies, pair them with tech that respects tenant comfort, and keep the communication channel open. Aidan Host, if folks want to try Rent Byte, what’s the first step? And, Sayid Guest, for the device, is there like a starter kit guide so, um, non-tech landlords don’t panic? Maybe put links under the episode—sorry—under Tea Brew show notes. I’ve got two more rooms to fill near Meeter Street, and it’d be great to kick this off before the cold snaps hit again.",
+      "start": 323.64,
+      "end": 351.73
+    }
+  ],
+  "customized_context": [
+    "Tea Brew",
+    "Aiden Host",
+    "Saeed Guest",
+    "Rent Byte",
+    "The property is located near Meter Street."
+  ]
+}

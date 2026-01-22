@@ -364,7 +364,7 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else getattr(self.config, 'use_cache', False)
 
         # Process inputs
         if inputs_embeds is None and input_ids is not None:
@@ -377,6 +377,8 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
                 speech_masks=speech_masks,
                 speech_semantic_tensors=speech_semantic_tensors,
             )
+            # Clone to avoid in-place operation on leaf variable during training
+            inputs_embeds = inputs_embeds.clone()
             inputs_embeds[acoustic_input_mask] = speech_features
 
         # Forward through the model
@@ -402,7 +404,7 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
             shift_logits = shift_logits.view(-1, self.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
