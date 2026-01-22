@@ -8,7 +8,7 @@ This directory contains scripts for LoRA (Low-Rank Adaptation) fine-tuning of th
 # you need to install vibevoice first
 # pip install -e .[asr]
 
-pip install peft accelerate
+pip install peft
 ```
 
 ## Toy Dataset
