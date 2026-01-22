@@ -5,6 +5,9 @@ This directory contains scripts for LoRA (Low-Rank Adaptation) fine-tuning of th
 ## Requirements
 
 ```bash
+# you need to install vibevoice first
+# pip install -e .[asr]
+
 pip install peft accelerate
 ```
 
@@ -52,23 +55,36 @@ Each JSON file should have the following structure:
       "end": 77.88
     }
   ],
-  "hotwords": ["Tea Brew", "Aiden Host"]  // optional
+  "customized_context": ["Tea Brew", "Aiden Host", "The property is near Meter Street."]  // optional, domain-specific terms or context sentences
 }
 ```
 
 ## Training
 
-### Basic Usage
+### Basic
 
 ```bash
-python lora_finetune.py \
+# 1 GPU
+torchrun --nproc_per_node=1 lora_finetune.py \
     --model_path microsoft/VibeVoice-ASR \
     --data_dir ./toy_dataset \
     --output_dir ./output \
     --num_train_epochs 3 \
     --per_device_train_batch_size 1 \
     --learning_rate 1e-4 \
-    --bf16
+    --bf16 \
+    --report_to none
+
+# Specific GPUs (e.g., GPU 0,1,2,3)
+CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 lora_finetune.py \
+    --model_path microsoft/VibeVoice-ASR \
+    --data_dir ./toy_dataset \
+    --output_dir ./output \
+    --num_train_epochs 3 \
+    --per_device_train_batch_size 1 \
+    --learning_rate 1e-4 \
+    --bf16 \
+    --report_to none
 ```
 
 ### Full Options
@@ -76,7 +92,7 @@ python lora_finetune.py \
 The script uses HuggingFace's `TrainingArguments`, so all standard options are available:
 
 ```bash
-python lora_finetune.py \
+torchrun --nproc_per_node=4 lora_finetune.py \
     --model_path microsoft/VibeVoice-ASR \
     --data_dir ./toy_dataset \
     --output_dir ./output \
@@ -108,7 +124,7 @@ python lora_finetune.py \
 | `--gradient_accumulation_steps` | 1 | Effective batch size = batch_size × grad_accum |
 | `--learning_rate` | 5e-5 | Learning rate (1e-4 to 2e-4 typical for LoRA) |
 | `--gradient_checkpointing` | False | Enable to reduce memory usage |
-| `--use_hotwords` | True | Include hotwords from JSON as context |
+| `--use_customized_context` | True | Include customized_context from JSON as additional context |
 | `--max_audio_length` | None | Skip audio longer than this (seconds) |
 
 ## Inference with Fine-tuned Model
@@ -118,7 +134,7 @@ python inference_lora.py \
     --base_model microsoft/VibeVoice-ASR \
     --lora_path ./output \
     --audio_file ./toy_dataset/0.mp3 \
-    --context_info "Hotwords: Tea Brew, Aiden Host"
+    --context_info "Tea Brew, Aiden Host"
 ```
 
 ## Merging LoRA Weights (Optional)

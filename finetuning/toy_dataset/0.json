@@ -63,11 +63,11 @@
       "end": 351.73
     }
   ],
-  "hotwords": [
+  "customized_context": [
     "Tea Brew",
     "Aiden Host",
     "Saeed Guest",
     "Rent Byte",
-    "Meter Street"
+    "The property is located near Meter Street."
   ]
 }

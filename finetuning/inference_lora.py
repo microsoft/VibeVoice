@@ -11,16 +11,10 @@ Usage:
         --audio_file ./toy_dataset/0.mp3
 """
 
-import os
-import sys
 import argparse
 import torch
-from pathlib import Path
 
 from peft import PeftModel
-
-# Add parent directory to path for vibevoice imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
 from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor

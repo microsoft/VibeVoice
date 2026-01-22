@@ -6,8 +6,6 @@ This script implements LoRA (Low-Rank Adaptation) fine-tuning for the VibeVoice 
 It uses PEFT (Parameter-Efficient Fine-Tuning) library for efficient training.
 """
 
-import os
-import sys
 import json
 import logging
 from pathlib import Path
@@ -30,9 +28,6 @@ from peft import (
     prepare_model_for_kbit_training,
     TaskType,
 )
-
-# Add parent directory to path for vibevoice imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
 from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
@@ -66,9 +61,9 @@ class DataArguments:
         default=None,
         metadata={"help": "Maximum audio length in seconds (default: no limit)"}
     )
-    use_hotwords: bool = field(
+    use_customized_context: bool = field(
         default=True,
-        metadata={"help": "Whether to use hotwords from JSON"}
+        metadata={"help": "Whether to use customized_context from JSON as additional context"}
     )
 
 
@@ -174,7 +169,7 @@ class VibeVoiceASRDataset(Dataset):
                 },
                 ...
             ],
-            "hotwords": ["Tea Brew", "Aiden Host", ...]  # optional
+            "customized_context": ["Tea Brew", "The property is near Meter Street."]  # optional
         }
     """
     
@@ -183,7 +178,7 @@ class VibeVoiceASRDataset(Dataset):
         data_dir: str,
         processor: VibeVoiceASRProcessor,
         max_audio_length: Optional[float] = None,  # in seconds
-        use_hotwords: bool = True,
+        use_customized_context: bool = True,
     ):
         """
         Initialize the dataset.
@@ -192,12 +187,12 @@ class VibeVoiceASRDataset(Dataset):
             data_dir: Directory containing audio files and JSON labels
             processor: VibeVoice ASR processor
             max_audio_length: Maximum audio length in seconds (None = no limit)
-            use_hotwords: Whether to include hotwords in context
+            use_customized_context: Whether to include customized_context in prompt
         """
         self.data_dir = Path(data_dir)
         self.processor = processor
         self.max_audio_length = max_audio_length
-        self.use_hotwords = use_hotwords
+        self.use_customized_context = use_customized_context
         
         # Find all JSON files
         self.samples = self._load_samples()
@@ -284,12 +279,12 @@ class VibeVoiceASRDataset(Dataset):
         data = sample["data"]
         audio_path = sample["audio_path"]
         
-        # Prepare context info (hotwords)
+        # Prepare context info (customized_context)
         context_info = None
-        if self.use_hotwords and "hotwords" in data:
-            hotwords = data["hotwords"]
-            if hotwords:
-                context_info = "\n".join(hotwords)
+        if self.use_customized_context and "customized_context" in data:
+            customized_context = data["customized_context"]
+            if customized_context:
+                context_info = "\n".join(customized_context)
         
         # Process audio using the processor's internal method
         encoding = self.processor._process_single_audio(
@@ -488,7 +483,7 @@ def train(
         data_dir=data_args.data_dir,
         processor=processor,
         max_audio_length=data_args.max_audio_length,
-        use_hotwords=data_args.use_hotwords,
+        use_customized_context=data_args.use_customized_context,
     )
     
     if len(train_dataset) == 0:
