@@ -977,7 +977,6 @@ Or paste text directly and it will auto-assign speakers.""",
                     elem_classes="audio-output",
                     streaming=True,  # Enable streaming mode
                     autoplay=True,
-                    show_download_button=False,  # Explicitly show download button
                     visible=True
                 )
                 
@@ -988,7 +987,6 @@ Or paste text directly and it will auto-assign speakers.""",
                     elem_classes="audio-output complete-audio-section",
                     streaming=False,  # Non-streaming mode
                     autoplay=False,
-                    show_download_button=True,  # Explicitly show download button
                     visible=False  # Initially hidden, shown when audio is ready
                 )
                 
@@ -1284,8 +1282,7 @@ def main():
             share=args.share,
             server_port=args.port,
             server_name="0.0.0.0" if args.share else "127.0.0.1",
-            show_error=True,
-            show_api=args.show_api  # Toggle API docs page
+            show_error=True
         )
     except KeyboardInterrupt:
         print("\n🛑 Shutting down gracefully...")
