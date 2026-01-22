@@ -70,6 +70,12 @@ For more information, demos, and examples, please visit our [Project Page](https
 - **📝 Rich Transcription (Who, When, What)**:
   The model jointly performs ASR, diarization, and timestamping, producing a structured output that indicates *who* said *what* and *when*.
 
+<p align="center">
+  <img src="Figures/DER.jpg" alt="DER" width="50%"><br>
+  <img src="Figures/cpWER.jpg" alt="cpWER" width="50%"><br>
+  <img src="Figures/tcpWER.jpg" alt="tcpWER" width="50%">
+</p>
+
 [📖 Documentation](docs/vibevoice-asr.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-ASR) | [🎮 Playground](https://aka.ms/vibevoice-asr)
 
 
@@ -78,12 +84,6 @@ For more information, demos, and examples, please visit our [Project Page](https
 https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 </div>
-<p align="center">
-  <img src="Figures/DER.jpg" alt="DER" width="50%"><br>
-  <img src="Figures/cpWER.jpg" alt="cpWER" width="50%"><br>
-  <img src="Figures/tcpWER.jpg" alt="tcpWER" width="50%">
-</p>
-
 
 ### 2. 🎙️ [VibeVoice-TTS](docs/vibevoice-tts.md) - Long-form Multi-speaker TTS
 
@@ -102,11 +102,11 @@ https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
   Supports English, Chinese and other languages.
 
 
-[📖 Documentation](docs/vibevoice-tts.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-1.5B)  |  [📊 Paper](https://arxiv.org/pdf/2508.19205)
-
 <div align="center">
   <img src="Figures/VibeVoice-TTS-results.jpg" alt="VibeVoice Results" width="80%">
 </div>
+[📖 Documentation](docs/vibevoice-tts.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-1.5B)  |  [📊 Paper](https://arxiv.org/pdf/2508.19205)
+
 
 **English**
 <div align="center">
