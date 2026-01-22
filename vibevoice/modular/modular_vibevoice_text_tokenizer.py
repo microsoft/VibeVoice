@@ -207,8 +207,107 @@ class VibeVoiceTextTokenizerFast(Qwen2TokenizerFast):
         """Id used for padding (returns -100 for loss masking)."""
         return self._pad_id
 
+class VibeVoiceASRTextTokenizerFast(Qwen2TokenizerFast):
+    """
+    Construct a "fast" VibeVoice tokenizer (backed by HuggingFace's *tokenizers* library).
+    Based on the Qwen2 tokenizer with additional special tokens for speech.
+    
+    Args:
+        vocab_file (`str`, *optional*):
+            Path to the vocabulary file.
+        merges_file (`str`, *optional*):
+            Path to the merges file.
+        tokenizer_file (`str`, *optional*):
+            Path to [tokenizers](https://github.com/huggingface/tokenizers) file.
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The unknown token.
+        bos_token (`str`, *optional*):
+            The beginning of sequence token. Not used for vibevoice.
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The end of sequence token.
+        pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The token used for padding.
+    """
 
+    model_input_names = ["input_ids", "attention_mask"]
+
+    def __init__(
+        self,
+        vocab_file=None,
+        merges_file=None,
+        tokenizer_file=None,
+        unk_token="<|endoftext|>",
+        bos_token=None,
+        eos_token="<|endoftext|>",
+        pad_token="<|endoftext|>",
+        add_prefix_space=False,
+        **kwargs,
+    ):
+        super().__init__(
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            tokenizer_file=tokenizer_file,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+        
+        # Add VibeVoice-specific special tokens
+        self._add_vibevoice_special_tokens()
+        
+        # https://github.com/QwenLM/Qwen2.5-VL/blob/d2240f11656bfe404b9ba56db4e51cd09f522ff1/qwen-vl-finetune/qwenvl/data/data_qwen_packed.py#L57C5-L57C222
+        self.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+        
+    def _add_vibevoice_special_tokens(self):
+        """Add VibeVoice-specific special tokens."""
+        special_tokens = {
+            "additional_special_tokens": [
+                "<|object_ref_start|>",  # Speech start (reusing vision tokens)
+                "<|object_ref_end|>",  # Speech end
+                "<|box_start|>",  # Speech diffusion pad
+            ]
+        }
+        num_added = self.add_special_tokens(special_tokens)
+        
+        # Cache special token IDs
+        self._speech_start_id = self.convert_tokens_to_ids("<|object_ref_start|>")
+        self._speech_end_id = self.convert_tokens_to_ids("<|object_ref_end|>")
+        self._speech_pad_id = self.convert_tokens_to_ids("<|box_start|>")
+
+        self._eos_id = self.eos_token_id # qwen2 / qwen3
+        self._pad_id = self.convert_tokens_to_ids('<|image_pad|>')
+        
+        return num_added    
+    
+    @property
+    def eos_id(self) -> int:
+        """Id of the end of sequence token."""
+        return self._eos_id
+    
+    @property
+    def speech_start_id(self) -> int:
+        """Id of the speech start token."""
+        return self._speech_start_id
+    
+    @property
+    def speech_end_id(self) -> int:
+        """Id of the speech end token."""
+        return self._speech_end_id
+    
+    @property
+    def speech_pad_id(self) -> int:
+        """Id of the speech diffusion token."""
+        return self._speech_pad_id
+    
+    @property
+    def pad_id(self) -> int:
+        return self._pad_id
+    
 __all__ = [
     "VibeVoiceTextTokenizer", 
     "VibeVoiceTextTokenizerFast", 
+    "VibeVoiceASRTextTokenizerFast",
 ]

@@ -1,3 +1,4 @@
+# copied from https://github.com/vibevoice-community/VibeVoice/blob/main/vibevoice/modular/modeling_vibevoice.py
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union, Callable
 from tqdm import tqdm
@@ -259,9 +260,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
                     "constant",
                     0,
                 )
-            print("✅ Tied input and output embeddings using standard assignment.")
+            print("Tied input and output embeddings using standard assignment.")
         else:
-            print("ℹ️  tie_word_embeddings is False, not tying weights.")
+            print("tie_word_embeddings is False, not tying weights.")
 
     # Also, ensure set_output_embeddings is safe, though your implementation looks okay.
     # The key is to avoid calling it after accelerator.prepare().
@@ -368,11 +369,18 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
                 )
             if speech_tensors is not None:
                 if semantic_speech_all_connect_features is not None:
-                    x[acoustic_input_mask] = speech_all_connect_features[speech_masks] + semantic_speech_all_connect_features[speech_masks]
+                    x[acoustic_input_mask] = (
+                        speech_all_connect_features[speech_masks]
+                        + semantic_speech_all_connect_features[speech_masks]
+                    )
                 else:
                     x[acoustic_input_mask] = speech_all_connect_features[speech_masks]
-                speech_features = speech_all_features[speeches_loss_input.unsqueeze(-1) & speech_masks] # only part audio need diffuse
-                speech_connect_features = speech_all_connect_features[speeches_loss_input.unsqueeze(-1) & speech_masks]
+
+                # Select only the target segments' latents for diffusion loss.
+                # Both masks are [num_segments, max_latent_len]; using 2D mask on [B,T,D] selects [N_true, D].
+                target_latent_mask = speeches_loss_input & speech_masks
+                speech_features = speech_all_features[target_latent_mask]
+                speech_connect_features = speech_all_connect_features[target_latent_mask]
         else:
             speech_features, speech_connect_features = self.forward_speech_features(
                     speech_tensors=speech_tensors.type_as(x) if speech_tensors is not None else None,
