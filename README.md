@@ -127,6 +127,28 @@ Overlapping Speech: The current model does not explicitly model or generate over
 
 We do not recommend using VibeVoice in commercial or real-world applications without further testing and development. This model is intended for research and development purposes only. Please use responsibly.
 
+## Upstream Sync
+
+This fork tracks upstream `microsoft/VibeVoice` while preserving local MPS/Metal support.
+
+Recommended workflow:
+
+1) Stash local changes (including untracked):
+   - `git stash push -u -m "pre-upstream-sync"`
+2) Ensure upstream remote exists and fetch:
+   - `git remote add upstream https://github.com/microsoft/VibeVoice.git`
+   - `git fetch upstream --prune`
+3) Merge upstream into your current branch:
+   - `git merge upstream/main`
+4) Conflict policy:
+   - Default to upstream for conflicts.
+   - Re-apply MPS/Metal device handling in files that select devices, dtypes, or load models.
+5) Record conflicts and MPS edits in `SYNC_NOTES.md`.
+6) Run smoke checks:
+   - Unit tests (if any)
+   - Streaming TTS demo on Mac MPS
+   - Device priority: CUDA > MPS > CPU
+
 ## Star History
 
 ![Star History Chart](https://api.star-history.com/svg?repos=Microsoft/vibevoice&type=date&legend=top-left)

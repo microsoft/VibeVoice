@@ -1010,7 +1010,6 @@ class VibeVoiceTokenizerEncoderOutput:
     def mode(self):
         """Return the distribution mode (which is the mean for Gaussian)."""
         return self.mean
-    
 class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
     """VibeVoice speech tokenizer model combining encoder and decoder for acoustic tokens"""
     
