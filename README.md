@@ -85,6 +85,7 @@ For more information, demos, and examples, please visit our [Project Page](https
 https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 </div>
+<br>
 
 ### 2. 🎙️ [VibeVoice-TTS](docs/vibevoice-tts.md) - Long-form Multi-speaker TTS
 
@@ -152,6 +153,7 @@ https://github.com/user-attachments/assets/a357c4b6-9768-495c-a576-1618f6275727
 
 
 
+<br>
 
 ### 3. ⚡ [VibeVoice-Streaming](docs/vibevoice-realtime-0.5b.md) - Real-time Streaming TTS
 
@@ -171,6 +173,7 @@ https://github.com/user-attachments/assets/0901d274-f6ae-46ef-a0fd-3c4fba4f76dc
 
 </div>
 
+<br>
 
 ## ⚠️ Risks and Limitations
 
