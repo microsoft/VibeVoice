@@ -240,6 +240,26 @@ class VibeVoiceConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    def get_text_config(self, decoder=False):
+        """
+        Returns the text config for this model.
+        
+        vLLM uses this method to get the text configuration from multimodal models.
+        This allows vLLM to correctly determine hidden_size, num_attention_heads,
+        and other properties needed for memory profiling and model execution.
+        
+        For VibeVoice, the "text config" is the decoder_config (Qwen2Config).
+        
+        Args:
+            decoder: If True, return the decoder config (for encoder-decoder models).
+                    For VibeVoice, this is always the decoder_config.
+        
+        Returns:
+            The decoder configuration (Qwen2Config) which contains hidden_size, etc.
+        """
+        return self.decoder_config
+
+
 class VibeVoiceASRConfig(PretrainedConfig):
     model_type = "vibevoice"
     is_composition = True
