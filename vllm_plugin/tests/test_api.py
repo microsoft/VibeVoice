@@ -135,7 +135,7 @@ def test_transcription(audio_path: str, base_url: str = "http://localhost:8000")
                 ]
             }
         ],
-        "max_tokens": 4096,       
+        "max_tokens": 32768,       
         "temperature": 0.0,      
         "stream": True,
         "top_p": 1.0,
