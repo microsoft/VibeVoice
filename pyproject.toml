@@ -45,9 +45,20 @@ asr = [
   "pydub" # for visualization
 ]
 
+vllm = [
+  "transformers>=4.51.3",
+  "fastapi",
+  "uvicorn[standard]",
+  "requests",
+]
+
+[project.entry-points."vllm.general_plugins"]
+vibevoice = "vllm_plugin:register_vibevoice"
+
 [project.urls]
 "Homepage" = "https://github.com/microsoft/VibeVoice"
 "Bug Tracker" = "https://github.com/microsoft/VibeVoice/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["vibevoice*", "vllm_plugin*"]
