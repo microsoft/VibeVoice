@@ -79,9 +79,9 @@ python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --
 python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add a audio path here] 
 ```
 
-### Results
+## Results
 
-#### Multilingual
+### Multilingual
 | Dataset        | Language  | DER  | cpWER | tcpWER | WER  |
 |----------------|-----------|------|-------|--------|------|
 | MLC-Challenge  | English   | 4.28 | 11.48 | 13.02  | 7.99  |
