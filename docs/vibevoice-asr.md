@@ -7,7 +7,10 @@
 
 **Model:** [VibeVoice-ASR-7B](https://huggingface.co/microsoft/VibeVoice-ASR)<br>
 **Demo:** [VibeVoice-ASR-Demo](https://aka.ms/vibevoice-asr)<br>
-**Finetuning:** [finetune-guide](../finetuning-asr/README.md)
+**Report:** [VibeVoice-ASR-Report](./VibeVoice-ASR-Report.pdf)<br>
+**Finetuning:** [finetune-guide](../finetuning-asr/README.md)<br>
+**vllm:** [vllm-asr](./vibevoice-vllm-asr.md)<br>
+
 
 ## 🔥 Key Features
 
@@ -79,6 +82,34 @@ python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --
 python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add a audio path here] 
 ```
 
+## Results
+
+### Multilingual
+| Dataset        | Language  | DER  | cpWER | tcpWER | WER  |
+|----------------|-----------|------|-------|--------|------|
+| MLC-Challenge  | English   | 4.28 | 11.48 | 13.02  | 7.99  |
+| MLC-Challenge  | French    | 3.80 | 18.80 | 19.64  | 15.21 |
+| MLC-Challenge  | German    | 1.04 | 17.10 | 17.26  | 16.30 |
+| MLC-Challenge  | Italian   | 2.08 | 15.76 | 15.91  | 13.91 |
+| MLC-Challenge  | Japanese  | 0.82 | 15.33 | 15.41  | 14.69 |
+| MLC-Challenge  | Korean    | 4.52 | 15.35 | 16.07  | 9.65  |
+| MLC-Challenge  | Portuguese| 7.98 | 29.91 | 31.65  | 21.54 |
+| MLC-Challenge  | Russian   | 0.90 | 12.94 | 12.98  | 12.40 |
+| MLC-Challenge  | Spanish   | 2.67 | 10.51 | 11.71  | 8.04  |
+| MLC-Challenge  | Thai      | 4.09 | 14.91 | 15.57  | 13.61 |
+| MLC-Challenge  | Vietnamese| 0.16 | 14.57 | 14.57  | 14.43 |
+
+---
+
+| Dataset        | Language  | DER  | cpWER | tcpWER | WER  |
+|----------------|-----------|------|-------|--------|------|
+| AISHELL-4      | Chinese   | 6.77 | 24.99 | 25.35  | 21.40 |
+| AMI-IHM        | English   | 11.92| 20.41 | 20.82  | 18.81 |
+| AMI-SDM        | English   | 13.43| 28.82 | 29.80  | 24.65 |
+| AliMeeting     | Chinese   | 10.92| 29.33 | 29.51  | 27.40 |
+| MLC-Challenge  | Average   | 3.42 | 14.81 | 15.66  | 12.07|
+
+
 ## Finetuning
 LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetuning-asr/README.md) for detailed guide.
 
@@ -86,3 +117,11 @@ LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetun
 ## 📄 License
 
 This project is licensed under the [MIT License](../LICENSE).
+
+
+## Language Distribution
+<p align="center">
+  <img src="../Figures/language_distribution_horizontal.png" alt="Language Distribution" width="80%">
+</p>
+
+
