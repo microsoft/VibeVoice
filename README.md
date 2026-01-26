@@ -180,6 +180,12 @@ https://github.com/user-attachments/assets/0901d274-f6ae-46ef-a0fd-3c4fba4f76dc
 
 <br>
 
+## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+
+
+
 ## ⚠️ Risks and Limitations
 
 
