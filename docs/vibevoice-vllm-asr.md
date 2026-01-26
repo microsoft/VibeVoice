@@ -15,70 +15,54 @@ Deploy VibeVoice ASR model as a high-performance API service using [vLLM](https:
 
 Using Official vLLM Docker Image (Recommended)
 
+1. Clone the repository
 ```bash
-# 1. Pull the official vLLM image
-docker pull vllm/vllm-openai:latest
+git clone https://github.com/microsoft/VibeVoice.git
+cd VibeVoice
+```
 
-# 2. Start an interactive container
-docker run -it --gpus all --name vibevoice-vllm \
+2. Launch the server (background mode)
+```bash
+docker run -d --gpus all --name vibevoice-vllm \
   --ipc=host \
   -p 8000:8000 \
   -e VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
   -e PYTORCH_ALLOC_CONF=expandable_segments:True \
-  -v /path/to/models:/models \
-  -v /path/to/VibeVoice:/app \
+  -v $(pwd):/app \
   -w /app \
   --entrypoint bash \
-  vllm/vllm-openai:latest
-
-# 3. Inside container: Install system dependencies
-bash vllm_plugin/scripts/install_deps.sh
-
-# 4. Inside container: Install VibeVoice with vLLM support
-pip install -e .[vllm]
-
-# 5. Inside container: (Optional) Generate tokenizer files if needed
-python3 -m vllm_plugin.tools.generate_tokenizer_files --output /models/your_model
-
-# 6. Inside container: Start vLLM server
-vllm serve /models/your_model \
-  --served-model-name vibevoice \
-  --trust-remote-code \
-  --dtype bfloat16 \
-  --max-num-seqs 64 \
-  --max-model-len 65536 \
-  --max-num-batched-tokens 32768 \
-  --gpu-memory-utilization 0.8 \
-  --enforce-eager \
-  --no-enable-prefix-caching \
-  --enable-chunked-prefill \
-  --chat-template-content-format openai \
-  --tensor-parallel-size 1 \
-  --allowed-local-media-path /app \
-  --port 8000
+  vllm/vllm-openai:latest \
+  -c "python3 /app/vllm_plugin/scripts/start_server.py"
 ```
 
-> **Note**: This approach allows you to switch models, adjust parameters, and debug issues without rebuilding the container.
+3. View logs
+```bash
+docker logs -f vibevoice-vllm
+```
 
+> **Note**: 
+> - The `-d` flag runs the container in background (detached mode)
+> - Use `docker stop vibevoice-vllm` to stop the service
+> - The model will be downloaded to HuggingFace cache (`~/.cache/huggingface`) inside the container
 
-## 🚀 Quick Start
+## 🚀 Usages
 
 ### Test the API
 
 Once the vLLM server is running, test it with the provided script:
 
 ```bash
-# Run the test script (inside container)
-python3 vllm_plugin/tests/test_api.py /path/to/audio.wav
+# Run the test (use container path /app/...)
+docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api.py /app/audio.wav
 ```
-
+> **Note**: The audio file must be inside the mounted directory (`/app` in the container). Copy your audio to the VibeVoice folder before testing.
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `VIBEVOICE_FFMPEG_MAX_CONCURRENCY` | Maximum FFmpeg processes for audio decoding | `64` |
-| `PYTORCH_CUDA_ALLOC_CONF` | CUDA memory allocator config | `expandable_segments:True` |
+| `PYTORCH_ALLOC_CONF` | PyTorch memory allocator config | `expandable_segments:True` |
 
 
 
