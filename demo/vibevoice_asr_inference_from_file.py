@@ -30,7 +30,7 @@ class VibeVoiceASRBatchInference:
         model_path: str, 
         device: str = "cuda", 
         dtype: torch.dtype = torch.bfloat16,
-        attn_implementation: str = "sdpa"
+        attn_implementation: str = "flash_attention_2"
     ):
         """
         Initialize the ASR batch inference pipeline.
