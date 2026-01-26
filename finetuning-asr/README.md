@@ -5,8 +5,8 @@ This directory contains scripts for LoRA (Low-Rank Adaptation) fine-tuning of th
 ## Requirements
 
 ```bash
-# you need to install vibevoice first
-# pip install -e .[asr]
+# Install vibevoice first
+pip install -e .
 
 pip install peft
 ```

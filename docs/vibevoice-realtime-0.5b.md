@@ -97,8 +97,9 @@ sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulim
 git clone https://github.com/microsoft/VibeVoice.git
 cd VibeVoice/
 
-pip install -e .[tts]
+pip install -e .
 ```
+
 
 ## Usages
 

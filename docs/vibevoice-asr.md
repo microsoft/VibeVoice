@@ -65,7 +65,8 @@ sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulim
 ```bash
 git clone https://github.com/microsoft/VibeVoice.git
 cd VibeVoice
-pip install -e .[asr]
+
+pip install -e .
 ```
 
 ## Usages
