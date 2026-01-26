@@ -81,6 +81,15 @@ class VibeVoiceStreamingConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    def get_text_config(self, decoder=False):
+        """Returns the decoder config (required for transformers >= 4.57 cache compatibility)."""
+        return self.decoder_config
+
+    @property
+    def num_hidden_layers(self):
+        """Proxy to decoder_config.num_hidden_layers (required for transformers >= 4.57)."""
+        return self.decoder_config.num_hidden_layers
+
     def to_dict(self):
         """
         Override to_dict to handle torch.dtype serialization.
