@@ -41,12 +41,19 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         normalize_audio: bool = True,
         target_dB_FS: float = -25,
         eps: float = 1e-6,
+        max_audio_duration: float = 600.0,  # Maximum audio duration in seconds (10 minutes)
+        max_file_size_mb: float = 100.0,  # Maximum file size in MB
         **kwargs,
     ):
         super().__init__(**kwargs)
         
         self.sampling_rate = sampling_rate
         self.normalize_audio = normalize_audio
+        self.max_audio_duration = max_audio_duration
+        self.max_file_size_mb = max_file_size_mb
+        
+        # Allowed audio file formats (whitelist)
+        self.allowed_extensions = {'.wav', '.mp3', '.flac', '.m4a', '.ogg', '.pt', '.npy'}
         
         # Initialize audio normalizer if needed
         if self.normalize_audio:
@@ -60,7 +67,84 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
             "normalize_audio": normalize_audio,
             "target_dB_FS": target_dB_FS,
             "eps": eps,
+            "max_audio_duration": max_audio_duration,
+            "max_file_size_mb": max_file_size_mb,
         }
+    
+    def _validate_audio_file(self, audio_path: str) -> None:
+        """
+        Validate audio file for security: check extension, size, and existence.
+        
+        Args:
+            audio_path (str): Path to audio file
+            
+        Raises:
+            ValueError: If file is invalid or exceeds size limits
+            FileNotFoundError: If file does not exist
+        """
+        # Check if file exists
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        
+        # Validate file extension (whitelist)
+        file_ext = os.path.splitext(audio_path)[1].lower()
+        if file_ext not in self.allowed_extensions:
+            raise ValueError(
+                f"Unsupported or potentially unsafe file format: {file_ext}. "
+                f"Allowed formats: {', '.join(sorted(self.allowed_extensions))}"
+            )
+        
+        # Check file size
+        file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+        if file_size_mb > self.max_file_size_mb:
+            raise ValueError(
+                f"Audio file size ({file_size_mb:.2f} MB) exceeds maximum allowed "
+                f"size ({self.max_file_size_mb} MB). This prevents resource exhaustion attacks."
+            )
+    
+    def _validate_audio_array(self, audio: np.ndarray) -> None:
+        """
+        Validate audio array for security: check shape, duration, and content.
+        
+        Args:
+            audio (np.ndarray): Audio array to validate
+            
+        Raises:
+            ValueError: If audio array is invalid or exceeds limits
+        """
+        # Check if array is empty
+        if audio.size == 0:
+            raise ValueError("Audio array is empty")
+        
+        # Check for NaN or Inf values (potential malicious input)
+        if not np.isfinite(audio).all():
+            raise ValueError("Audio contains NaN or Inf values, which may indicate corrupted or malicious data")
+        
+        # Get audio duration
+        if len(audio.shape) == 1:
+            num_samples = audio.shape[0]
+        elif len(audio.shape) == 2:
+            # Get the time dimension (assuming it's the larger one)
+            num_samples = max(audio.shape[0], audio.shape[1])
+        else:
+            raise ValueError(f"Audio should be 1D or 2D, got shape: {audio.shape}")
+        
+        duration_seconds = num_samples / self.sampling_rate
+        
+        # Check duration limit
+        if duration_seconds > self.max_audio_duration:
+            raise ValueError(
+                f"Audio duration ({duration_seconds:.2f}s) exceeds maximum allowed "
+                f"duration ({self.max_audio_duration}s). This prevents resource exhaustion attacks."
+            )
+        
+        # Check for reasonable amplitude range (prevent extreme values)
+        max_abs_value = np.abs(audio).max()
+        if max_abs_value > 1e6:
+            raise ValueError(
+                f"Audio contains extreme amplitude values (max: {max_abs_value}), "
+                "which may indicate malicious or corrupted data"
+            )
     
     def _ensure_mono(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -106,6 +190,9 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         else:
             audio = audio.astype(np.float32)
         
+        # Validate audio array for security
+        self._validate_audio_array(audio)
+        
         # Ensure mono
         audio = self._ensure_mono(audio)
         
@@ -147,6 +234,13 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
             logger.warning(
                 f"Input sampling rate ({sampling_rate}) differs from expected "
                 f"sampling rate ({self.sampling_rate}). Please resample your audio."
+            )
+        
+        # Security: Validate input type to prevent unexpected objects
+        if not isinstance(audio, (str, np.ndarray, list)):
+            raise ValueError(
+                f"Invalid audio input type: {type(audio).__name__}. "
+                f"Expected str, np.ndarray, or list."
             )
         
         # Handle different input types
@@ -200,7 +294,7 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
 
     def _load_audio_from_path(self, audio_path: str) -> np.ndarray:
         """
-        Load audio from file path.
+        Load audio from file path with security validation.
         
         Args:
             audio_path (str): Path to audio file
@@ -208,34 +302,55 @@ class VibeVoiceTokenizerProcessor(FeatureExtractionMixin):
         Returns:
             np.ndarray: Loaded audio array
         """
+        # Validate file before loading (security check)
+        self._validate_audio_file(audio_path)
+        
         # Get file extension to determine loading method
         file_ext = os.path.splitext(audio_path)[1].lower()
         
         if file_ext in ['.wav', '.mp3', '.flac', '.m4a', '.ogg']:
             # Audio file - use librosa
-            import librosa
-            audio_array, sr = librosa.load(
-                audio_path, 
-                sr=self.sampling_rate, 
-                mono=True
-            )
-            return audio_array
+            try:
+                import librosa
+                audio_array, sr = librosa.load(
+                    audio_path, 
+                    sr=self.sampling_rate, 
+                    mono=True
+                )
+                return audio_array
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to load audio file {audio_path}. "
+                    f"The file may be corrupted or maliciously crafted. Error: {str(e)}"
+                )
         elif file_ext == '.pt':
-            # PyTorch tensor file
-            audio_tensor = torch.load(audio_path, map_location='cpu', weights_only=True).squeeze()
-            if isinstance(audio_tensor, torch.Tensor):
-                audio_array = audio_tensor.numpy()
-            else:
-                audio_array = np.array(audio_tensor)
-            return audio_array.astype(np.float32)
+            # PyTorch tensor file - use weights_only=True for security
+            try:
+                audio_tensor = torch.load(audio_path, map_location='cpu', weights_only=True).squeeze()
+                if isinstance(audio_tensor, torch.Tensor):
+                    audio_array = audio_tensor.numpy()
+                else:
+                    audio_array = np.array(audio_tensor)
+                return audio_array.astype(np.float32)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to load PyTorch tensor file {audio_path}. "
+                    f"The file may be corrupted or contain unsafe code. Error: {str(e)}"
+                )
         elif file_ext == '.npy':
-            # NumPy file
-            audio_array = np.load(audio_path)
-            return audio_array.astype(np.float32)
+            # NumPy file - use allow_pickle=False for security
+            try:
+                audio_array = np.load(audio_path, allow_pickle=False)
+                return audio_array.astype(np.float32)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to load NumPy file {audio_path}. "
+                    f"The file may be corrupted or contain unsafe pickled objects. Error: {str(e)}"
+                )
         else:
             raise ValueError(
                 f"Unsupported file format: {file_ext}. "
-                f"Supported formats: .wav, .mp3, .flac, .m4a, .ogg, .pt, .npy, .npz"
+                f"Supported formats: {', '.join(sorted(self.allowed_extensions))}"
             )
     
     def preprocess_audio(

@@ -146,12 +146,14 @@ class VibeVoiceASRProcessor:
         else:
             raise ValueError(f"Unsupported tokenizer type for {language_model_pretrained_name}")
         
-        # Load audio processor
+        # Load audio processor with security parameters
         audio_processor = VibeVoiceTokenizerProcessor(
             sampling_rate=target_sample_rate,
             normalize_audio=normalize_audio,
             target_dB_FS=config.get("target_dB_FS", -25),
             eps=config.get("eps", 1e-6),
+            max_audio_duration=config.get("max_audio_duration", 600.0),
+            max_file_size_mb=config.get("max_file_size_mb", 100.0),
         )
         
         return cls(
