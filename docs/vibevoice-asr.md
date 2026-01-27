@@ -9,7 +9,7 @@
 **Demo:** [VibeVoice-ASR-Demo](https://aka.ms/vibevoice-asr)<br>
 **Report:** [VibeVoice-ASR-Report](https://arxiv.org/pdf/2601.18184)<br>
 **Finetuning:** [finetune-guide](../finetuning-asr/README.md)<br>
-**vllm:** [vllm-asr](./vibevoice-vllm-asr.md)<br>
+**vLLM:** [vLLM-asr](./vibevoice-vllm-asr.md)<br>
 
 
 ## 🔥 Key Features
@@ -24,7 +24,7 @@
   The model jointly performs ASR, diarization, and timestamping, producing a structured output that indicates *who* said *what* and *when*.
   
 - **🌍 Multilingual & Code-Switching Support**:
-  It supports over 50 languages, requires no explicit language setting, and natively handles code-switching within and across utterances. Language distribution can be found [here](#language-distribution)
+  It supports over 50 languages, requires no explicit language setting, and natively handles code-switching within and across utterances. Language distribution can be found [here](#language-distribution).
 
 
 ## 🏗️ Model Architecture
