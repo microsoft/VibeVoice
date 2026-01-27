@@ -120,14 +120,14 @@ LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetun
 | MLC-Challenge  | Average   | 3.42 | 14.81 | 15.66  | 12.07|
 
 
-## 📄 License
-
-This project is licensed under the [MIT License](../LICENSE).
-
-
 ## Language Distribution
 <p align="center">
   <img src="../Figures/language_distribution_horizontal.png" alt="Language Distribution" width="80%">
 </p>
+
+## 📄 License
+
+This project is licensed under the [MIT License](../LICENSE).
+
 
 
