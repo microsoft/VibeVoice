@@ -7,7 +7,7 @@
 
 **Model:** [VibeVoice-ASR-7B](https://huggingface.co/microsoft/VibeVoice-ASR)<br>
 **Demo:** [VibeVoice-ASR-Demo](https://aka.ms/vibevoice-asr)<br>
-**Report:** [VibeVoice-ASR-Report](./VibeVoice-ASR-Report.pdf)<br>
+**Report:** [VibeVoice-ASR-Report](https://arxiv.org/pdf/2601.18184)<br>
 **Finetuning:** [finetune-guide](../finetuning-asr/README.md)<br>
 **vllm:** [vllm-asr](./vibevoice-vllm-asr.md)<br>
 
