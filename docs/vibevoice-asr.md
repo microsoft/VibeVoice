@@ -86,6 +86,12 @@ python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --
 python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add a audio path here] 
 ```
 
+
+## Finetuning
+LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetuning-asr/README.md) for detailed guide.
+
+
+
 ## Results
 
 ### Multilingual
@@ -112,10 +118,6 @@ python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoic
 | AMI-SDM        | English   | 13.43| 28.82 | 29.80  | 24.65 |
 | AliMeeting     | Chinese   | 10.92| 29.33 | 29.51  | 27.40 |
 | MLC-Challenge  | Average   | 3.42 | 14.81 | 15.66  | 12.07|
-
-
-## Finetuning
-LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetuning-asr/README.md) for detailed guide.
 
 
 ## 📄 License
