@@ -918,21 +918,29 @@
     updateButtonLabel();
     createAudioChain();
 
-    const params = new URLSearchParams();
-    params.set('text', textValue);
+    // Prepare configuration object to send via WebSocket message instead of URL
+    const config = {
+      text: textValue,
+    };
     if (!Number.isNaN(cfgValue)) {
-      params.set('cfg', cfgValue.toFixed(3));
+      config.cfg = cfgValue.toFixed(3);
     }
     if (!Number.isNaN(stepsValue)) {
-      params.set('steps', stepsValue.toString());
+      config.steps = stepsValue.toString();
     }
     if (voiceValue) {
-      params.set('voice', voiceValue);
+      config.voice = voiceValue;
     }
-    const wsUrl = `${location.origin.replace(/^http/, 'ws')}/stream?${params.toString()}`;
+
+    const wsUrl = `${location.origin.replace(/^http/, 'ws')}/stream`;
 
     socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';
+
+    socket.onopen = () => {
+      // Send configuration as first message after connection opens
+      socket.send(JSON.stringify(config));
+    };
 
     socket.onmessage = event => {
       if (typeof event.data === 'string') {
