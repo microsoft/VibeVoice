@@ -73,6 +73,7 @@ def _ffmpeg_load_file(filepath) -> tuple[np.ndarray, int]:
 
 # Register FFmpeg-based audio loader
 import vllm.multimodal.audio as _vllm_audio_module
+import warnings
 
 # Handle both old and new vLLM versions
 # In newer versions, AudioMediaIO may not exist or may have been moved
@@ -81,6 +82,11 @@ try:
     
     class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
         """AudioMediaIO implementation using FFmpeg for audio decoding."""
+        
+        def __init__(self, **kwargs):
+            # Call parent constructor if it exists
+            if hasattr(super(), '__init__'):
+                super().__init__(**kwargs)
         
         def load_bytes(self, data: bytes) -> tuple[np.ndarray, int]:
             return _ffmpeg_load_bytes(data, media_type=None)
@@ -98,12 +104,18 @@ try:
     try:
         import vllm.multimodal.utils as _vllm_utils_module
         _vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
-    except (ImportError, AttributeError):
-        pass  # Utils module may not have AudioMediaIO in newer versions
+    except (ImportError, AttributeError) as e:
+        warnings.warn(f"Could not patch AudioMediaIO in vllm.multimodal.utils: {e}", UserWarning)
         
-except AttributeError:
+except (AttributeError, ImportError) as e:
     # AudioMediaIO doesn't exist in this vLLM version
     # Define our own standalone implementation
+    warnings.warn(
+        f"AudioMediaIO not found in vllm.multimodal.audio ({e}). "
+        "Using standalone FFmpeg-based implementation for compatibility.",
+        UserWarning
+    )
+    
     class _PatchedAudioMediaIO:
         """Standalone AudioMediaIO implementation using FFmpeg for audio decoding.
         
@@ -125,8 +137,12 @@ except AttributeError:
     # Try to register it in the module if possible
     try:
         _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
-    except (AttributeError, TypeError):
-        pass  # Can't set attribute, audio loading will use our functions directly
+    except (AttributeError, TypeError) as e:
+        warnings.warn(
+            f"Could not register AudioMediaIO in vllm.multimodal.audio: {e}. "
+            "Audio loading will use FFmpeg functions directly.",
+            UserWarning
+        )
 
 # ============================================================================
 
