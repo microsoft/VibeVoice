@@ -73,26 +73,60 @@ def _ffmpeg_load_file(filepath) -> tuple[np.ndarray, int]:
 
 # Register FFmpeg-based audio loader
 import vllm.multimodal.audio as _vllm_audio_module
-_OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
 
-class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
-    """AudioMediaIO implementation using FFmpeg for audio decoding."""
+# Handle both old and new vLLM versions
+# In newer versions, AudioMediaIO may not exist or may have been moved
+try:
+    _OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
     
-    def load_bytes(self, data: bytes) -> tuple[np.ndarray, int]:
-        return _ffmpeg_load_bytes(data, media_type=None)
+    class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
+        """AudioMediaIO implementation using FFmpeg for audio decoding."""
+        
+        def load_bytes(self, data: bytes) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_bytes(data, media_type=None)
+        
+        def load_base64(self, media_type: str, data: str) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_bytes(base64.b64decode(data), media_type=media_type)
+        
+        def load_file(self, filepath) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_file(filepath)
     
-    def load_base64(self, media_type: str, data: str) -> tuple[np.ndarray, int]:
-        return _ffmpeg_load_bytes(base64.b64decode(data), media_type=media_type)
+    # Replace globally
+    _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
     
-    def load_file(self, filepath) -> tuple[np.ndarray, int]:
-        return _ffmpeg_load_file(filepath)
-
-# Replace globally
-_vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
-
-# Also patch in utils module where it's imported
-import vllm.multimodal.utils as _vllm_utils_module
-_vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
+    # Also patch in utils module where it's imported
+    try:
+        import vllm.multimodal.utils as _vllm_utils_module
+        _vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
+    except (ImportError, AttributeError):
+        pass  # Utils module may not have AudioMediaIO in newer versions
+        
+except AttributeError:
+    # AudioMediaIO doesn't exist in this vLLM version
+    # Define our own standalone implementation
+    class _PatchedAudioMediaIO:
+        """Standalone AudioMediaIO implementation using FFmpeg for audio decoding.
+        
+        This is used when vLLM doesn't provide AudioMediaIO or it's been moved/removed.
+        """
+        
+        def __init__(self, **kwargs):
+            pass
+        
+        def load_bytes(self, data: bytes) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_bytes(data, media_type=None)
+        
+        def load_base64(self, media_type: str, data: str) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_bytes(base64.b64decode(data), media_type=media_type)
+        
+        def load_file(self, filepath) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_file(filepath)
+    
+    # Try to register it in the module if possible
+    try:
+        _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
+    except (AttributeError, TypeError):
+        pass  # Can't set attribute, audio loading will use our functions directly
 
 # ============================================================================
 
