@@ -1,0 +1,3 @@
+# Development / test-only requirements
+# Keep test and development tools separate from runtime dependencies
+pytest==8.3.3

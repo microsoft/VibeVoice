@@ -1,16 +1,18 @@
 # vibevoice/__init__.py
-from vibevoice.modular import (
-    VibeVoiceStreamingForConditionalGenerationInference,
-    VibeVoiceStreamingConfig,
-)
+__all__ = []
+
 from vibevoice.processor import (
     VibeVoiceStreamingProcessor,
     VibeVoiceTokenizerProcessor,
+    MarkdownChunker,
+    MarkdownChunk,
+    ChunkedTTSProcessor,
 )
 
-__all__ = [
-    "VibeVoiceStreamingForConditionalGenerationInference",
-    "VibeVoiceStreamingConfig",
+__all__ += [
     "VibeVoiceStreamingProcessor",
     "VibeVoiceTokenizerProcessor",
+    "MarkdownChunker",
+    "MarkdownChunk",
+    "ChunkedTTSProcessor",
 ]

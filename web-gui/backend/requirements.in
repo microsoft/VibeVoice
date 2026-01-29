@@ -1,0 +1,11 @@
+fastapi==0.127.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.6.1
+python-multipart==0.0.22
+aiofiles==24.1.0
+sqlalchemy==2.0.35
+aiosqlite==0.20.0
+
+# Note: test and development-only dependencies (e.g., pytest) have been moved to `dev-requirements.in` to
+# keep runtime dependencies minimal and avoid installing tests in production environments.

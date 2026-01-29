@@ -176,3 +176,31 @@ tags
 exp
 .gradio/
 experimental_voices
+
+# Node.js / frontend artifacts
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.next/
+**/.next/
+/playwright-report/
+**/playwright-report/
+test-results/
+**/test-results/
+
+# Frontend build / cache
+/dist/
+build/
+
+# Virtualenvs and test venvs
+.venv*
+venv/
+env/
+.env
+
+# pip download cache
+pip_downloads/
+**/pip_downloads/

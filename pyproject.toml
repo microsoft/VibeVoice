@@ -28,35 +28,22 @@ dependencies = [
     "librosa",
     "ml-collections",
     "absl-py",
-    "gradio",
 ]
 
 [project.optional-dependencies]
 tts = [
-  "transformers==4.51.3", # we develop this project on transformers==4.51.3, later version may not be compatible
+  "transformers==4.51.3",
   "av",
   "aiortc",
   "uvicorn[standard]",
   "fastapi"
 ]
 
-asr = [
-  "transformers>=4.51.3", # the versions after 4.51.3 are all support
-  "pydub" # for visualization
-]
-
-vllm = [
-  "transformers>=4.51.3",
-  "fastapi",
-  "uvicorn[standard]",
-  "requests",
-]
-
 [project.entry-points."vllm.general_plugins"]
 vibevoice = "vllm_plugin:register_vibevoice"
 
 [project.urls]
-"Homepage" = "https://github.com/microsoft/VibeVoice"
+Homepage = "https://github.com/microsoft/VibeVoice"
 "Bug Tracker" = "https://github.com/microsoft/VibeVoice/issues"
 
 [tool.setuptools.packages.find]

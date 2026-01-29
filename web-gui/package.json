@@ -1,0 +1,7 @@
+{
+  "name": "web-gui",
+  "private": true,
+  "devDependencies": {
+    "jsdom": "^27.4.0"
+  }
+}
