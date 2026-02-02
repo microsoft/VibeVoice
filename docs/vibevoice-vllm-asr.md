@@ -55,6 +55,11 @@ Once the vLLM server is running, test it with the provided script:
 # Run the test (use container path /app/...)
 docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api.py /app/audio.wav
 ```
+
+```bash
+# Run the recover_test (use container path /app/...)
+docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api_auto_recover.py /app/audio.wav
+```
 > **Note**: The audio file must be inside the mounted directory (`/app` in the container). Copy your audio to the VibeVoice folder before testing.
 
 ### Environment Variables
