@@ -142,7 +142,7 @@ class StreamingTTSService:
         if name and name in self.voice_presets:
             return name
 
-        default_key = "en-WHTest_man"
+        default_key = "en-Carter_man"
         if default_key in self.voice_presets:
             return default_key
 
