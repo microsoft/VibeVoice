@@ -38,6 +38,12 @@ dependencies = [
     "requests",
 ]
 
+
+[project.optional-dependencies]
+streamingtts = [
+  "transformers==4.51.3", 
+]
+
 [project.entry-points."vllm.general_plugins"]
 vibevoice = "vllm_plugin:register_vibevoice"
 
