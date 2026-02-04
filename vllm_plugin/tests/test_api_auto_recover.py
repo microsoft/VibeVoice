@@ -1,18 +1,36 @@
 #!/usr/bin/env python3
 """
-VibeVoice vLLM API with Auto-Recovery from Repetition Loops.
+Test VibeVoice vLLM API with Streaming, Hotwords, and Auto-Recovery.
 
-Strategy:
-1. Start with greedy decoding (temperature=0, top_p=1.0)
-2. Stream and detect repetition patterns in real-time
-3. Only output content up to (current_length - window_size) at segment boundaries
-4. When loop detected:
-   - Truncate to last complete segment boundary (},)
-   - Recovery with temperature=0.2/0.3/0.4 for retry 1/2/3, top_p=0.95
-5. Max 3 retries, if all fail output error message
+This script tests ASR transcription with automatic recovery from repetition loops.
+Supports optional hotwords to improve recognition of domain-specific terms.
 
-User sees: clean streaming transcription output (only complete segments)
-Internal: automatic recovery from repetition loops (silent)
+Features:
+- Streaming output with real-time repetition detection
+- Auto-recovery when model enters repetition loops
+- Optional hotwords support (embedded in prompt as "with extra info: {hotwords}")
+- Video file support (auto-extracts audio)
+
+Recovery Strategy:
+1. First attempt: greedy decoding (temperature=0, top_p=1.0)
+2. If loop detected: retry with temperature=0.2/0.3/0.4, top_p=0.95
+3. Max 3 retries, truncate to last complete segment boundary
+
+Usage:
+    python test_api_auto_recover.py <audio_path> [output_path] [--url URL] [--hotwords "word1,word2"] [--debug]
+
+Examples:
+    # Basic usage
+    python3 test_api_auto_recover.py audio.wav
+    
+    # With hotwords
+    python3 test_api_auto_recover.py audio.wav --hotwords "Microsoft,VibeVoice"
+    
+    # Save result to file
+    python3 test_api_auto_recover.py audio.wav result.txt
+    
+    # Debug mode (show recovery info)
+    python3 test_api_auto_recover.py audio.wav --debug
 """
 import requests
 import json
@@ -22,6 +40,7 @@ import sys
 import os
 import subprocess
 import re
+import argparse
 from collections import Counter
 
 
@@ -441,30 +460,41 @@ def stream_with_recovery(
     return None
 
 
-def test_transcription_with_recovery():
-    """Main test function with auto-recovery."""
+def test_transcription_with_recovery(
+    audio_path: str,
+    output_path: str = None,
+    base_url: str = "http://localhost:8000",
+    hotwords: str = None,
+    debug: bool = False,
+):
+    """
+    Test ASR transcription with auto-recovery from repetition loops.
     
-    # Parse arguments
-    debug = "--debug" in sys.argv or "-debug" in sys.argv
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    Args:
+        audio_path: Path to the audio file
+        output_path: Optional path to save transcription result
+        base_url: vLLM server URL
+        hotwords: Hotwords string (e.g., "Microsoft,Azure,VibeVoice")
+        debug: Show recovery debug info
+    """
     
-    audio_path = (
-        args[0]
-    )
-    
-    output_path = args[1] if len(args) > 1 else None
-    
-    print(f"Loading audio from: {audio_path}")
+    print(f"=" * 70)
+    print(f"Testing with Auto-Recovery")
+    print(f"=" * 70)
+    print(f"Input file: {audio_path}")
+    print(f"Hotwords: {hotwords or '(none)'}")
+    print()
     
     # Handle video files: extract audio first
     temp_audio_path = None
     actual_audio_path = audio_path
     if _is_video_file(audio_path):
-        print(f"Detected video file, extracting audio...")
+        print(f"🎬 Detected video file, extracting audio...")
         temp_audio_path = _extract_audio_from_video(audio_path)
         actual_audio_path = temp_audio_path
-        print(f"Audio extracted to: {temp_audio_path}")
+        print(f"✅ Audio extracted to: {temp_audio_path}")
     
+    # Load audio
     try:
         duration = _get_duration_seconds_ffprobe(actual_audio_path)
         print(f"Audio duration: {duration:.2f} seconds")
@@ -476,16 +506,29 @@ def test_transcription_with_recovery():
         print(f"Audio size: {len(audio_bytes)} bytes")
         
     except Exception as e:
-        print(f"Error preparing audio: {e}")
+        print(f"❌ Error preparing audio: {e}")
+        # Cleanup temp file if created
+        if temp_audio_path and os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
         return
 
-    url = "http://localhost:8000/v1/chat/completions"
+    url = f"{base_url}/v1/chat/completions"
     
     show_keys = ["Start time", "End time", "Speaker ID", "Content"]
-    prompt_text = (
-        f"This is a {duration:.2f} seconds audio, please transcribe it with these keys: "
-        + ", ".join(show_keys)
-    )
+    
+    # Build prompt with optional hotwords
+    if hotwords and hotwords.strip():
+        prompt_text = (
+            f"This is a {duration:.2f} seconds audio, with extra info: {hotwords.strip()}\n\n"
+            f"Please transcribe it with these keys: " + ", ".join(show_keys)
+        )
+        print(f"\n📝 Hotwords embedded in prompt: '{hotwords}'")
+    else:
+        prompt_text = (
+            f"This is a {duration:.2f} seconds audio, please transcribe it with these keys: "
+            + ", ".join(show_keys)
+        )
+        print(f"\n📝 No hotwords provided")
 
     mime = _guess_mime_type(actual_audio_path)
     data_url = f"data:{mime};base64,{audio_b64}"
@@ -505,12 +548,13 @@ def test_transcription_with_recovery():
         }
     ]
     
-    print(f"\nSending request to {url} (Streaming Mode)...")
-    print(f"Prompt: {prompt_text}")
-    print("-" * 60)
-    print("Response received. Streaming content:\n")
+    print(f"\n{'=' * 70}")
+    print(f"Sending request to {url}")
+    print(f"{'=' * 70}")
     
     t0 = time.time()
+    print("\n✅ Response received. Streaming content:\n")
+    print("-" * 50)
     
     result = stream_with_recovery(
         url=url,
@@ -522,27 +566,73 @@ def test_transcription_with_recovery():
         debug=debug,
     )
     
-    print("\n[Finished]")
-    print("-" * 60)
-    print(f"Total time elapsed: {time.time() - t0:.2f}s")
+    elapsed = time.time() - t0
+    print("-" * 50)
+    print("✅ [Finished]")
+    print(f"\n{'=' * 70}")
+    print(f"⏱️  Total time elapsed: {elapsed:.2f}s")
+    print(f"{'=' * 70}")
     
     if result is None:
-        print("Transcription failed")
+        print("❌ Transcription failed")
         return
     
-    print(f"Final output length: {len(result)} chars")
+    print(f"📄 Final output length: {len(result)} chars")
     
     # Optionally save result
     if output_path:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(result)
-        print(f"Result saved to: {output_path}")
+        print(f"💾 Result saved to: {output_path}")
     
     # Cleanup temp audio file if created
     if temp_audio_path and os.path.exists(temp_audio_path):
         os.remove(temp_audio_path)
-        print(f"Cleaned up temp file: {temp_audio_path}")
+        print(f"🗑️  Cleaned up temp file: {temp_audio_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Test VibeVoice vLLM API with auto-recovery from repetition loops"
+    )
+    parser.add_argument(
+        "audio_path",
+        help="Path to audio file (wav, mp3, flac, etc.) or video file"
+    )
+    parser.add_argument(
+        "output_path",
+        nargs="?",
+        default=None,
+        help="Optional path to save transcription result"
+    )
+    parser.add_argument(
+        "--url",
+        default="http://localhost:8000",
+        help="vLLM server URL (default: http://localhost:8000)"
+    )
+    parser.add_argument(
+        "--hotwords",
+        type=str,
+        default=None,
+        help="Hotwords to improve recognition (e.g., 'Microsoft,Azure,VibeVoice')"
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show recovery debug info"
+    )
+    
+    args = parser.parse_args()
+    
+    # Run test
+    test_transcription_with_recovery(
+        audio_path=args.audio_path,
+        output_path=args.output_path,
+        base_url=args.url,
+        hotwords=args.hotwords,
+        debug=args.debug,
+    )
 
 
 if __name__ == "__main__":
-    test_transcription_with_recovery()
+    main()
