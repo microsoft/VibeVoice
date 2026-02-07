@@ -15,7 +15,6 @@ from vibevoice.modular.configuration_vibevoice import VibeVoiceConfig
 from vibevoice.modular.modular_vibevoice_text_tokenizer import VibeVoiceASRTextTokenizerFast
 
 from .model import VibeVoiceForCausalLM
-from .inputs import vibevoice_audio_input_mapper
 
 
 def register_vibevoice():

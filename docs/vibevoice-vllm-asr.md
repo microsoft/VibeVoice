@@ -52,15 +52,25 @@ docker logs -f vibevoice-vllm
 Once the vLLM server is running, test it with the provided script:
 
 ```bash
-# Run the test (use container path /app/...)
+# Basic transcription
 docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api.py /app/audio.wav
+
+# With hotwords for better recognition of specific terms
+docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api.py /app/audio.wav --hotwords "Microsoft,VibeVoice"
+
 ```
 
 ```bash
-# Run the recover_test (use container path /app/...)
+# With auto-recovery from repetition loops (for long audio)
 docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api_auto_recover.py /app/audio.wav
+
+# Auto-recover with hotwords
+docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api_auto_recover.py /app/audio.wav --hotwords "Microsoft,VibeVoice"
 ```
-> **Note**: The audio file must be inside the mounted directory (`/app` in the container). Copy your audio to the VibeVoice folder before testing.
+
+> **Note**: 
+> - The audio/video file must be inside the mounted directory (`/app` in the container). Copy your files to the VibeVoice folder before testing.
+> - Hotwords help improve recognition of domain-specific terms like proper nouns, technical terms, and speaker names.
 
 ### Environment Variables
 
