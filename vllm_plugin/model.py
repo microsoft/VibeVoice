@@ -530,28 +530,86 @@ class VibeVoiceProcessingInfo(BaseProcessingInfo):
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
         return {"audio": 1}
 
+    def get_mm_max_tokens_per_item(
+        self,
+        seq_len: int,
+        mm_counts: Mapping[str, int],
+    ) -> Mapping[str, int]:
+        """Return the maximum number of audio tokens per item.
+
+        This tells vLLM's scheduler the upper bound so that
+        ``encoder_compute_budget`` is large enough for any audio length
+        the model can handle, preventing the silent scheduling deadlock
+        described in docs/max_num_batched_tokens_issue.md.
+
+        Formula: audio_tokens = ceil(audio_samples / compress_ratio) + 3
+        where +3 accounts for speech_start, speech_end, and newline tokens.
+        The max audio samples is bounded by seq_len (the model's context
+        window cannot hold more tokens than that).
+        """
+        hf_config = self.get_hf_config()
+
+        def _cfg(key: str, default):
+            if isinstance(hf_config, dict):
+                return hf_config.get(key, default)
+            return getattr(hf_config, key, default)
+
+        compress_ratio = int(_cfg("speech_tok_compress_ratio", 3200))
+        sample_rate = int(_cfg("target_sample_rate", 24000))
+
+        # Upper bound: 61-minute audio at 24 kHz
+        max_audio_samples = 61 * 60 * sample_rate  # 88,464,000
+        max_audio_tokens = int(np.ceil(max_audio_samples / compress_ratio)) + 3
+
+        # Cannot exceed the model's context window
+        max_audio_tokens = min(max_audio_tokens, seq_len)
+
+        return {"audio": max_audio_tokens}
+
 
 class VibeVoiceDummyInputsBuilder(BaseDummyInputsBuilder[VibeVoiceProcessingInfo]):
     """
     Build dummy inputs for multimodal profiling.
     
-    Dummy text uses the raw <|AUDIO|> token(s). vLLM's processing pipeline will
-    expand each <|AUDIO|> via `VibeVoiceMultiModalProcessor._get_prompt_updates`
-    into the full ASR format:
-        [speech_start_id] + [speech_pad_id] * N + [speech_end_id] + [newline_id]
-    where N is derived from audio length / compress_ratio.
+    vLLM uses dummy inputs to:
+    1. Measure peak GPU activation memory → determine KV cache capacity
+    2. Warm up CUDA graphs
+    
+    The dummy audio length must be consistent with ``get_mm_max_tokens_per_item``
+    so that the memory estimate covers the worst-case (longest audio) scenario.
     """
     
+    def _get_max_audio_samples(self, seq_len: int) -> int:
+        """Compute maximum audio samples consistent with ``get_mm_max_tokens_per_item``.
+        
+        Uses the same formula: max_tokens = min(ceil(61min * sr / ratio) + 3, seq_len),
+        then converts back to samples.
+        """
+        hf_config = self.info.get_hf_config()
+
+        def _cfg(key: str, default):
+            if isinstance(hf_config, dict):
+                return hf_config.get(key, default)
+            return getattr(hf_config, key, default)
+
+        compress_ratio = int(_cfg("speech_tok_compress_ratio", 3200))
+        sample_rate = int(_cfg("target_sample_rate", 24000))
+
+        # Upper bound: 61-minute audio at 24 kHz
+        max_hour_samples = 61 * 60 * sample_rate  # 88,464,000
+        max_tokens_from_audio = int(np.ceil(max_hour_samples / compress_ratio)) + 3
+        # Cannot exceed model context window
+        max_tokens = min(max_tokens_from_audio, seq_len)
+        # Convert tokens back to samples
+        return max_tokens * compress_ratio
+
     def get_dummy_text(self, mm_counts: Mapping[str, int]) -> str:
         num_audios = mm_counts.get("audio", 0)
         if num_audios <= 0:
             return ""
         
-        # Get the audio token from our token info helper
         token_info = self.info.get_audio_token_info()
         audio_token = token_info["audio_token"]
-        
-        # Return ONLY the audio tokens - the HF processor adds bos/eos
         return audio_token * num_audios
 
     def get_dummy_mm_data(
@@ -560,16 +618,23 @@ class VibeVoiceDummyInputsBuilder(BaseDummyInputsBuilder[VibeVoiceProcessingInfo
         mm_counts: Mapping[str, int],
         mm_options: Mapping[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        """Generate dummy audio data for profiling."""
-        feature_extractor = self.info.get_feature_extractor()
+        """Generate dummy audio data for profiling.
         
-        sampling_rate = feature_extractor.sampling_rate
-        audio_len = feature_extractor.chunk_length * sampling_rate
+        The audio length is derived from ``seq_len`` so that profiling
+        accurately measures memory for the longest audio the model can handle.
+        Supports ``AudioDummyOptions.length`` override for faster startup.
+        """
         num_audios = mm_counts.get("audio", 0)
-        
-        # Generate dummy audio as numpy arrays (what the HF processor expects)
+        max_audio_len = self._get_max_audio_samples(seq_len)
+
+        audio_overrides = mm_options.get("audio") if mm_options else None
+
         return {
-            "audio": [np.zeros(audio_len, dtype=np.float32) for _ in range(num_audios)]
+            "audio": self._get_dummy_audios(
+                length=max_audio_len,
+                num_audios=num_audios,
+                overrides=audio_overrides,
+            )
         }
 
     def get_dummy_processor_inputs(
