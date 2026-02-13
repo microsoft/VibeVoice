@@ -19,11 +19,22 @@ def get_available_vram_gb() -> float:
     try:
         # Get first CUDA device
         device = torch.device("cuda:0")
-        # Get total and allocated memory
-        total = torch.cuda.get_device_properties(device).total_memory
-        allocated = torch.cuda.memory_allocated(device)
-        available = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # Convert to GB
-        return available
+
+        # Prefer direct CUDA mem info if available (free, total in bytes)
+        if hasattr(torch.cuda, "mem_get_info"):
+            free_bytes, total_bytes = torch.cuda.mem_get_info(device)
+            available_gb = free_bytes / (1024 ** 3)
+        else:
+            # Fallback: estimate free memory from total minus reserved/allocated
+            props = torch.cuda.get_device_properties(device)
+            total_bytes = props.total_memory
+            reserved_bytes = torch.cuda.memory_reserved(device)
+            allocated_bytes = torch.cuda.memory_allocated(device)
+            used_bytes = max(reserved_bytes, allocated_bytes)
+            free_bytes = max(total_bytes - used_bytes, 0)
+            available_gb = free_bytes / (1024 ** 3)
+
+        return available_gb
     except Exception as e:
         logger.warning(f"Could not detect VRAM: {e}")
         return 0.0
