@@ -12,6 +12,9 @@ from vibevoice.modular.modeling_vibevoice_streaming_inference import VibeVoiceSt
 from vibevoice.processor.vibevoice_streaming_processor import VibeVoiceStreamingProcessor
 from transformers.utils import logging
 
+from utils.vram_utils import get_available_vram_gb, print_vram_info
+from utils.quantization import get_quantization_config, apply_selective_quantization
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -147,7 +150,7 @@ def main():
     print(f"Using device: {args.device}")
     
     # VRAM Detection and Quantization Info (NEW)
-    if args.device == "cuda":
+    if args.device.startswith("cuda"):
         available_vram = get_available_vram_gb()
         print_vram_info(available_vram, args.model_path, args.quantization)
     elif args.quantization != "fp16":
@@ -206,7 +209,7 @@ def main():
                 device_map=None,  # load then move
             )
             model.to("mps")
-        elif args.device == "cuda":
+        elif args.device.startswith("cuda"):
             # MODIFIED SECTION - Add quantization support
             model_kwargs = {
                 "torch_dtype": load_dtype,
