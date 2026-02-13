@@ -98,9 +98,9 @@ def apply_selective_quantization(model, quantization: str):
         should_quantize = any(comp in name for comp in quantize_components)
         
         if should_keep_fp:
-            # Ensure audio components stay at full precision
-            if hasattr(module, 'weight') and module.weight.dtype != torch.float32:
-                module.weight.data = module.weight.data.to(torch.bfloat16)
+            # Ensure audio components stay at higher precision (e.g., bfloat16 instead of 4/8-bit)
+            with torch.no_grad():
+                module.to(torch.bfloat16)
             logger.debug(f"Keeping {name} at full precision (audio-critical)")
         
         elif should_quantize:
