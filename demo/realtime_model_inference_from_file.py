@@ -244,7 +244,7 @@ def main():
             model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
                 args.model_path,
                 torch_dtype=load_dtype,
-                device_map=(args.device if args.device in ("cuda", "cpu") else None),
+                device_map=(args.device if args.device.startswith("cuda") or args.device == "cpu" else None),
                 attn_implementation='sdpa'
             )
             if args.device == "mps":
