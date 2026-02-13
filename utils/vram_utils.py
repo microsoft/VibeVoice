@@ -1,9 +1,9 @@
 """VRAM detection and quantization recommendation utilities."""
 
 import torch
-import logging
+from transformers.utils import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def get_available_vram_gb() -> float:
@@ -51,13 +51,27 @@ def suggest_quantization(available_vram_gb: float, model_name: str = "VibeVoice-
     Returns:
         str: Suggested quantization level ("fp16", "8bit", or "4bit")
     """
-    # VibeVoice-7B memory requirements (approximate)
-    # Full precision (fp16/bf16): ~20GB
-    # 8-bit quantization: ~12GB
-    # 4-bit quantization: ~7GB
+    # Parse model size from name (e.g., "0.5B", "1.5B", "7B")
+    import re
+    size_match = re.search(r'(\d+\.?\d*)B', model_name)
     
-    if "1.5B" in model_name:
-        # 1.5B model is smaller, adjust thresholds
+    if size_match:
+        size_b = float(size_match.group(1))
+    else:
+        # Default to 7B if size cannot be determined
+        size_b = 7.0
+    
+    # Adjust thresholds based on model size
+    if size_b <= 0.5:
+        # 0.5B model
+        if available_vram_gb >= 4:
+            return "fp16"
+        elif available_vram_gb >= 3:
+            return "8bit"
+        else:
+            return "4bit"
+    elif size_b <= 1.5:
+        # 1.5B model
         if available_vram_gb >= 8:
             return "fp16"
         elif available_vram_gb >= 6:
@@ -65,7 +79,7 @@ def suggest_quantization(available_vram_gb: float, model_name: str = "VibeVoice-
         else:
             return "4bit"
     else:
-        # Assume 7B model
+        # 7B or larger model
         if available_vram_gb >= 22:
             return "fp16"
         elif available_vram_gb >= 14:
