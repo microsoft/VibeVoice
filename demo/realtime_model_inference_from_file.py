@@ -194,7 +194,7 @@ def main():
     if quant_config:
         print(f"Using {args.quantization} quantization...")
     else:
-        print("Using full precision (fp16)...")
+        print("Using full precision (no quantization)...")
     
     # Load model with device-specific logic
     try:
