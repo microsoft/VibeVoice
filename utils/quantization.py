@@ -80,16 +80,16 @@ def apply_selective_quantization(model, quantization: str):
     logger.info("Applying selective quantization...")
     
     # Components to KEEP at full precision (audio-critical)
+    # For the streaming model, audio-critical modules are typically exposed as
+    # a prediction head and acoustic_* components. We match on these names to
+    # ensure they remain at higher precision while only the LLM is quantized.
     keep_fp_components = [
-        "diffusion_head",
-        "acoustic_connector",
-        "semantic_connector",
-        "acoustic_tokenizer",
-        "semantic_tokenizer",
-        "vae",
+        "prediction_head",
+        "acoustic_",
     ]
     
     # Only quantize the LLM (Qwen2.5) component
+    quantize_components = ["llm", "language_model"]
     quantize_components = ["llm", "language_model"]
     
     for name, module in model.named_modules():
