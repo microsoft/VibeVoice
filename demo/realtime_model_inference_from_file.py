@@ -126,7 +126,7 @@ def parse_args():
         type=str,
         default="fp16",
         choices=["fp16", "8bit", "4bit"],
-        help="Quantization level: fp16 (default, ~20GB), 8bit (~12GB), or 4bit (~7GB)"
+        help="Quantization level: fp16 (no quantization, ~20GB), 8bit (~12GB), or 4bit (~7GB)"
     )
     
     return parser.parse_args()
