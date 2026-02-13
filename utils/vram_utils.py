@@ -82,6 +82,6 @@ def print_vram_info(available_vram_gb: float, model_name: str, quantization: str
             f"Recommended: --quantization {suggested}"
         )
         logger.warning(
-            f"   Example: python demo/inference_from_file.py "
+            f"   Example: python demo/realtime_model_inference_from_file.py "
             f"--model_path {model_name} --quantization {suggested} ..."
         )
