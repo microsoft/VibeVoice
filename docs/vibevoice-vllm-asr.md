@@ -31,7 +31,7 @@ docker run -d --gpus all --name vibevoice-vllm \
   -v $(pwd):/app \
   -w /app \
   --entrypoint bash \
-  vllm/vllm-openai:latest \
+  vllm/vllm-openai:v0.14.1 \
   -c "python3 /app/vllm_plugin/scripts/start_server.py"
 ```
 

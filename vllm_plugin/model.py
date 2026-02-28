@@ -46,8 +46,13 @@ def _ffmpeg_load_file(filepath) -> tuple[np.ndarray, int]:
     return audio, sr
 
 # Register FFmpeg-based audio loader
-import vllm.multimodal.audio as _vllm_audio_module
-_OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
+try:
+    # Try new location (vLLM >= 0.6.x)
+    from vllm.multimodal.media.audio import AudioMediaIO as _OriginalAudioMediaIO
+except ImportError:
+    # Fall back to old location (vLLM < 0.6.x)
+    import vllm.multimodal.audio as _vllm_audio_module
+    _OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
 
 class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
     """AudioMediaIO implementation using FFmpeg for audio decoding."""
@@ -62,11 +67,22 @@ class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
         return _ffmpeg_load_file(filepath)
 
 # Replace globally
-_vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
+try:
+    # For new vLLM versions
+    import vllm.multimodal.media.audio as _vllm_audio_module
+    _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
+except ImportError:
+    # For old vLLM versions
+    import vllm.multimodal.audio as _vllm_audio_module
+    _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
 
 # Also patch in utils module where it's imported
-import vllm.multimodal.utils as _vllm_utils_module
-_vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
+try:
+    import vllm.multimodal.utils as _vllm_utils_module
+    _vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
+except (ImportError, AttributeError):
+    # AudioMediaIO might not be imported in utils in newer versions
+    pass
 
 # ============================================================================
 
@@ -91,7 +107,17 @@ from vllm.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from vllm.multimodal.profiling import BaseDummyInputsBuilder, ProcessorInputs
+try:
+    # Try new location (vLLM >= 0.6.x)
+    from vllm.multimodal.processing import BaseDummyInputsBuilder, ProcessorInputs
+except ImportError:
+    # Fall back to old location (vLLM < 0.6.x)
+    try:
+        from vllm.multimodal.profiling import BaseDummyInputsBuilder, ProcessorInputs
+    except ImportError:
+        # If neither location works, try individual imports
+        from vllm.multimodal.processing.dummy_inputs import BaseDummyInputsBuilder
+        from vllm.multimodal.processing.inputs import ProcessorInputs
 
 # Import VibeVoice components
 from vibevoice.modular.modular_vibevoice_tokenizer import (
