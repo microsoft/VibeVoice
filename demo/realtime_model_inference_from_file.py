@@ -308,7 +308,7 @@ def main():
         print(f"Total tokens: {output_tokens}")
     
     # Save output 
-    txt_filename = os.path.splittext(os.path.basename(args.txt_path))[0]
+    txt_filename = os.path.splitext(os.path.basename(args.txt_path))[0]
     output_path = os.path.join(args.output_dir, f"{txt_filename}_generated.wav")
     os.makedirs(args.output_dir, exist_ok=True)
     processor.save_audio(
