@@ -121,6 +121,12 @@ def parse_args():
         default=1.5,
         help="CFG (Classifier-Free Guidance) scale for generation (default: 1.5)",
     )
+    parser.add_argument(
+        "--streaming_enabled",
+        action="store_true",
+        default=False,
+        help="Enable streaming audio output. If False, generates full audio."
+    )
     
     return parser.parse_args()
 
@@ -242,51 +248,75 @@ def main():
 
     # Generate audio
     start_time = time.time()
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=None,
-        cfg_scale=args.cfg_scale,
-        tokenizer=processor.tokenizer,
-        generation_config={'do_sample': False},
-        verbose=True,
-        all_prefilled_outputs=copy.deepcopy(all_prefilled_outputs) if all_prefilled_outputs is not None else None,
-    )
+
+    if args.streaming_enabled:
+        import threading
+        from vibevoice.modular.streamer import AudioStreamer
+
+        streamer = AudioStreamer(batch_size=1, stop_signal=None, timeout=30.0)
+
+        def run_generate():
+            model.generate(
+                **inputs,
+                max_new_tokens=None,
+                cfg_scale=args.cfg_scale,
+                tokenizer=processor.tokenizer,
+                generation_config={"do_sample": False},
+                verbose=True,
+                all_prefilled_outputs=copy.deepcopy(all_prefilled_outputs),
+                audio_streamer=streamer
+            )
+        thread = threading.Thread(target=run_generate)
+        thread.start()
+
+        all_chunks = []
+        for audio_chunk in streamer.get_stream(0):
+            all_chunks.append(audio_chunk)
+        thread.join()
+        speech_output = torch.cat(all_chunks, dim=-1)
+    else:
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=None,
+            cfg_scale=args.cfg_scale,
+            tokenizer=processor.tokenizer,
+            generation_config={'do_sample': False},
+            verbose=True,
+            all_prefilled_outputs=copy.deepcopy(all_prefilled_outputs) if all_prefilled_outputs is not None else None,
+        )
+        speech_output = outputs.speech_outputs[0]
+        print("Outputs: ", outputs)
     generation_time = time.time() - start_time
     print(f"Generation time: {generation_time:.2f} seconds")
     
-    # Calculate audio duration and additional metrics
-    if outputs.speech_outputs and outputs.speech_outputs[0] is not None:
-        # Assuming 24kHz sample rate (common for speech synthesis)
-        sample_rate = 24000
-        audio_samples = outputs.speech_outputs[0].shape[-1] if len(outputs.speech_outputs[0].shape) > 0 else len(outputs.speech_outputs[0])
-        audio_duration = audio_samples / sample_rate
+    sample_rate = 24000
+    if speech_output is not None:
+        audio_samples = speech_output.shape[-1]
+        audio_duration = audio_samples/sample_rate
         rtf = generation_time / audio_duration if audio_duration > 0 else float('inf')
-        
         print(f"Generated audio duration: {audio_duration:.2f} seconds")
         print(f"RTF (Real Time Factor): {rtf:.2f}x")
     else:
         print("No audio output generated")
-    
-    # Calculate token metrics
-    input_tokens = inputs['tts_text_ids'].shape[1]  # Number of input tokens
-    output_tokens = outputs.sequences.shape[1]  # Total tokens (input + generated)
-    generated_tokens = output_tokens - input_tokens - all_prefilled_outputs['tts_lm']['last_hidden_state'].size(1)
-    
-    print(f"Prefilling text tokens: {input_tokens}")
-    print(f"Generated speech tokens: {generated_tokens}")
-    print(f"Total tokens: {output_tokens}")
 
-    # Save output (processor handles device internally)
-    txt_filename = os.path.splitext(os.path.basename(args.txt_path))[0]
+    if not args.streaming_enabled:
+        input_tokens = inputs["tts_text_ids"].shape[1]
+        output_tokens = outputs.sequences.shape[1]
+        generated_tokens = output_tokens - input_tokens - all_prefilled_outputs['tts_lm']['last_hidden_state'].size(1)
+        print(f"Prefilling text tokens: {input_tokens}")
+        print(f"Generated speech tokens: {generated_tokens}")
+        print(f"Total tokens: {output_tokens}")
+    
+    # Save output 
+    txt_filename = os.path.splittext(os.path.basename(args.txt_path))[0]
     output_path = os.path.join(args.output_dir, f"{txt_filename}_generated.wav")
     os.makedirs(args.output_dir, exist_ok=True)
-    
     processor.save_audio(
-        outputs.speech_outputs[0], # First (and only) batch item
-        output_path=output_path,
+        speech_output, 
+        output_path=output_path
     )
     print(f"Saved output to {output_path}")
-    
+
     # Print summary
     print("\n" + "="*50)
     print("GENERATION SUMMARY")
