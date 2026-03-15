@@ -254,18 +254,24 @@ def main():
         from vibevoice.modular.streamer import AudioStreamer
 
         streamer = AudioStreamer(batch_size=1, stop_signal=None, timeout=30.0)
-
+        gen_result = [None]
+        gen_errors = [] 
         def run_generate():
-            model.generate(
-                **inputs,
-                max_new_tokens=None,
-                cfg_scale=args.cfg_scale,
-                tokenizer=processor.tokenizer,
-                generation_config={"do_sample": False},
-                verbose=True,
-                all_prefilled_outputs=copy.deepcopy(all_prefilled_outputs),
-                audio_streamer=streamer
-            )
+            try:
+                gen_result[0] = model.generate(
+                    **inputs,
+                    max_new_tokens=None,
+                    cfg_scale=args.cfg_scale,
+                    tokenizer=processor.tokenizer,
+                    generation_config={"do_sample": False},
+                    verbose=True,
+                    all_prefilled_outputs=copy.deepcopy(all_prefilled_outputs),
+                    audio_streamer=streamer
+                )
+            except Exception as e:
+                gen_errors.append(e)
+                traceback.print_exc()   
+                streamer.end()
         thread = threading.Thread(target=run_generate)
         thread.start()
 
@@ -273,7 +279,10 @@ def main():
         for audio_chunk in streamer.get_stream(0):
             all_chunks.append(audio_chunk)
         thread.join()
+        if gen_errors:
+            raise gen_errors[0] 
         speech_output = torch.cat(all_chunks, dim=-1)
+        outputs = gen_result[0] 
     else:
         outputs = model.generate(
             **inputs,
@@ -285,7 +294,7 @@ def main():
             all_prefilled_outputs=copy.deepcopy(all_prefilled_outputs) if all_prefilled_outputs is not None else None,
         )
         speech_output = outputs.speech_outputs[0]
-        print("Outputs: ", outputs)
+
     generation_time = time.time() - start_time
     print(f"Generation time: {generation_time:.2f} seconds")
     
@@ -299,13 +308,12 @@ def main():
     else:
         print("No audio output generated")
 
-    if not args.streaming_enabled:
-        input_tokens = inputs["tts_text_ids"].shape[1]
-        output_tokens = outputs.sequences.shape[1]
-        generated_tokens = output_tokens - input_tokens - all_prefilled_outputs['tts_lm']['last_hidden_state'].size(1)
-        print(f"Prefilling text tokens: {input_tokens}")
-        print(f"Generated speech tokens: {generated_tokens}")
-        print(f"Total tokens: {output_tokens}")
+    input_tokens = inputs["tts_text_ids"].shape[1]
+    output_tokens = outputs.sequences.shape[1]
+    generated_tokens = output_tokens - input_tokens - all_prefilled_outputs['tts_lm']['last_hidden_state'].size(1)
+    print(f"Prefilling text tokens: {input_tokens}")
+    print(f"Generated speech tokens: {generated_tokens}")
+    print(f"Total tokens: {output_tokens}")
     
     # Save output 
     txt_filename = os.path.splitext(os.path.basename(args.txt_path))[0]
