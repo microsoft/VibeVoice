@@ -77,10 +77,14 @@ def generate_tokenizer(model_path: str) -> None:
     )
 
 
-def start_vllm_server(model_path: str, port: int) -> None:
+def start_vllm_server(model_path: str, port: int,
+                      tensor_parallel_size: int = 1,
+                      data_parallel_size: int = 1) -> None:
     """Start vLLM server (replaces current process)."""
     print(f"\n{'='*60}")
     print(f"  Starting vLLM server on port {port}")
+    print(f"  Tensor Parallel (TP): {tensor_parallel_size}")
+    print(f"  Data Parallel   (DP): {data_parallel_size}")
     print(f"{'='*60}\n")
     
     vllm_cmd = [
@@ -96,7 +100,8 @@ def start_vllm_server(model_path: str, port: int) -> None:
         "--no-enable-prefix-caching",
         "--enable-chunked-prefill",
         "--chat-template-content-format", "openai",
-        "--tensor-parallel-size", "1",
+        "--tensor-parallel-size", str(tensor_parallel_size),
+        "--data-parallel-size", str(data_parallel_size),
         "--allowed-local-media-path", "/app",
         "--port", str(port),
     ]
@@ -110,11 +115,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Start with default settings
+    # Start with default settings (single GPU)
     python3 start_server.py
 
     # Use custom port
     python3 start_server.py --port 8080
+
+    # Data parallel: 4 independent replicas on 4 GPUs (load balancing)
+    python3 start_server.py --dp 4
+
+    # Tensor parallel: split model across 2 GPUs
+    python3 start_server.py --tp 2
 
     # Skip dependency installation (if already installed)
     python3 start_server.py --skip-deps
@@ -141,6 +152,20 @@ Examples:
         action="store_true",
         help="Skip generating tokenizer files"
     )
+    parser.add_argument(
+        "--tp", "--tensor-parallel-size",
+        type=int,
+        default=1,
+        dest="tensor_parallel_size",
+        help="Tensor parallel size: split one model across N GPUs (default: 1)"
+    )
+    parser.add_argument(
+        "--dp", "--data-parallel-size",
+        type=int,
+        default=1,
+        dest="data_parallel_size",
+        help="Data parallel size: run N independent model replicas for load balancing (default: 1)"
+    )
     args = parser.parse_args()
 
     print("\n" + "="*60)
@@ -162,7 +187,9 @@ Examples:
         generate_tokenizer(model_path)
 
     # Step 5: Start vLLM server
-    start_vllm_server(model_path, args.port)
+    start_vllm_server(model_path, args.port,
+                      tensor_parallel_size=args.tensor_parallel_size,
+                      data_parallel_size=args.data_parallel_size)
 
 
 if __name__ == "__main__":
