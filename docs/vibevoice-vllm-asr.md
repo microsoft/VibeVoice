@@ -47,7 +47,9 @@ The launcher supports two types of GPU parallelism via `--tp` and `--dp` flags:
 
 ### Data Parallel (Recommended for scaling throughput)
 
-Run 4 independent replicas on 4 GPUs — vLLM automatically distributes incoming requests:
+Run 4 independent replicas on 4 GPUs with automatic load balancing behind a single port.
+When `--dp N` is specified (N > 1), the launcher automatically starts N independent vLLM
+processes behind an nginx reverse proxy for optimal throughput:
 
 ```bash
 docker run -d --gpus '"device=0,1,2,3"' --name vibevoice-vllm \
@@ -60,6 +62,21 @@ docker run -d --gpus '"device=0,1,2,3"' --name vibevoice-vllm \
   --entrypoint bash \
   vllm/vllm-openai:v0.14.1 \
   -c "python3 /app/vllm_plugin/scripts/start_server.py --dp 4"
+```
+
+Run on all 8 GPUs:
+
+```bash
+docker run -d --gpus all --name vibevoice-vllm \
+  --ipc=host \
+  -p 8000:8000 \
+  -e VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
+  -e PYTORCH_ALLOC_CONF=expandable_segments:True \
+  -v $(pwd):/app \
+  -w /app \
+  --entrypoint bash \
+  vllm/vllm-openai:v0.14.1 \
+  -c "python3 /app/vllm_plugin/scripts/start_server.py --dp 8"
 ```
 
 ### Tensor Parallel
