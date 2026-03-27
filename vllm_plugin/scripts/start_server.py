@@ -214,6 +214,14 @@ def start_dp_server(model_path: str, frontend_port: int,
         f"but only {num_gpus} available"
     )
 
+    # Auto-tune per-worker env vars based on dp size
+    ffmpeg_concurrency = max(
+        64, int(os.environ.get("VIBEVOICE_FFMPEG_MAX_CONCURRENCY", "64"))
+    )
+    media_threads = max(
+        8, int(os.environ.get("VLLM_MEDIA_LOADING_THREAD_COUNT", "8"))
+    )
+
     _install_nginx()
 
     # Assign internal ports: frontend_port + 100, +101, ...
@@ -228,6 +236,8 @@ def start_dp_server(model_path: str, frontend_port: int,
     print(f"  GPUs per replica:  {gpus_per_replica}")
     print(f"  Max Num Seqs:      {max_num_seqs}")
     print(f"  Max Model Len:     {max_model_len}")
+    print(f"  FFmpeg concurrency (per worker): {ffmpeg_concurrency}")
+    print(f"  Media loading threads (per worker): {media_threads}")
     print(f"{'='*60}\n")
 
     # Write nginx config
@@ -242,6 +252,8 @@ def start_dp_server(model_path: str, frontend_port: int,
         
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = gpu_ids
+        env["VIBEVOICE_FFMPEG_MAX_CONCURRENCY"] = str(ffmpeg_concurrency)
+        env["VLLM_MEDIA_LOADING_THREAD_COUNT"] = str(media_threads)
 
         vllm_cmd = _build_vllm_cmd(
             model_path, port,
