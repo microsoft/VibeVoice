@@ -21,6 +21,12 @@ import traceback
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    # Error correction 'pwd' for Windows
+if sys.platform == 'win32':
+    os.environ['USER'] = os.environ.get('USERNAME', 'user')
+    os.environ['TORCHINDUCTOR_CACHE_DIR'] = os.path.join(os.environ.get('TEMP', '.'), 'torch_cache')
+
+
 # Import TextIteratorStreamer for streaming generation
 from transformers import TextIteratorStreamer, StoppingCriteria, StoppingCriteriaList
 
