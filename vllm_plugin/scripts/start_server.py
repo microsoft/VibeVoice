@@ -146,11 +146,18 @@ def _install_nginx() -> None:
         )
 
 
-def _write_nginx_config(frontend_port: int, backend_ports: list[int]) -> str:
-    """Write nginx config for round-robin load balancing."""
+def _write_nginx_config(frontend_port: int, backend_ports: list[int],
+                        num_workers: int = 0) -> str:
+    """Write nginx config for round-robin load balancing.
+    
+    Args:
+        num_workers: Number of nginx worker processes. 0 = auto (2 × num backends).
+    """
+    if num_workers <= 0:
+        num_workers = len(backend_ports) * 2
     backends = "\n".join(f"        server 127.0.0.1:{p};" for p in backend_ports)
     config = textwrap.dedent(f"""\
-        worker_processes auto;
+        worker_processes {num_workers};
         worker_rlimit_nofile 65536;
         error_log /dev/stderr warn;
         pid /tmp/nginx.pid;
