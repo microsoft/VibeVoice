@@ -161,7 +161,7 @@ class StreamingTTSService:
             prefilled_outputs = torch.load(
                 preset_path,
                 map_location=self._torch_device,
-                weights_only=False,
+                weights_only=True,
             )
             self._voice_cache[key] = prefilled_outputs
 
@@ -364,6 +364,11 @@ def streaming_tts(text: str, **kwargs) -> Iterator[np.ndarray]:
 async def websocket_stream(ws: WebSocket) -> None:
     await ws.accept()
     text = ws.query_params.get("text", "")
+    # Limit text size to prevent DoS via excessive GPU inference (CWE-770)
+    MAX_TEXT_LENGTH = 10000  # ~10K chars is reasonable for TTS
+    if len(text) > MAX_TEXT_LENGTH:
+        await ws.close(code=1008, reason=f"Text too long ({len(text)} > {MAX_TEXT_LENGTH})")
+        return
     print(f"Client connected, text={text!r}")
     cfg_param = ws.query_params.get("cfg")
     steps_param = ws.query_params.get("steps")
