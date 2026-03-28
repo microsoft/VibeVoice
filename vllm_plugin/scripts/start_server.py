@@ -90,7 +90,8 @@ def _build_vllm_cmd(model_path: str, port: int,
                      max_num_seqs: int = 64,
                      max_model_len: int = 65536,
                      gpu_memory_utilization: float = 0.8,
-                     trust_remote_code: bool = False) -> list[str]:
+                     trust_remote_code: bool = False,
+                     api_key: str = "") -> list[str]:
     """Build the vllm serve command."""
     cmd = [
         "vllm", "serve", model_path,
@@ -109,6 +110,8 @@ def _build_vllm_cmd(model_path: str, port: int,
     ]
     if trust_remote_code:
         cmd.append("--trust-remote-code")
+    if api_key:
+        cmd.extend(["--api-key", api_key])
     return cmd
 
 
@@ -118,7 +121,8 @@ def start_vllm_server(model_path: str, port: int,
                       max_num_seqs: int = 64,
                       max_model_len: int = 65536,
                       gpu_memory_utilization: float = 0.8,
-                      trust_remote_code: bool = False) -> None:
+                      trust_remote_code: bool = False,
+                      api_key: str = "") -> None:
     """Start a single vLLM server (replaces current process)."""
     print(f"\n{'='*60}")
     print(f"  Starting vLLM server on port {port}")
@@ -137,6 +141,7 @@ def start_vllm_server(model_path: str, port: int,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
         trust_remote_code=trust_remote_code,
+        api_key=api_key,
     )
     os.execvp("vllm", vllm_cmd)
 
@@ -210,7 +215,8 @@ def start_dp_server(model_path: str, frontend_port: int,
                     max_num_seqs: int = 64,
                     max_model_len: int = 65536,
                     gpu_memory_utilization: float = 0.8,
-                    trust_remote_code: bool = False) -> None:
+                    trust_remote_code: bool = False,
+                    api_key: str = "") -> None:
     """Start multiple vLLM workers behind nginx for data parallelism.
     
     Launches N independent vLLM processes (one per GPU group) on internal
@@ -276,6 +282,7 @@ def start_dp_server(model_path: str, frontend_port: int,
             max_model_len=max_model_len,
             gpu_memory_utilization=gpu_memory_utilization,
             trust_remote_code=trust_remote_code,
+            api_key=api_key,
         )
 
         print(f"  Launching worker rank={rank} on GPU(s) {gpu_ids}, port {port}")
@@ -420,6 +427,13 @@ Examples:
         dest="trust_remote_code",
         help="Allow execution of remote code from model repos (security risk, use only with trusted models)"
     )
+    parser.add_argument(
+        "--api-key",
+        type=str,
+        default=os.environ.get("VLLM_API_KEY", ""),
+        dest="api_key",
+        help="API key for vLLM server authentication (or set VLLM_API_KEY env var)"
+    )
     args = parser.parse_args()
 
     print("\n" + "="*60)
@@ -450,6 +464,7 @@ Examples:
             max_model_len=args.max_model_len,
             gpu_memory_utilization=args.gpu_memory_utilization,
             trust_remote_code=args.trust_remote_code,
+            api_key=args.api_key,
         )
     else:
         start_vllm_server(
@@ -460,6 +475,7 @@ Examples:
             max_model_len=args.max_model_len,
             gpu_memory_utilization=args.gpu_memory_utilization,
             trust_remote_code=args.trust_remote_code,
+            api_key=args.api_key,
         )
 
 
