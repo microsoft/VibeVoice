@@ -26,15 +26,15 @@ import textwrap
 import time
 
 
-def run_command(cmd: list[str], description: str, shell: bool = False) -> None:
-    """Run a command with logging."""
+def run_command(cmd: list[str], description: str) -> None:
+    """Run a command with logging.
+
+    Always uses shell=False to prevent command injection (CWE-78).
+    """
     print(f"\n{'='*60}")
     print(f"  {description}")
     print(f"{'='*60}\n")
-    if shell:
-        subprocess.run(cmd, shell=True, check=True)
-    else:
-        subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True)
 
 
 def install_system_deps() -> None:
@@ -89,12 +89,12 @@ def _build_vllm_cmd(model_path: str, port: int,
                      data_parallel_size: int = 1,
                      max_num_seqs: int = 64,
                      max_model_len: int = 65536,
-                     gpu_memory_utilization: float = 0.8) -> list[str]:
+                     gpu_memory_utilization: float = 0.8,
+                     trust_remote_code: bool = False) -> list[str]:
     """Build the vllm serve command."""
-    return [
+    cmd = [
         "vllm", "serve", model_path,
         "--served-model-name", "vibevoice",
-        "--trust-remote-code",
         "--dtype", "bfloat16",
         "--max-num-seqs", str(max_num_seqs),
         "--max-model-len", str(max_model_len),
@@ -107,6 +107,9 @@ def _build_vllm_cmd(model_path: str, port: int,
         "--allowed-local-media-path", "/app",
         "--port", str(port),
     ]
+    if trust_remote_code:
+        cmd.append("--trust-remote-code")
+    return cmd
 
 
 def start_vllm_server(model_path: str, port: int,
@@ -114,7 +117,8 @@ def start_vllm_server(model_path: str, port: int,
                       data_parallel_size: int = 1,
                       max_num_seqs: int = 64,
                       max_model_len: int = 65536,
-                      gpu_memory_utilization: float = 0.8) -> None:
+                      gpu_memory_utilization: float = 0.8,
+                      trust_remote_code: bool = False) -> None:
     """Start a single vLLM server (replaces current process)."""
     print(f"\n{'='*60}")
     print(f"  Starting vLLM server on port {port}")
@@ -132,6 +136,7 @@ def start_vllm_server(model_path: str, port: int,
         max_num_seqs=max_num_seqs,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
+        trust_remote_code=trust_remote_code,
     )
     os.execvp("vllm", vllm_cmd)
 
@@ -204,7 +209,8 @@ def start_dp_server(model_path: str, frontend_port: int,
                     tensor_parallel_size: int = 1,
                     max_num_seqs: int = 64,
                     max_model_len: int = 65536,
-                    gpu_memory_utilization: float = 0.8) -> None:
+                    gpu_memory_utilization: float = 0.8,
+                    trust_remote_code: bool = False) -> None:
     """Start multiple vLLM workers behind nginx for data parallelism.
     
     Launches N independent vLLM processes (one per GPU group) on internal
@@ -269,6 +275,7 @@ def start_dp_server(model_path: str, frontend_port: int,
             max_num_seqs=max_num_seqs,
             max_model_len=max_model_len,
             gpu_memory_utilization=gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
         )
 
         print(f"  Launching worker rank={rank} on GPU(s) {gpu_ids}, port {port}")
@@ -406,6 +413,13 @@ Examples:
         dest="gpu_memory_utilization",
         help="GPU memory utilization fraction (default: 0.8)"
     )
+    parser.add_argument(
+        "--trust-remote-code",
+        action="store_true",
+        default=False,
+        dest="trust_remote_code",
+        help="Allow execution of remote code from model repos (security risk, use only with trusted models)"
+    )
     args = parser.parse_args()
 
     print("\n" + "="*60)
@@ -435,6 +449,7 @@ Examples:
             max_num_seqs=args.max_num_seqs,
             max_model_len=args.max_model_len,
             gpu_memory_utilization=args.gpu_memory_utilization,
+            trust_remote_code=args.trust_remote_code,
         )
     else:
         start_vllm_server(
@@ -444,6 +459,7 @@ Examples:
             max_num_seqs=args.max_num_seqs,
             max_model_len=args.max_model_len,
             gpu_memory_utilization=args.gpu_memory_utilization,
+            trust_remote_code=args.trust_remote_code,
         )
 
 
