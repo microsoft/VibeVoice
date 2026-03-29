@@ -85,27 +85,27 @@ class VibeVoiceTextTokenizer(Qwen2Tokenizer):
     
     @property
     def eos_id(self) -> int:
-        """Id of the end of sequence token."""
+        """ID of the end of sequence token."""
         return self._eos_id
     
     @property
     def speech_start_id(self) -> int:
-        """Id of the speech start token."""
+        """ID of the speech start token."""
         return self._speech_start_id
     
     @property
     def speech_end_id(self) -> int:
-        """Id of the speech end token."""
+        """ID of the speech end token."""
         return self._speech_end_id
     
     @property
     def speech_diffusion_id(self) -> int:
-        """Id of the speech diffusion token."""
+        """ID of the speech diffusion token."""
         return self._speech_diffusion_id
     
     @property
     def pad_id(self) -> int:
-        """Id used for padding (returns -100 for loss masking)."""
+        """ID used for padding (returns -100 for loss masking)."""
         return -100
 
 
@@ -184,27 +184,27 @@ class VibeVoiceTextTokenizerFast(Qwen2TokenizerFast):
     
     @property
     def eos_id(self) -> int:
-        """Id of the end of sequence token."""
+        """ID of the end of sequence token."""
         return self._eos_id
     
     @property
     def speech_start_id(self) -> int:
-        """Id of the speech start token."""
+        """ID of the speech start token."""
         return self._speech_start_id
     
     @property
     def speech_end_id(self) -> int:
-        """Id of the speech end token."""
+        """ID of the speech end token."""
         return self._speech_end_id
     
     @property
     def speech_diffusion_id(self) -> int:
-        """Id of the speech diffusion token."""
+        """ID of the speech diffusion token."""
         return self._speech_diffusion_id
     
     @property
     def pad_id(self) -> int:
-        """Id used for padding (returns -100 for loss masking)."""
+        """ID used for padding (returns -100 for loss masking)."""
         return self._pad_id
 
 class VibeVoiceASRTextTokenizerFast(Qwen2TokenizerFast):
@@ -284,22 +284,22 @@ class VibeVoiceASRTextTokenizerFast(Qwen2TokenizerFast):
     
     @property
     def eos_id(self) -> int:
-        """Id of the end of sequence token."""
+        """ID of the end of sequence token."""
         return self._eos_id
     
     @property
     def speech_start_id(self) -> int:
-        """Id of the speech start token."""
+        """ID of the speech start token."""
         return self._speech_start_id
     
     @property
     def speech_end_id(self) -> int:
-        """Id of the speech end token."""
+        """ID of the speech end token."""
         return self._speech_end_id
     
     @property
     def speech_pad_id(self) -> int:
-        """Id of the speech diffusion token."""
+        """ID of the speech diffusion token."""
         return self._speech_pad_id
     
     @property
