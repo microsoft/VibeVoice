@@ -8,7 +8,7 @@
 VibeVoice-Realtime is a **lightweight real‑time** text-to-speech model supporting **streaming text input** and **robust long-form speech generation**. It can be used to build real-time TTS services, narrate live data streams, and let different LLMs start speaking from their very first tokens (plug in your preferred model) long before a full answer is generated. It produces initial audible speech in **~200 milliseconds** (hardware dependent).
 
 
-**Model:** [VibeVoice-Realtime-0.5B](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B)<br>
+**Model:** [VibeVoice Realtime 0.5B (on Hugging Face)](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B)<br>
 **Colab:** [Link](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb)<br>
 
 
