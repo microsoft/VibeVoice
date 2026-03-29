@@ -26,15 +26,12 @@ import textwrap
 import time
 
 
-def run_command(cmd: list[str], description: str, shell: bool = False) -> None:
+def run_command(cmd: list[str], description: str) -> None:
     """Run a command with logging."""
     print(f"\n{'='*60}")
     print(f"  {description}")
     print(f"{'='*60}\n")
-    if shell:
-        subprocess.run(cmd, shell=True, check=True)
-    else:
-        subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True)
 
 
 def install_system_deps() -> None:
