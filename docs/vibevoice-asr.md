@@ -24,7 +24,7 @@
   The model jointly performs ASR, diarization, and timestamping, producing a structured output that indicates *who* said *what* and *when*.
   
 - **🌍 Multilingual & Code-Switching Support**:
-  It supports over 50 languages, requires no explicit language setting, and natively handles code-switching within and across utterances. Language distribution can be found [here](#language-distribution).
+  It supports over 50 languages, requires no explicit language setting, and natively handles code-switching within and across utterances. See the [Language distribution](#language-distribution).
 
 
 ## 🏗️ Model Architecture
