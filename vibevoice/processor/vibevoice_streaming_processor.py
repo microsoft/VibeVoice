@@ -220,7 +220,7 @@ class VibeVoiceStreamingProcessor:
             input_id_length = cached_prompt_input['lm']['last_hidden_state'].size(1)
             tts_lm_input_id_length = cached_prompt_input['tts_lm']['last_hidden_state'].size(1)
 
-            # psudo input ids and masks
+            # pseudo input ids and masks
             input_ids = [self.tokenizer.pad_id] * input_id_length
             tts_lm_input_ids = [self.tokenizer.pad_id] * tts_lm_input_id_length
             speech_input_mask = [False] * tts_lm_input_id_length
