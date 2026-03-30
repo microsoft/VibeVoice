@@ -49,6 +49,7 @@ class VibeVoiceASRProcessor:
         speech_tok_compress_ratio=320,
         target_sample_rate=24000,
         normalize_audio=True,
+        output_script: Optional[str] = None,
         **kwargs
     ):
         self.tokenizer = tokenizer
@@ -64,6 +65,19 @@ class VibeVoiceASRProcessor:
             self.audio_normalizer = AudioNormalizer()
         else:
             self.audio_normalizer = None
+
+        self.output_script = output_script
+        self._opencc_converter = None
+
+        if self.output_script in { "traditional", "traditional_chinese", "zh-tw" }:
+            try:
+                import opencc
+                self._opencc_converter = opencc.OpenCC('s2t')
+            except ImportError:
+                warnings.warn(
+                    "opencc not installed. Traditional Chinese conversion disabled. "
+                    "Install with: pip install opencc-python-reimplemented"
+                )
         
         # Cache special token IDs
         self._cache_special_tokens()
@@ -112,7 +126,8 @@ class VibeVoiceASRProcessor:
         # Try to load configuration
         config_path = os.path.join(pretrained_model_name_or_path, "preprocessor_config.json")
         config = {}
-        
+        output_script = kwargs.pop("output_script", None)
+
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 config = json.load(f)
@@ -160,6 +175,7 @@ class VibeVoiceASRProcessor:
             speech_tok_compress_ratio=speech_tok_compress_ratio,
             target_sample_rate=target_sample_rate,
             normalize_audio=normalize_audio,
+            output_script=output_script,
         )
     
     def save_pretrained(self, save_directory: Union[str, os.PathLike], **kwargs):
@@ -182,6 +198,7 @@ class VibeVoiceASRProcessor:
             "normalize_audio": self.normalize_audio,
             "target_dB_FS": -25,
             "eps": 1e-6,
+            "output_script": self.output_script,
         }
         
         config_path = os.path.join(save_directory, "preprocessor_config.json")
@@ -552,6 +569,12 @@ class VibeVoiceASRProcessor:
                             cleaned_item[mapped_key] = item[key]
                     
                     if cleaned_item:
+                        if self._opencc_converter and "text" in cleaned_item:
+                            try:
+                                cleaned_item["text"] = self._opencc_converter.convert(cleaned_item["text"])
+                            except Exception as e:
+                                logger.warning(f"OpenCC conversion failed: {e}")
+
                         cleaned_result.append(cleaned_item)
             
             return cleaned_result
