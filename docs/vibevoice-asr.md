@@ -83,7 +83,7 @@ python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --
 
 ### Usage 2: Inference from files directly
 ```bash
-python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add a audio path here] 
+python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add an audio path here] 
 ```
 
 
