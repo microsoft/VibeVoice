@@ -20,6 +20,7 @@ from functools import wraps
 
 from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
 from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
+from vibevoice.processor.audio_utils import COMMON_AUDIO_EXTS
 
 
 class VibeVoiceASRBatchInference:
@@ -502,9 +503,10 @@ def main():
         audio_files.extend(args.audio_files)
     
     if args.audio_dir:
-        import glob
-        for ext in ["*.wav", "*.mp3", "*.flac", "*.mp4", "*.m4a", "*.webm"]:
-            audio_files.extend(glob.glob(os.path.join(args.audio_dir, ext)))
+        supported = set(e.lower() for e in COMMON_AUDIO_EXTS)
+        for f in os.listdir(args.audio_dir):
+            if os.path.splitext(f)[1].lower() in supported:
+                audio_files.append(os.path.join(args.audio_dir, f))
     
     if args.dataset:
         concatenated_audio = load_dataset_and_concatenate(
