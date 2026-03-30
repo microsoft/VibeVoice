@@ -962,7 +962,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
         Returns:
             [`~schedulers.scheduling_utils.SchedulerOutput`] or `tuple`:
-                If return_dict is `True`, [`~schedulers.scheduling_utils.SchedulerOutput`] is returned, otherwise a
+                If return_dict is `True`, [`~schedulers.scheduling_utils.SchedulerOutput`] is returned; otherwise, a
                 tuple is returned where the first element is the sample tensor.
 
         """
