@@ -66,13 +66,20 @@ class VibeVoiceASRProcessor:
         else:
             self.audio_normalizer = None
 
-        self.output_script = output_script
+        self.output_script = self._normalize_output_script(output_script)
         self._opencc_converter = None
 
-        if self.output_script in { "traditional", "traditional_chinese", "zh-tw" }:
+        if self.output_script == "zh-tw":
+            config = "s2t"
+        elif self.output_script == "zh-cn":
+            config = None
+        else:
+            config = None
+
+        if config:
             try:
                 import opencc
-                self._opencc_converter = opencc.OpenCC('s2t')
+                self._opencc_converter = opencc.OpenCC(config)
             except ImportError:
                 warnings.warn(
                     "opencc not installed. Traditional Chinese conversion disabled. "
@@ -401,6 +408,26 @@ class VibeVoiceASRProcessor:
             "speech": audio_array,
             "vae_tok_len": vae_tok_len,
         }
+
+    def _normalize_output_script(self, output_script: Optional[str]) -> Optional[str]:
+        if not output_script:
+            return None
+
+        script = output_script.lower().strip()
+
+        alias_map = {
+            "traditional": "zh-tw",
+            "traditional_chinese": "zh-tw",
+            "zh-tw": "zh-tw",
+            "zh_hant": "zh-tw",
+
+            "simplified": "zh-cn",
+            "simplified_chinese": "zh-cn",
+            "zh-cn": "zh-cn",
+            "zh_hans": "zh-cn",
+        }
+
+        return alias_map.get(script, script)
     
     def _batch_encode(
         self,
