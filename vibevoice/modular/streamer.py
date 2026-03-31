@@ -128,7 +128,7 @@ class AudioBatchIterator:
                     samples_to_remove.add(idx)
                 else:
                     batch_chunks[idx] = value
-            except:
+            except Exception:
                 # Queue is empty for this sample, skip it this iteration
                 pass
         
