@@ -3,8 +3,9 @@ from __future__ import annotations
 import torch
 
 import asyncio
-from queue import Queue
-from typing import TYPE_CHECKING, Optional
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from queue import Empty, Full, Queue
+from typing import Any, Optional
 
 
 from transformers.generation import BaseStreamer
@@ -22,22 +23,59 @@ class AudioStreamer(BaseStreamer):
             The signal to put in the queue when generation ends. Defaults to None.
         timeout (`float`, *optional*):
             The timeout for the audio queue. If `None`, the queue will block indefinitely.
+        max_queue_size (`int`, *optional*):
+            Max items stored per sample queue. `None` means unbounded.
+        queue_overflow (`str`, *optional*):
+            Overflow behavior when queue is full. `"block"` waits for space,
+            `"drop_oldest"` drops the oldest queued chunk.
     """
     
     def __init__(
         self, 
         batch_size: int,
-        stop_signal: Optional[any] = None,
+        stop_signal: Optional[Any] = None,
         timeout: Optional[float] = None,
+        max_queue_size: Optional[int] = None,
+        queue_overflow: str = "block",
     ):
         self.batch_size = batch_size
         self.stop_signal = stop_signal
         self.timeout = timeout
+        self.max_queue_size = 0 if max_queue_size is None else int(max_queue_size)
+        self.queue_overflow = queue_overflow
+        self.dropped_chunks = 0
+
+        if self.max_queue_size < 0:
+            raise ValueError("max_queue_size must be >= 0")
+        if self.queue_overflow not in {"block", "drop_oldest"}:
+            raise ValueError("queue_overflow must be one of: 'block', 'drop_oldest'")
         
         # Create a queue for each sample in the batch
-        self.audio_queues = [Queue() for _ in range(batch_size)]
+        self.audio_queues = [Queue(maxsize=self.max_queue_size) for _ in range(batch_size)]
         self.finished_flags = [False for _ in range(batch_size)]
         self.sample_indices_map = {}  # Maps from sample index to queue index
+
+    def _enqueue(self, idx: int, value: Any):
+        queue = self.audio_queues[idx]
+        if self.queue_overflow == "drop_oldest":
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                    self.dropped_chunks += 1
+                except Empty:
+                    pass
+            try:
+                queue.put_nowait(value)
+            except Full:
+                try:
+                    queue.get_nowait()
+                    self.dropped_chunks += 1
+                except Empty:
+                    pass
+                queue.put_nowait(value)
+            return
+
+        queue.put(value, timeout=self.timeout)
         
     def put(self, audio_chunks: torch.Tensor, sample_indices: torch.Tensor):
         """
@@ -52,7 +90,7 @@ class AudioStreamer(BaseStreamer):
             if idx < self.batch_size and not self.finished_flags[idx]:
                 # Convert to numpy or keep as tensor based on preference
                 audio_chunk = audio_chunks[i].detach().cpu()
-                self.audio_queues[idx].put(audio_chunk, timeout=self.timeout)
+                self._enqueue(idx, audio_chunk)
     
     def end(self, sample_indices: Optional[torch.Tensor] = None):
         """
@@ -65,15 +103,25 @@ class AudioStreamer(BaseStreamer):
             # End all samples
             for idx in range(self.batch_size):
                 if not self.finished_flags[idx]:
-                    self.audio_queues[idx].put(self.stop_signal, timeout=self.timeout)
+                    self._enqueue(idx, self.stop_signal)
                     self.finished_flags[idx] = True
         else:
             # End specific samples
             for sample_idx in sample_indices:
                 idx = sample_idx.item() if torch.is_tensor(sample_idx) else sample_idx
                 if idx < self.batch_size and not self.finished_flags[idx]:
-                    self.audio_queues[idx].put(self.stop_signal, timeout=self.timeout)
+                    self._enqueue(idx, self.stop_signal)
                     self.finished_flags[idx] = True
+
+    def get_stats(self):
+        return {
+            "batch_size": self.batch_size,
+            "active_samples": sum(not flag for flag in self.finished_flags),
+            "queue_sizes": [q.qsize() for q in self.audio_queues],
+            "max_queue_size": None if self.max_queue_size == 0 else self.max_queue_size,
+            "queue_overflow": self.queue_overflow,
+            "dropped_chunks": self.dropped_chunks,
+        }
     
     def __iter__(self):
         """Returns an iterator over the batch of audio streams."""
@@ -128,7 +176,7 @@ class AudioBatchIterator:
                     samples_to_remove.add(idx)
                 else:
                     batch_chunks[idx] = value
-            except:
+            except Empty:
                 # Queue is empty for this sample, skip it this iteration
                 pass
         
@@ -155,13 +203,51 @@ class AsyncAudioStreamer(AudioStreamer):
     def __init__(
         self, 
         batch_size: int,
-        stop_signal: Optional[any] = None,
+        stop_signal: Optional[Any] = None,
         timeout: Optional[float] = None,
+        max_queue_size: Optional[int] = None,
+        queue_overflow: str = "block",
     ):
-        super().__init__(batch_size, stop_signal, timeout)
+        super().__init__(
+            batch_size,
+            stop_signal,
+            timeout,
+            max_queue_size=max_queue_size,
+            queue_overflow=queue_overflow,
+        )
         # Replace regular queues with async queues
-        self.audio_queues = [asyncio.Queue() for _ in range(batch_size)]
+        self.audio_queues = [asyncio.Queue(maxsize=self.max_queue_size) for _ in range(batch_size)]
         self.loop = asyncio.get_running_loop()
+
+    def _enqueue_async(self, idx: int, value: Any):
+        queue = self.audio_queues[idx]
+        if self.queue_overflow == "drop_oldest":
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                    self.dropped_chunks += 1
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                queue.put_nowait(value)
+            except asyncio.QueueFull:
+                try:
+                    queue.get_nowait()
+                    self.dropped_chunks += 1
+                except asyncio.QueueEmpty:
+                    pass
+                queue.put_nowait(value)
+            return
+
+        future = asyncio.run_coroutine_threadsafe(queue.put(value), self.loop)
+        try:
+            if self.timeout is None:
+                future.result()
+            else:
+                future.result(timeout=self.timeout)
+        except FutureTimeoutError:
+            future.cancel()
+            raise TimeoutError("Timed out while waiting to enqueue audio chunk")
         
     def put(self, audio_chunks: torch.Tensor, sample_indices: torch.Tensor):
         """Put audio chunks in the appropriate async queues."""
@@ -169,9 +255,7 @@ class AsyncAudioStreamer(AudioStreamer):
             idx = sample_idx.item()
             if idx < self.batch_size and not self.finished_flags[idx]:
                 audio_chunk = audio_chunks[i].detach().cpu()
-                self.loop.call_soon_threadsafe(
-                    self.audio_queues[idx].put_nowait, audio_chunk
-                )
+                self._enqueue_async(idx, audio_chunk)
     
     def end(self, sample_indices: Optional[torch.Tensor] = None):
         """Signal the end of generation for specified samples."""
@@ -182,9 +266,7 @@ class AsyncAudioStreamer(AudioStreamer):
             
         for idx in indices_to_end:
             if idx < self.batch_size and not self.finished_flags[idx]:
-                self.loop.call_soon_threadsafe(
-                    self.audio_queues[idx].put_nowait, self.stop_signal
-                )
+                self._enqueue_async(idx, self.stop_signal)
                 self.finished_flags[idx] = True
     
     async def get_stream(self, sample_idx: int):
