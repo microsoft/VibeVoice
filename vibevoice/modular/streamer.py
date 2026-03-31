@@ -247,7 +247,7 @@ class AsyncAudioStreamer(AudioStreamer):
                 future.result(timeout=self.timeout)
         except FutureTimeoutError:
             future.cancel()
-            raise TimeoutError("Timed out while waiting to enqueue audio chunk")
+            raise asyncio.QueueFull("Timed out while waiting to enqueue audio chunk")
         
     def put(self, audio_chunks: torch.Tensor, sample_indices: torch.Tensor):
         """Put audio chunks in the appropriate async queues."""
