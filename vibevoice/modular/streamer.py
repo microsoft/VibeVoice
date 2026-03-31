@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 
 import asyncio
-from queue import Queue
+from queue import Empty, Queue
 from typing import TYPE_CHECKING, Optional
 
 
@@ -128,7 +128,7 @@ class AudioBatchIterator:
                     samples_to_remove.add(idx)
                 else:
                     batch_chunks[idx] = value
-            except:
+            except Empty:
                 # Queue is empty for this sample, skip it this iteration
                 pass
         
