@@ -51,7 +51,7 @@ https://github.com/user-attachments/assets/acde5602-dc17-4314-9e3b-c630bc84aefa
 
 
 ## Installation
-We recommend to use NVIDIA Deep Learning Container to manage the CUDA environment. 
+We recommend using NVIDIA Deep Learning Container to manage the CUDA environment. 
 
 1. Launch docker
 ```bash
