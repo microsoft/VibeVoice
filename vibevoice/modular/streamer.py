@@ -3,8 +3,9 @@ from __future__ import annotations
 import torch
 
 import asyncio
+import time
 from queue import Empty, Queue
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 
 from transformers.generation import BaseStreamer
@@ -18,7 +19,7 @@ class AudioStreamer(BaseStreamer):
     Parameters:
         batch_size (`int`):
             The batch size for generation
-        stop_signal (`any`, *optional*):
+        stop_signal (`Any`, *optional*):
             The signal to put in the queue when generation ends. Defaults to None.
         timeout (`float`, *optional*):
             The timeout for the audio queue. If `None`, the queue will block indefinitely.
@@ -27,7 +28,7 @@ class AudioStreamer(BaseStreamer):
     def __init__(
         self, 
         batch_size: int,
-        stop_signal: Optional[any] = None,
+        stop_signal: Optional[Any] = None,
         timeout: Optional[float] = None,
     ):
         self.batch_size = batch_size
@@ -140,7 +141,6 @@ class AudioBatchIterator:
         elif self.active_samples:
             # If no chunks were ready but we still have active samples, 
             # wait a bit and try again
-            import time
             time.sleep(0.01)
             return self.__next__()
         else:
@@ -155,7 +155,7 @@ class AsyncAudioStreamer(AudioStreamer):
     def __init__(
         self, 
         batch_size: int,
-        stop_signal: Optional[any] = None,
+        stop_signal: Optional[Any] = None,
         timeout: Optional[float] = None,
     ):
         super().__init__(batch_size, stop_signal, timeout)
