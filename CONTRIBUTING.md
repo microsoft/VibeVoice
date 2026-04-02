@@ -15,7 +15,7 @@ Our core principles are **code minimalism**, **high readability**, and **functio
 
 - **Over-Engineering**  
   We will reject unnecessary encapsulation, excessive abstraction, or complex architectural refactoring.  
-  Please remember this is research-purposed code, not a commercial enterprise project.
+  Please remember this is research-oriented code, not a commercial enterprise project.
 
 - **Style Tweaks**  
   PRs solely for formatting, beautification, or non-functional style adjustments will be rejected.

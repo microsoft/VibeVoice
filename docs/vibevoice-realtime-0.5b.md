@@ -79,7 +79,7 @@ The model achieves satisfactory performance on short-sentence benchmarks, while 
 
 
 ## Installation
-We recommend to use NVIDIA Deep Learning Container to manage the CUDA environment. 
+We recommend using NVIDIA Deep Learning Container to manage the CUDA environment. 
 
 1. Launch docker
 ```bash
@@ -105,7 +105,7 @@ pip install -e .[streamingtts]
 
 
 ### Usage 1: Launch real-time websocket demo
-Note: NVIDIA T4 / Mac M4 Pro achieve realtime in our tests; other devices with weaker inference capability may require further testing and speed optimizations. 
+Note: NVIDIA T4 / Mac M4 Pro achieve real-time performance in our tests; other devices with weaker inference capability may require further testing and speed optimizations. 
 
 Due to network latency, the time when audio playback is heard may exceed the ~300 ms first speech chunk generation latency.
 ```bash

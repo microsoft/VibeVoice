@@ -102,7 +102,7 @@ We observed users may encounter occasional instability when synthesizing Chinese
 
 - Using English punctuation even for Chinese text, preferably only commas and periods.
 - Using the Large model variant, which is considerably more stable.
-- If you found the generated voice speak too fast. Please try to chunk your text with multiple speaker turns with same speaker label.
+- If you find that the generated voice speaks too fast, try chunking your text into multiple turns with the same speaker label.
 
 We'd like to thank [PsiPi](https://huggingface.co/PsiPi) for sharing an interesting way for emotion control. Details can be found via [discussion12](https://huggingface.co/microsoft/VibeVoice-1.5B/discussions/12).
 
