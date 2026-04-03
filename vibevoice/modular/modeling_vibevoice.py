@@ -415,6 +415,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
 
         # --- Diffusion Loss Calculation ---
         diffusion_loss = None
+        speech_len = 0  # Initialize to prevent NameError when else branch is taken
         # This block is executed only if we are in a context that involves speech.
         if speech_tensors is not None and acoustic_loss_mask.sum().item() > 0:
             condition_features = hidden_states[acoustic_loss_mask]
