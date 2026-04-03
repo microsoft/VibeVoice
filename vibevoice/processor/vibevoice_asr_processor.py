@@ -37,7 +37,7 @@ class VibeVoiceASRProcessor:
     Args:
         tokenizer: The text tokenizer for processing text
         audio_processor: The audio processor for processing speech
-        speech_tok_compress_ratio (int): Compression ratio for speech tokenization
+        speech_tok_compress_ratio (int): Compression ratio for speech tokenization. Default: 3200 (product of encoder ratios [8,5,5,4,2,2])
         target_sample_rate (int): Target sample rate for audio
         normalize_audio (bool): Whether to normalize audio input
     """
@@ -46,7 +46,7 @@ class VibeVoiceASRProcessor:
         self,
         tokenizer=None,
         audio_processor=None,
-        speech_tok_compress_ratio=320,
+        speech_tok_compress_ratio=3200,
         target_sample_rate=24000,
         normalize_audio=True,
         **kwargs
