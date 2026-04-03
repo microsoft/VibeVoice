@@ -78,6 +78,11 @@ class VoiceMapper:
             return matched_path
         
         # Default to first voice if no match found
+        if not self.voice_presets:
+            raise ValueError(
+                f"No voice presets available. Please download voices first using: "
+                f"bash demo/download_experimental_voices.sh"
+            )
         default_voice = list(self.voice_presets.values())[0]
         print(f"Warning: No voice preset found for '{speaker_name}', using default voice: {default_voice}")
         return default_voice
