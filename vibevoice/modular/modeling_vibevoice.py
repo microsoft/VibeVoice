@@ -358,7 +358,12 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
         
         x = self.get_input_embeddings()(input_ids)
 
-        semantic_speech_all_connect_features = self.model.semantic_connector(speech_semantic_tensors)
+        # Guard: semantic_connector expects a Tensor but speech_semantic_tensors is Optional;
+        # calling it with None crashes.  Produce None so downstream code can skip it.
+        semantic_speech_all_connect_features = (
+            self.model.semantic_connector(speech_semantic_tensors)
+            if speech_semantic_tensors is not None else None
+        )
         if speeches_loss_input is not None:
             # only part audio need diffuse
             speech_all_features, speech_all_connect_features = self.forward_speech_features(
@@ -415,8 +420,16 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
 
         # --- Diffusion Loss Calculation ---
         diffusion_loss = None
+        # speech_len must be initialised before the conditional block so that it is
+        # always bound when referenced in the return statements below.
+        speech_len = 0
         # This block is executed only if we are in a context that involves speech.
-        if speech_tensors is not None and acoustic_loss_mask.sum().item() > 0:
+        # acoustic_loss_mask is Optional, so guard against None before calling .sum().
+        if (
+            speech_tensors is not None
+            and acoustic_loss_mask is not None
+            and acoustic_loss_mask.sum().item() > 0
+        ):
             condition_features = hidden_states[acoustic_loss_mask]
             
             speech_len, latent_size = speech_features.shape
