@@ -85,6 +85,8 @@ For more information, demos, and examples, please visit our [Project Page](https
 
 [📖 Documentation](docs/vibevoice-asr.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-ASR) | [🎮 Playground](https://aka.ms/vibevoice-asr) | [🛠️ Finetuning](finetuning-asr/README.md) |  [📊 Paper](docs/VibeVoice-ASR-Report.pdf)
 
+> Security note: if you self-host the ASR Gradio demo with `--share` or another public tunnel, treat uploaded media and local model artifacts as untrusted inputs.
+
 
 <p align="center">
   <img src="Figures/DER.jpg" alt="DER" width="50%"><br>

@@ -81,6 +81,8 @@ apt update && apt install ffmpeg -y # for demo
 python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --share
 ```
 
+> Security note: `--share` creates a public Gradio link. Only use it for trusted traffic, and only load trusted local voice preset files and model artifacts.
+
 ### Usage 2: Inference from files directly
 ```bash
 python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add a audio path here] 
@@ -128,6 +130,5 @@ LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetun
 ## 📄 License
 
 This project is licensed under the [MIT License](../LICENSE).
-
 
 
