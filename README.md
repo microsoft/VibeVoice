@@ -16,7 +16,7 @@
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Figures/VibeVoice_logo_white.png">
-  <img src="Figures/VibeVoice_logo.png" alt="VibeVoice Logo" width="300">
+  <img src="Figures/VibeVoice_logo.png" alt="VibeVoicelogo" width="300">
 </picture>
 </div>
 
