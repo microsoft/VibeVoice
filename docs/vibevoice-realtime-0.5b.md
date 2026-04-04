@@ -8,8 +8,8 @@
 VibeVoice-Realtime is a **lightweight real‑time** text-to-speech model supporting **streaming text input** and **robust long-form speech generation**. It can be used to build real-time TTS services, narrate live data streams, and let different LLMs start speaking from their very first tokens (plug in your preferred model) long before a full answer is generated. It produces initial audible speech in **~200 milliseconds** (hardware dependent).
 
 
-**Model:** [VibeVoice-Realtime-0.5B](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B)<br>
-**Colab:** [Link](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb)<br>
+**Model:** [VibeVoice Realtime 0.5B (on Hugging Face)](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B)<br>
+**Colab:** [VibeVoice Realtime Colab (Jupyter Notebook)](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb)<br>
 
 
 > Note (multilingual exploration): Although the model is primarily built for English, we found that it still exhibits a certain level of multilingual capability—and even performs reasonably well in some languages. We provide nine additional languages (German, French, Italian, Japanese, Korean, Dutch, Polish, Portuguese, and Spanish) for users to explore. These multilingual behaviors have not been extensively tested; use with caution and share observations.

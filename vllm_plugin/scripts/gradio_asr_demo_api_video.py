@@ -1734,7 +1734,7 @@ def create_gradio_interface(api_url: str, model_name: str = None, default_max_to
                     with gr.Column(scale=1):
                         gr.Markdown("## 📋 Customized Context")
                         context_info_input = gr.Textbox(
-                            label="Add your customized terms in bellow for better recognition. ",
+                            label="Add your customized terms below for better recognition. ",
                             placeholder="VibeVoice \nMicrosoft \nAzure ... ",
                             lines=5,
                             max_lines=6,
