@@ -266,7 +266,8 @@ def main():
         print(f"RTF (Real Time Factor): {rtf:.2f}x")
     else:
         print("No audio output generated")
-    
+        return
+
     # Calculate token metrics
     input_tokens = inputs['tts_text_ids'].shape[1]  # Number of input tokens
     output_tokens = outputs.sequences.shape[1]  # Total tokens (input + generated)
