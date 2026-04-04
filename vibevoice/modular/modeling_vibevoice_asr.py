@@ -90,7 +90,7 @@ class VibeVoiceASRModel(VibeVoiceASRPreTrainedModel):
         for name, attr in self.language_model.fullmap.items(): # parallel by nnscaler, the name is changed
             if attr.orig_name == 'embed_tokens.weight':
                 return getattr(self.language_model, name)
-        assert False, 'should not arrive here'
+        raise RuntimeError("Failed to locate input embedding weights in language_model.fullmap")
 
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value

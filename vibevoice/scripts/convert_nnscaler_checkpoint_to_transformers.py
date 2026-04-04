@@ -29,7 +29,7 @@ def convert_vibevoice_nnscaler_checkpoint_to_hf(
     
     # Load regular checkpoint
     logger.info(f"Loading regular checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location="cpu") # ['model', 'optimizer', 'lr_scheduler', 'train_status', 'train_args', 'rng_states', 'nnscaler', 'dataloader']
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False) # ['model', 'optimizer', 'lr_scheduler', 'train_status', 'train_args', 'rng_states', 'nnscaler', 'dataloader']
     
     # config = checkpoint['train_args']
     init_config_name = checkpoint['train_args']['vars']['model_args']['config_path']['relative_path']
@@ -65,13 +65,13 @@ def convert_vibevoice_nnscaler_checkpoint_to_hf(
     # Set the default dtype to bfloat16 before creating the model
     original_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch.bfloat16)
-
-    # Create the HuggingFace model
-    logger.info("Creating HuggingFace VibeVoiceForConditionalGeneration model")
-    model = VibeVoiceForConditionalGeneration(config)
-    
-    # Restore original dtype
-    torch.set_default_dtype(original_dtype)
+    try:
+        # Create the HuggingFace model
+        logger.info("Creating HuggingFace VibeVoiceForConditionalGeneration model")
+        model = VibeVoiceForConditionalGeneration(config)
+    finally:
+        # Restore original dtype even if model creation fails
+        torch.set_default_dtype(original_dtype)
 
     # Load the state dict
     logger.info("Loading weights into model")
