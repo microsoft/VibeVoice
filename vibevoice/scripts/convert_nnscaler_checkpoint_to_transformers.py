@@ -29,13 +29,17 @@ def convert_vibevoice_nnscaler_checkpoint_to_hf(
     
     # Load regular checkpoint
     logger.info(f"Loading regular checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location="cpu") # ['model', 'optimizer', 'lr_scheduler', 'train_status', 'train_args', 'rng_states', 'nnscaler', 'dataloader']
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)  # ['model', 'optimizer', 'lr_scheduler', 'train_status', 'train_args', 'rng_states', 'nnscaler', 'dataloader']
     
     # config = checkpoint['train_args']
     init_config_name = checkpoint['train_args']['vars']['model_args']['config_path']['relative_path']
     pretrained_name = checkpoint['train_args']['vars']['data_args']['tokenizer_path']
-    
-    init_config_path = Path(__file__).parent.parent / 'configs' / init_config_name.split('/')[-1]
+
+    # Sanitize config name to prevent path traversal (CWE-22)
+    config_basename = Path(init_config_name).name
+    if '..' in config_basename or config_basename.startswith('/'):
+        raise ValueError(f"Invalid config path: {config_basename}")
+    init_config_path = Path(__file__).parent.parent / 'configs' / config_basename
     if init_config_path.exists():
         logger.info(f"Loading initial config from {init_config_path}")
         with open(init_config_path, 'r') as f:
