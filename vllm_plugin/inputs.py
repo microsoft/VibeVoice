@@ -4,11 +4,20 @@ This module handles audio data loading and preprocessing for VibeVoice ASR infer
 It converts various audio input formats (path, bytes, numpy array) into tensors
 that can be processed by the VibeVoice model.
 """
+import os
+import logging
 import torch
 import numpy as np
 from typing import Union, List
 from vllm.multimodal.inputs import MultiModalInputs
 from vibevoice.processor.audio_utils import load_audio_use_ffmpeg, load_audio_bytes_use_ffmpeg, AudioNormalizer
+
+logger = logging.getLogger(__name__)
+
+# Maximum audio duration in seconds. Default 3660s (61 minutes) matches the
+# model's designed capacity. Override via environment variable to guard against
+# OOM on GPUs with less VRAM. See https://github.com/microsoft/VibeVoice/issues/210
+_MAX_AUDIO_DURATION = float(os.environ.get("VIBEVOICE_MAX_AUDIO_DURATION", "3660"))
 
 
 def load_audio(audio_path: str, target_sr: int = 24000) -> np.ndarray:
@@ -71,7 +80,17 @@ def vibevoice_audio_input_mapper(ctx, data: Union[str, bytes, np.ndarray, List[s
         audio_waveform = data
     else:
         raise ValueError(f"Unsupported audio data type: {type(data)}")
-        
+
+    # Validate audio duration before tensor conversion to catch OOM early
+    duration_sec = len(audio_waveform) / 24000
+    if duration_sec > _MAX_AUDIO_DURATION:
+        raise ValueError(
+            f"Audio duration ({duration_sec:.1f}s) exceeds the configured "
+            f"limit ({_MAX_AUDIO_DURATION:.0f}s). Set the "
+            f"VIBEVOICE_MAX_AUDIO_DURATION environment variable to adjust "
+            f"this limit, or use shorter audio."
+        )
+
     # Convert to tensor
     audio_tensor = torch.from_numpy(audio_waveform).float()
     audio_length = audio_tensor.shape[0]
