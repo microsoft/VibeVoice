@@ -24,7 +24,7 @@
 
 <h3>📰 News</h3>
 
-<strong>🎉 VibeVoice-ASR is being adopted by the community! <a href="https://vibingjustspeakit.github.io/Vibing/">Vibing</a>, an intelligent voice input method, is now built on top of VibeVoice-ASR. Download: [macOS](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.0/Vibing-v0.1.0-mac.dmg) | [Windows EXE Installer](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.2/Vibing-v0.1.2-windows.exe) | [Windows ZIP (Portable)](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.2/Vibing-v0.1.2-windows.zip)</strong>
+<strong>🎉 <a href="https://vibingjustspeakit.github.io/Vibing/">Vibing</a>, an intelligent voice input method built by the community, is now powered by VibeVoice-ASR. Download: [macOS](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.0/Vibing-v0.1.0-mac.dmg) | [Windows EXE Installer](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.2/Vibing-v0.1.2-windows.exe) | [Windows ZIP (Portable)](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.2/Vibing-v0.1.2-windows.zip)</strong>
 
 https://github.com/user-attachments/assets/db0bb23f-ae06-4135-a66a-1ff1669f4f84
 
