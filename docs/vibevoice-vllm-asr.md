@@ -10,6 +10,7 @@ Deploy VibeVoice ASR model as a high-performance API service using [vLLM](https:
 - **📡 OpenAI-Compatible API**: Standard `/v1/chat/completions` endpoint with streaming support
 - **🎵 Long Audio Support**: Process up to 60+ minutes of audio in a single request
 - **🔌 Plugin Architecture**: No vLLM source code modification required - just install and run
+- **⚡ Data Parallel (DP)**: Run independent model replicas across multiple GPUs with automatic load balancing behind a single port
 
 ## 🛠️ Installation
 
@@ -31,9 +32,86 @@ docker run -d --gpus all --name vibevoice-vllm \
   -v $(pwd):/app \
   -w /app \
   --entrypoint bash \
-  vllm/vllm-openai:latest \
+  vllm/vllm-openai:v0.14.1 \
   -c "python3 /app/vllm_plugin/scripts/start_server.py"
 ```
+
+## ⚡ Multi-GPU Deployment
+
+The launcher supports two types of GPU parallelism via `--tp` and `--dp` flags:
+
+| Flag | Name | What it does |
+|------|------|-------------|
+| `--tp N` | Tensor Parallel | Splits **one model** across N GPUs (for models too large for a single GPU) |
+| `--dp N` | Data Parallel | Runs **N independent replicas**, one per GPU, with automatic load balancing behind a single port |
+
+### Data Parallel (Recommended for scaling throughput)
+
+Run N independent replicas on N GPUs with automatic load balancing behind a single port.
+When `--dp N` is specified (N > 1), the launcher automatically starts N independent vLLM
+processes behind an nginx reverse proxy (2×N workers) for optimal throughput:
+
+```bash
+docker run -d --gpus '"device=0,1,2,3"' --name vibevoice-vllm \
+  --ipc=host \
+  -p 8000:8000 \
+  -e VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
+  -e PYTORCH_ALLOC_CONF=expandable_segments:True \
+  -v $(pwd):/app \
+  -w /app \
+  --entrypoint bash \
+  vllm/vllm-openai:v0.14.1 \
+  -c "python3 /app/vllm_plugin/scripts/start_server.py --dp 4"
+```
+
+Run on all 8 GPUs:
+
+```bash
+docker run -d --gpus all --name vibevoice-vllm \
+  --ipc=host \
+  -p 8000:8000 \
+  -e VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
+  -e PYTORCH_ALLOC_CONF=expandable_segments:True \
+  -v $(pwd):/app \
+  -w /app \
+  --entrypoint bash \
+  vllm/vllm-openai:v0.14.1 \
+  -c "python3 /app/vllm_plugin/scripts/start_server.py --dp 8"
+```
+
+### Tensor Parallel
+
+Split a single model across 2 GPUs (useful if GPU memory is limited):
+
+```bash
+docker run -d --gpus '"device=0,1"' --name vibevoice-vllm \
+  --ipc=host \
+  -p 8000:8000 \
+  -e VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
+  -e PYTORCH_ALLOC_CONF=expandable_segments:True \
+  -v $(pwd):/app \
+  -w /app \
+  --entrypoint bash \
+  vllm/vllm-openai:v0.14.1 \
+  -c "python3 /app/vllm_plugin/scripts/start_server.py --tp 2"
+```
+
+### Hybrid (DP × TP)
+
+Combine both — e.g., 2 replicas, each split across 2 GPUs (4 GPUs total):
+
+```bash
+docker run -d --gpus '"device=0,1,2,3"' --name vibevoice-vllm \
+  --ipc=host \
+  -p 8000:8000 \
+  -v $(pwd):/app \
+  -w /app \
+  --entrypoint bash \
+  vllm/vllm-openai:v0.14.1 \
+  -c "python3 /app/vllm_plugin/scripts/start_server.py --dp 2 --tp 2"
+```
+
+> **Note**: Total GPUs required = `dp × tp`. Make sure to expose enough GPU devices in the Docker `--gpus` flag.
 
 3. View logs
 ```bash

@@ -537,6 +537,10 @@ def transcribe_audio(
 
         if audio_path_input:
             candidate = Path(audio_path_input.strip())
+            # Security: validate file extension to prevent arbitrary file probing
+            if candidate.suffix.lower() not in {e.lower() for e in COMMON_AUDIO_EXTS}:
+                yield "❌ Unsupported audio format.", ""
+                return
             if not candidate.exists():
                 yield f"❌ Provided path does not exist: {candidate}", ""
                 return

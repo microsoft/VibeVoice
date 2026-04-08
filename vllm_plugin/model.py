@@ -46,8 +46,13 @@ def _ffmpeg_load_file(filepath) -> tuple[np.ndarray, int]:
     return audio, sr
 
 # Register FFmpeg-based audio loader
-import vllm.multimodal.audio as _vllm_audio_module
-_OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
+try:
+    # Try new location (vLLM >= 0.6.x)
+    from vllm.multimodal.media.audio import AudioMediaIO as _OriginalAudioMediaIO
+except ImportError:
+    # Fall back to old location (vLLM < 0.6.x)
+    import vllm.multimodal.audio as _vllm_audio_module
+    _OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
 
 class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
     """AudioMediaIO implementation using FFmpeg for audio decoding."""
@@ -62,11 +67,22 @@ class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
         return _ffmpeg_load_file(filepath)
 
 # Replace globally
-_vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
+try:
+    # For new vLLM versions
+    import vllm.multimodal.media.audio as _vllm_audio_module
+    _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
+except ImportError:
+    # For old vLLM versions
+    import vllm.multimodal.audio as _vllm_audio_module
+    _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
 
 # Also patch in utils module where it's imported
-import vllm.multimodal.utils as _vllm_utils_module
-_vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
+try:
+    import vllm.multimodal.utils as _vllm_utils_module
+    _vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
+except (ImportError, AttributeError):
+    # AudioMediaIO might not be imported in utils in newer versions
+    pass
 
 # ============================================================================
 
@@ -91,7 +107,17 @@ from vllm.multimodal.processing import (
     PromptUpdate,
     PromptUpdateDetails,
 )
-from vllm.multimodal.profiling import BaseDummyInputsBuilder, ProcessorInputs
+try:
+    # Try new location (vLLM >= 0.6.x)
+    from vllm.multimodal.processing import BaseDummyInputsBuilder, ProcessorInputs
+except ImportError:
+    # Fall back to old location (vLLM < 0.6.x)
+    try:
+        from vllm.multimodal.profiling import BaseDummyInputsBuilder, ProcessorInputs
+    except ImportError:
+        # If neither location works, try individual imports
+        from vllm.multimodal.processing.dummy_inputs import BaseDummyInputsBuilder
+        from vllm.multimodal.processing.inputs import ProcessorInputs
 
 # Import VibeVoice components
 from vibevoice.modular.modular_vibevoice_tokenizer import (
@@ -1023,9 +1049,6 @@ class VibeVoiceForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         embeddings = []
         
         # Get model device for tensor placement.
-        # dtype is NOT set here — audio_encoder.forward() handles it internally:
-        #   input: converted to fp32 (self._audio_encoder_dtype)
-        #   output: converted to bfloat16 (self._lm_dtype)
         try:
             device = next(self.audio_encoder.parameters()).device
         except StopIteration:
@@ -1035,63 +1058,44 @@ class VibeVoiceForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         # vLLM batches as: [batch_size, 1, seq_len] or [batch_size, seq_len]
         if isinstance(raw_audio, torch.Tensor):
             if raw_audio.dim() == 3:
-                # Shape: [batch_size, 1, seq_len] - squeeze the middle dimension
                 num_audios = raw_audio.shape[0]
                 audio_list = [raw_audio[i].squeeze(0) for i in range(num_audios)]
             elif raw_audio.dim() == 2:
-                # Shape: [batch_size, seq_len]
                 num_audios = raw_audio.shape[0]
                 audio_list = [raw_audio[i] for i in range(num_audios)]
             else:
-                # Single 1D tensor
                 audio_list = [raw_audio]
         elif isinstance(raw_audio, (list, tuple)):
             audio_list = list(raw_audio)
         else:
-            # Single tensor
             audio_list = [raw_audio]
         
         for i, audio_tensor in enumerate(audio_list):
             try:
                 if isinstance(audio_tensor, list):
                     audio_tensor = torch.stack(audio_tensor)
-                
-                # Ensure tensor
                 if not isinstance(audio_tensor, torch.Tensor):
                     audio_tensor = torch.tensor(audio_tensor)
-                
-                # Only place on correct device; audio_encoder.forward() handles dtype
                 audio_tensor = audio_tensor.to(device=device)
-                
-                # Get actual length if available, otherwise use full length
                 if raw_audio_lengths and i < len(raw_audio_lengths):
                     actual_len = int(raw_audio_lengths[i])
                     if actual_len > 0 and actual_len <= audio_tensor.shape[-1]:
-                        # Truncate from the last dimension (sequence length)
                         audio_tensor = audio_tensor[..., :actual_len]
-                
-                # Skip if audio is too short (< 1 frame)
-                if audio_tensor.numel() < 160:  # Minimum ~1ms at 24kHz
+                if audio_tensor.numel() < 160:
                     continue
                 
-                # Encode audio through VibeVoice encoder
                 audio_embeds = self.audio_encoder(
                     audio_tensor,
                     use_streaming=use_streaming_flag,
                     segment_duration_s=streaming_segment_duration,
                 )
-                
-                # audio_embeds shape: [1, seq_len, hidden_size]
-                # We need to return it as a single embedding tensor per audio
                 final_embed = audio_embeds.squeeze(0)
                 embeddings.append(final_embed)
                 
             except Exception as e:
-                # Log error but don't crash - this helps debug profiling issues
                 print(f"[VibeVoice] Error encoding audio {i}: {e}")
                 import traceback
                 traceback.print_exc()
-                # Return empty embedding to avoid crash
                 continue
         
         return tuple(embeddings)
