@@ -83,7 +83,80 @@ python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --
 
 ### Usage 2: Inference from files directly
 ```bash
-python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add a audio path here] 
+python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add a audio path here]
+```
+
+### Usage 3: Python API — direct inference with hotwords
+
+For programmatic integration, you can use `VibeVoiceASRProcessor` and `VibeVoiceASRForConditionalGeneration` directly:
+
+```python
+import torch
+from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
+from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
+
+model_path = "microsoft/VibeVoice-ASR"
+
+# Load model and processor
+model = VibeVoiceASRForConditionalGeneration.from_pretrained(
+    model_path,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+processor = VibeVoiceASRProcessor.from_pretrained(model_path)
+
+# --- Basic transcription ---
+inputs = processor(
+    audio="path/to/audio.wav",
+    return_tensors="pt",
+).to(model.device)
+
+with torch.no_grad():
+    output_ids = model.generate(**inputs, max_new_tokens=32768)
+
+transcription = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
+print(transcription)
+
+# --- With customized hotwords ---
+# Hotwords improve recognition of proper nouns, technical terms, or speaker names.
+# Pass them as a comma-separated string via context_info.
+inputs = processor(
+    audio="path/to/audio.wav",
+    context_info="Microsoft, Azure, VibeVoice",  # domain-specific terms
+    return_tensors="pt",
+).to(model.device)
+
+with torch.no_grad():
+    output_ids = model.generate(**inputs, max_new_tokens=32768)
+
+transcription = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
+```
+
+### Output format
+
+The model produces a JSON array where each element represents one speech segment, containing:
+
+- **`Start time`** — segment start time in seconds
+- **`End time`** — segment end time in seconds
+- **`Speaker ID`** — speaker identifier (e.g., `"SPEAKER_00"`, `"SPEAKER_01"`)
+- **`Content`** — transcribed text for this segment
+
+Example output for a two-speaker recording:
+
+```json
+[
+  {"Start time": 0.0, "End time": 12.5, "Speaker ID": "SPEAKER_00", "Content": "Welcome to our podcast. Today we're discussing AI research."},
+  {"Start time": 12.8, "End time": 25.3, "Speaker ID": "SPEAKER_01", "Content": "Thanks for having me. I've been working on speech models for five years."},
+  {"Start time": 25.5, "End time": 38.0, "Speaker ID": "SPEAKER_00", "Content": "Let's start with the basics. How does automatic speech recognition work?"}
+]
+```
+
+The `post_process_transcription` helper on the processor can parse this JSON into a list of Python dicts:
+
+```python
+segments = processor.post_process_transcription(transcription)
+for seg in segments:
+    print(f"[{seg['start_time']:.1f}s – {seg['end_time']:.1f}s] {seg['speaker_id']}: {seg['text']}")
 ```
 
 
