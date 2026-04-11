@@ -125,6 +125,14 @@ LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetun
   <img src="../Figures/language_distribution_horizontal.png" alt="Language Distribution" width="80%">
 </p>
 
+### Community Fine-tuning
+
+Languages fine-tuned by the community using [LoRA](../finetuning-asr/README.md):
+
+| Language | ISO 639-3 | Data |
+|----------|-----------|------|
+| Darija (Moroccan Arabic) | `ary` | 81h, 27k samples |
+
 ## 📄 License
 
 This project is licensed under the [MIT License](../LICENSE).
