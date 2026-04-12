@@ -328,6 +328,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
             connect_features = self.model.acoustic_connector(audio_features)
             if return_unmask:
                 return audio_features, connect_features
+            # Ensure masks are on the same device as features (multi-GPU safety)
+            speech_masks = speech_masks.to(audio_features.device)
             return audio_features[speech_masks], connect_features[speech_masks]
         
     def forward(
@@ -358,7 +360,11 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
         
         x = self.get_input_embeddings()(input_ids)
 
-        semantic_speech_all_connect_features = self.model.semantic_connector(speech_semantic_tensors)
+        semantic_speech_all_connect_features = self.model.semantic_connector(
+            speech_semantic_tensors.to(self.model.semantic_connector[0].weight.device)
+            if speech_semantic_tensors is not None and hasattr(self.model.semantic_connector, '__getitem__')
+            else speech_semantic_tensors
+        )
         if speeches_loss_input is not None:
             # only part audio need diffuse
             speech_all_features, speech_all_connect_features = self.forward_speech_features(
