@@ -78,7 +78,7 @@ class VibeVoiceASRInference:
         print(f"Using attention implementation: {attn_implementation}")
         self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
             model_path,
-            dtype=dtype,
+            torch_dtype=dtype,
             device_map=device if device == "auto" else None,
             attn_implementation=attn_implementation,
             trust_remote_code=True

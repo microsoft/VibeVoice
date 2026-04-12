@@ -49,7 +49,7 @@ def load_lora_model(
     # Load base model
     model = VibeVoiceASRForConditionalGeneration.from_pretrained(
         base_model_path,
-        dtype=dtype,
+        torch_dtype=dtype,
         device_map=device if device == "auto" else None,
         attn_implementation="flash_attention_2",
         trust_remote_code=True,
