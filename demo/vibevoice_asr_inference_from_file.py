@@ -6,21 +6,17 @@ This script supports batch inference for ASR model and compares results
 between batch processing and single-sample processing.
 """
 
-import os
-import sys
-import torch
-import numpy as np
-from pathlib import Path
 import argparse
+import os
 import time
-import json
-import re
-from typing import List, Dict, Any, Optional
-from functools import wraps
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+import torch
 
 from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
-from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
 from vibevoice.processor.audio_utils import COMMON_AUDIO_EXTS
+from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
 
 
 class VibeVoiceASRBatchInference:
@@ -254,7 +250,7 @@ def print_result(result: Dict[str, Any]):
     """Pretty print a single transcription result."""
     print(f"\nFile: {result['file']}")
     print(f"Generation Time: {result['generation_time']:.2f}s")
-    print(f"\n--- Raw Output ---")
+    print("\n--- Raw Output ---")
     print(result['raw_text'][:500] + "..." if len(result['raw_text']) > 500 else result['raw_text'])
     
     if result['segments']:
@@ -288,8 +284,8 @@ def load_dataset_and_concatenate(
         List of concatenated audio arrays, or None if loading fails
     """
     try:
+        import torchcodec  # noqa: F401  # just for decode audio in datasets
         from datasets import load_dataset
-        import torchcodec # just for decode audio in datasets
     except ImportError:
         print("Please install it with: pip install datasets torchcodec")
         return None        
@@ -300,7 +296,7 @@ def load_dataset_and_concatenate(
     try:
         # Use streaming to avoid downloading the entire dataset
         dataset = load_dataset(dataset_name, split=split, streaming=True)
-        print(f"Dataset loaded in streaming mode")
+        print("Dataset loaded in streaming mode")
         
         concatenated_audios = []  # List of concatenated audio metadata
         
@@ -485,7 +481,7 @@ def main():
     if args.attn_implementation == "auto":
         if args.device == "cuda" and torch.cuda.is_available():
             try:
-                import flash_attn
+                import flash_attn  # noqa: F401
                 args.attn_implementation = "flash_attention_2"
             except ImportError:
                 print("flash_attn not installed, falling back to sdpa")
