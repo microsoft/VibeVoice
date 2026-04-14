@@ -347,6 +347,14 @@
           <option value="">Loading...</option>
         </select>
       </div>
+      <div class="inline-field">
+        <span class="field-label">Language</span>
+        <select id="languageSelect" class="select-control">
+          <option value="en">English</option>
+          <option value="ta">Tamil</option>
+          <option value="hi">Hindi</option>
+        </select>
+      </div>
 
       <div class="control-row">
         <label class="range-control">
@@ -409,6 +417,7 @@
   const speedValueLabel = document.getElementById('speedValue');
   const stepsSelect = document.getElementById('inferenceSteps');
   const voiceSelect = document.getElementById('voiceSelect');
+  const languageSelect = document.getElementById('languageSelect');
   const cfgValueLabel = document.getElementById('cfgValue');
   const stepsValueLabel = document.getElementById('stepsValue');
   const modelGeneratedLabel = document.getElementById('modelGenerated');
@@ -931,6 +940,7 @@
     const params = new URLSearchParams();
     params.set('text', textValue);
     params.set('speed', speedControl.value);
+    params.set('language', languageSelect.value);
     if (!Number.isNaN(cfgValue)) {
       params.set('cfg', cfgValue.toFixed(3));
     }

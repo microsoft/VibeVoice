@@ -25,6 +25,8 @@ from vibevoice.processor.vibevoice_streaming_processor import (
 from vibevoice.modular.streamer import AudioStreamer
 
 import copy
+from googletrans import Translator
+translator = Translator()
 
 BASE = Path(__file__).parent
 SAMPLE_RATE = 24_000
@@ -364,7 +366,15 @@ def streaming_tts(text: str, **kwargs) -> Iterator[np.ndarray]:
 async def websocket_stream(ws: WebSocket) -> None:
     await ws.accept()
     text = ws.query_params.get("text", "")
+    language = ws.query_params.get("language", "en")
     print(f"Client connected, text={text!r}")
+    try:
+            if language and language != "en":
+                translated = translator.translate(text, dest=language)
+                text = translated.text
+                print(f"Translated text: {text}")
+    except Exception as e:
+        print(f"Translation error: {e}")
     cfg_param = ws.query_params.get("cfg")
     steps_param = ws.query_params.get("steps")
     voice_param = ws.query_params.get("voice")
