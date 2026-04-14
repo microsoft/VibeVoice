@@ -10,6 +10,7 @@
 **Report:** [VibeVoice-ASR-Report](https://arxiv.org/pdf/2601.18184)<br>
 **Finetuning:** [finetune-guide](../finetuning-asr/README.md)<br>
 **vLLM:** [vLLM-asr](./vibevoice-vllm-asr.md)<br>
+**Transformers:** [VibeVoice-ASR-HF](https://huggingface.co/microsoft/VibeVoice-ASR-HF)<br>
 
 
 ## 🔥 Key Features
