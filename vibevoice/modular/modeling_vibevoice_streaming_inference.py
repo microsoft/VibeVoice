@@ -660,7 +660,8 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
 
         acoustic_cache = VibeVoiceTokenizerStreamingCache()
         batch_size = input_ids.shape[0]
-        assert batch_size == 1, "Currently only supports batch size == 1"
+        if batch_size != 1:
+            raise ValueError(f"Currently only supports batch size == 1, got {batch_size}")
         device = input_ids.device
         finished_tags = torch.zeros(batch_size, dtype=torch.bool, device=device)
         verbose = kwargs.get("verbose", False)
