@@ -65,7 +65,7 @@ class VibeVoiceASRInference:
         
         Args:
             model_path: Path to the pretrained model (HuggingFace format directory or model name)
-            device: Device to run inference on
+            device: Device to run inference on (cuda, mps, xpu, cpu, auto)
             dtype: Data type for model weights
             attn_implementation: Attention implementation to use ('flash_attention_2', 'sdpa', 'eager')
         """
@@ -74,17 +74,34 @@ class VibeVoiceASRInference:
         # Load processor
         self.processor = VibeVoiceASRProcessor.from_pretrained(model_path)
         
-        # Load model
+        # Load model with device-specific handling
         print(f"Using attention implementation: {attn_implementation}")
-        self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
-            model_path,
-            dtype=dtype,
-            device_map=device if device == "auto" else None,
-            attn_implementation=attn_implementation,
-            trust_remote_code=True
-        )
-        
-        if device != "auto":
+        if device == "mps":
+            # MPS: load onto CPU first, then move (device_map="mps" is not supported)
+            self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
+                model_path,
+                dtype=dtype,
+                device_map=None,
+                attn_implementation=attn_implementation,
+                trust_remote_code=True
+            )
+            self.model = self.model.to("mps")
+        elif device == "auto":
+            self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
+                model_path,
+                dtype=dtype,
+                device_map="auto",
+                attn_implementation=attn_implementation,
+                trust_remote_code=True
+            )
+        else:
+            self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
+                model_path,
+                dtype=dtype,
+                device_map=device if device != "auto" else None,
+                attn_implementation=attn_implementation,
+                trust_remote_code=True
+            )
             self.model = self.model.to(device)
         
         self.device = device if device != "auto" else next(self.model.parameters()).device
@@ -480,7 +497,11 @@ def initialize_model(model_path: str, device: str = "cuda", attn_implementation:
     """Initialize the ASR model."""
     global asr_model
     try:
-        dtype = torch.bfloat16 if device != "cpu" else torch.float32
+        # MPS and CPU require float32; CUDA/XPU can use bfloat16
+        if device in ("mps", "cpu"):
+            dtype = torch.float32
+        else:
+            dtype = torch.bfloat16
         asr_model = VibeVoiceASRInference(
             model_path=model_path,
             device=device,
@@ -893,17 +914,68 @@ def transcribe_audio(
         yield f"❌ Error during transcription: {str(e)}", ""
 
 
-def create_gradio_interface(model_path: str, default_max_tokens: int = 8192, attn_implementation: str = "flash_attention_2"):
+def _detect_device_and_attn(
+    device: str = "auto",
+    attn_implementation: str = "auto",
+):
+    """
+    Auto-detect the best device and attention implementation.
+
+    Args:
+        device: Explicit device or ``"auto"`` for best available.
+        attn_implementation: Explicit implementation or ``"auto"``.
+
+    Returns:
+        (device, attn_implementation) tuple.
+    """
+    # --- resolve device ---
+    if device == "auto":
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+    elif device == "mps" and not (
+        hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    ):
+        print("Warning: MPS requested but not available. Falling back to CPU.")
+        device = "cpu"
+
+    # --- resolve attention ---
+    if attn_implementation == "auto":
+        if device == "cuda":
+            try:
+                import flash_attn  # noqa: F401
+                attn_implementation = "flash_attention_2"
+            except ImportError:
+                print("flash_attn not installed, falling back to sdpa")
+                attn_implementation = "sdpa"
+        else:
+            # MPS / XPU / CPU don't support flash_attention_2
+            attn_implementation = "sdpa"
+
+    print(f"Using device: {device}, attn_implementation: {attn_implementation}")
+    return device, attn_implementation
+
+
+def create_gradio_interface(
+    model_path: str,
+    default_max_tokens: int = 8192,
+    device: str = "auto",
+    attn_implementation: str = "auto",
+):
     """Create and launch Gradio interface.
     
     Args:
         model_path: Path to the model (HuggingFace format directory or model name)
         default_max_tokens: Default value for max_new_tokens slider
-        attn_implementation: Attention implementation to use ('flash_attention_2', 'sdpa', 'eager')
+        device: Device to run inference on ('auto', 'cuda', 'mps', 'xpu', 'cpu')
+        attn_implementation: Attention implementation to use ('auto', 'flash_attention_2', 'sdpa', 'eager')
     """
     
     # Initialize model at startup
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device, attn_implementation = _detect_device_and_attn(device, attn_implementation)
     model_status = initialize_model(model_path, device, attn_implementation)
     print(model_status)
     
@@ -1127,10 +1199,18 @@ def main():
         help="Path to the model (HuggingFace format directory or model name)"
     )
     parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["auto", "cuda", "mps", "xpu", "cpu"],
+        help="Device to run inference on. 'auto' detects the best available (default: auto)"
+    )
+    parser.add_argument(
         "--attn_implementation",
         type=str,
-        default="flash_attention_2",
-        help="Attention implementation to use (default: flash_attention_2)"
+        default="auto",
+        choices=["auto", "flash_attention_2", "sdpa", "eager"],
+        help="Attention implementation to use. 'auto' selects the best for your device (default: auto)"
     )
     parser.add_argument(
         "--max_new_tokens",
@@ -1162,7 +1242,8 @@ def main():
     demo, custom_css = create_gradio_interface(
         model_path=args.model_path,
         default_max_tokens=args.max_new_tokens,
-        attn_implementation=args.attn_implementation
+        device=args.device,
+        attn_implementation=args.attn_implementation,
     )
     
     print(f"🚀 Starting VibeVoice ASR Demo...")
