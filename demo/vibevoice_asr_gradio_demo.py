@@ -278,7 +278,7 @@ def clip_and_encode_audio(
             sr = target_sr
         
         # Convert float32 audio to int16 for encoding
-        segment_data_int16 = (segment_data * 32768.0).astype(np.int16)
+        segment_data_int16 = (segment_data * 32767.0).astype(np.int16)
         
         # Convert to MP3 if pydub is available and use_mp3 is True
         if use_mp3 and HAS_PYDUB:
@@ -471,7 +471,7 @@ def slice_audio_to_temp(
     segment = audio_data[start_idx:end_idx]
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
     temp_file.close()
-    segment_int16 = (segment * 32768.0).astype(np.int16)
+    segment_int16 = (segment * 32767.0).astype(np.int16)
     sf.write(temp_file.name, segment_int16, sample_rate, subtype='PCM_16')
     return temp_file.name, None
 
@@ -585,7 +585,7 @@ def transcribe_audio(
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
             audio_path = temp_file.name
             temp_file.close()
-            audio_data_int16 = (audio_array * 32768.0).astype(np.int16)
+            audio_data_int16 = (audio_array * 32767.0).astype(np.int16)
             sf.write(audio_path, audio_data_int16, sample_rate, subtype='PCM_16')
             print(f"[INFO] Microphone audio saved to temp file: {audio_path}")
         
