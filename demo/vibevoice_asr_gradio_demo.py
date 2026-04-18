@@ -1135,8 +1135,8 @@ def main():
     parser.add_argument(
         "--max_new_tokens",
         type=int,
-        default=32768,
-        help="Default max new tokens for generation (default: 32768)"
+        default=4096,
+        help="Maximum number of tokens to generate (default: 4096)"
     )
     parser.add_argument(
         "--host",
