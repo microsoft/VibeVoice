@@ -347,8 +347,21 @@
           <option value="">Loading...</option>
         </select>
       </div>
+      <div class="inline-field">
+        <span class="field-label">Language</span>
+        <select id="languageSelect" class="select-control">
+          <option value="en">English</option>
+          <option value="ta">Tamil</option>
+          <option value="hi">Hindi</option>
+        </select>
+      </div>
 
       <div class="control-row">
+        <label class="range-control">
+        <span>Speed</span>
+        <input id="speedControl" type="range" min="0.5" max="2" step="0.1" value="1" />
+        <span class="range-value" id="speedValue">1.0</span>
+        </label>
         <label class="range-control">
           <span>CFG</span>
           <input id="cfgScale" type="range" min="1.3" max="3" step="0.05" value="1.5" />
@@ -400,8 +413,11 @@
   const streamingPreview = document.getElementById('streamingPreview');
   const controlBtn = document.getElementById('playback');
   const cfgSelect = document.getElementById('cfgScale');
+  const speedControl = document.getElementById('speedControl');
+  const speedValueLabel = document.getElementById('speedValue');
   const stepsSelect = document.getElementById('inferenceSteps');
   const voiceSelect = document.getElementById('voiceSelect');
+  const languageSelect = document.getElementById('languageSelect');
   const cfgValueLabel = document.getElementById('cfgValue');
   const stepsValueLabel = document.getElementById('stepsValue');
   const modelGeneratedLabel = document.getElementById('modelGenerated');
@@ -490,6 +506,9 @@
   };
 
   cfgSelect.addEventListener('input', updateCfgDisplay);
+  const updateSpeedDisplay = () => {speedValueLabel.textContent = Number(speedControl.value).toFixed(1);};
+  speedControl.addEventListener('input', updateSpeedDisplay);
+  updateSpeedDisplay();
   stepsSelect.addEventListener('input', updateStepsDisplay);
   updateCfgDisplay();
   updateStepsDisplay();
@@ -920,6 +939,8 @@
 
     const params = new URLSearchParams();
     params.set('text', textValue);
+    params.set('speed', speedControl.value);
+    params.set('language', languageSelect.value);
     if (!Number.isNaN(cfgValue)) {
       params.set('cfg', cfgValue.toFixed(3));
     }
