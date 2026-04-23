@@ -24,9 +24,8 @@
 
 <h3>📰 News</h3>
 
-<strong>🎉 <a href="https://vibingjustspeakit.github.io/Vibing/">Vibing</a>, an intelligent voice input method built by the community, is now powered by VibeVoice-ASR. Download: [macOS](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.0/Vibing-v0.1.0-mac.dmg) | [Windows EXE Installer (Recommended)](https://get.microsoft.com/installer/download/9pjf89frgg1d) | [Windows ZIP (Portable)](https://github.com/VibingJustSpeakIt/Vibing/releases/download/v0.1.3/Vibing-v0.1.3-windows.zip)</strong>
 
-https://github.com/user-attachments/assets/db0bb23f-ae06-4135-a66a-1ff1669f4f84
+
 
 <strong>2026-03-06: 🚀 VibeVoice ASR is now part of a <a href="https://huggingface.co/microsoft/VibeVoice-ASR-HF">Transformers release</a>! You can now use our speech recognition model directly through the Hugging Face Transformers library for seamless integration into your projects.</strong>
 
