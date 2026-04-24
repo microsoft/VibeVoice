@@ -3,35 +3,35 @@
 VibeVoice ASR Gradio Demo
 """
 
-import os
-import sys
-import torch
-import numpy as np
-import soundfile as sf
-from pathlib import Path
 import argparse
-import time
-import json
-import gradio as gr
-from typing import List, Dict, Tuple, Optional, Generator
-import tempfile
 import base64
+import gradio as gr
 import io
-import traceback
+import json
+import numpy as np
+import os
+import soundfile as sf
+import sys
+import tempfile
 import threading
+import time
+import torch
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional, Generator
 
-    # Error correction 'pwd' for Windows
+# Error correction 'pwd' for Windows
 if sys.platform == 'win32':
     os.environ['USER'] = os.environ.get('USERNAME', 'user')
     os.environ['TORCHINDUCTOR_CACHE_DIR'] = os.path.join(os.environ.get('TEMP', '.'), 'torch_cache')
-
 
 # Import TextIteratorStreamer for streaming generation
 from transformers import TextIteratorStreamer, StoppingCriteria, StoppingCriteriaList
 
 try:
     from liger_kernel.transformers import apply_liger_kernel_to_qwen2
+
     # Only apply RoPE, RMSNorm, SwiGLU patches (these affect the underlying Qwen2 layers)
     apply_liger_kernel_to_qwen2(
         rope=True,
@@ -42,10 +42,11 @@ try:
     print("✅ Liger Kernel applied to Qwen2 components (RoPE, RMSNorm, SwiGLU)")
 except Exception as e:
     print(f"⚠️ Failed to apply Liger Kernel: {e}, you can install it with: pip install liger-kernel")
-    
+
 # Try to import pydub for MP3 conversion
 try:
     from pydub import AudioSegment
+
     HAS_PYDUB = True
 except ImportError:
     HAS_PYDUB = False
@@ -58,8 +59,9 @@ from vibevoice.processor.audio_utils import load_audio_use_ffmpeg, COMMON_AUDIO_
 
 class VibeVoiceASRInference:
     """Simple inference wrapper for VibeVoice ASR model."""
-    
-    def __init__(self, model_path: str, device: str = "cuda", dtype: torch.dtype = torch.bfloat16, attn_implementation: str = "flash_attention_2"):
+
+    def __init__(self, model_path: str, device: str = "cuda", dtype: torch.dtype = torch.bfloat16,
+                 attn_implementation: str = "flash_attention_2"):
         """
         Initialize the ASR inference pipeline.
         
@@ -70,10 +72,10 @@ class VibeVoiceASRInference:
             attn_implementation: Attention implementation to use ('flash_attention_2', 'sdpa', 'eager')
         """
         print(f"Loading VibeVoice ASR model from {model_path}")
-        
+
         # Load processor
         self.processor = VibeVoiceASRProcessor.from_pretrained(model_path)
-        
+
         # Load model with device-specific handling
         print(f"Using attention implementation: {attn_implementation}")
         if device == "mps":
@@ -103,28 +105,28 @@ class VibeVoiceASRInference:
                 trust_remote_code=True
             )
             self.model = self.model.to(device)
-        
+
         self.device = device if device != "auto" else next(self.model.parameters()).device
         self.model.eval()
-        
+
         # Print model info
         total_params = sum(p.numel() for p in self.model.parameters())
         print(f"✅ Model loaded successfully on {self.device}")
-        print(f"📊 Total parameters: {total_params:,} ({total_params/1e9:.2f}B)")
-    
+        print(f"📊 Total parameters: {total_params:,} ({total_params / 1e9:.2f}B)")
+
     def transcribe(
-        self, 
-        audio_path: str = None,
-        audio_array: np.ndarray = None,
-        sample_rate: int = None,
-        max_new_tokens: int = 512,
-        temperature: float = 0.0,
-        top_p: float = 1.0,
-        do_sample: bool = False,
-        num_beams: int = 1,
-        repetition_penalty: float = 1.0,
-        context_info: str = None,
-        streamer: Optional[TextIteratorStreamer] = None,
+            self,
+            audio_path: str = None,
+            audio_array: np.ndarray = None,
+            sample_rate: int = None,
+            max_new_tokens: int = 512,
+            temperature: float = 0.0,
+            top_p: float = 1.0,
+            do_sample: bool = False,
+            num_beams: int = 1,
+            repetition_penalty: float = 1.0,
+            context_info: str = None,
+            streamer: Optional[TextIteratorStreamer] = None,
     ) -> dict:
         """
         Transcribe audio to text.
@@ -153,11 +155,11 @@ class VibeVoiceASRInference:
             add_generation_prompt=True,
             context_info=context_info
         )
-        
+
         # Move to device
-        inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v 
+        inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v
                   for k, v in inputs.items()}
-        
+
         # Generate
         generation_config = {
             "max_new_tokens": max_new_tokens,
@@ -169,32 +171,32 @@ class VibeVoiceASRInference:
             "pad_token_id": self.processor.pad_id,
             "eos_token_id": self.processor.tokenizer.eos_token_id,
         }
-        
+
         # Add streamer if provided
         if streamer is not None:
             generation_config["streamer"] = streamer
-        
+
         # Add stopping criteria for stop button support
         generation_config["stopping_criteria"] = StoppingCriteriaList([StopOnFlag()])
-        
+
         # Remove None values
         generation_config = {k: v for k, v in generation_config.items() if v is not None}
-        
+
         start_time = time.time()
-        
+
         # Calculate input token statistics before generation
         input_ids = inputs['input_ids'][0]  # Shape: [seq_len]
         total_input_tokens = input_ids.shape[0]
-        
+
         # Count padding tokens (tokens equal to pad_id)
         pad_id = self.processor.pad_id
         padding_mask = (input_ids == pad_id)
         num_padding_tokens = padding_mask.sum().item()
-        
+
         # Count speech tokens (tokens between speech_start_id and speech_end_id)
         speech_start_id = self.processor.speech_start_id
         speech_end_id = self.processor.speech_end_id
-        
+
         # Find speech regions
         input_ids_list = input_ids.tolist()
         num_speech_tokens = 0
@@ -208,29 +210,29 @@ class VibeVoiceASRInference:
                 num_speech_tokens += 1  # Count speech_end token
             elif in_speech:
                 num_speech_tokens += 1
-        
+
         # Text tokens = total - speech - padding
         num_text_tokens = total_input_tokens - num_speech_tokens - num_padding_tokens
-        
+
         with torch.no_grad():
             output_ids = self.model.generate(
                 **inputs,
                 **generation_config
             )
-        
+
         generation_time = time.time() - start_time
-        
+
         # Decode output
         generated_ids = output_ids[0, inputs['input_ids'].shape[1]:]
         generated_text = self.processor.decode(generated_ids, skip_special_tokens=True)
-        
+
         # Parse structured output
         try:
             transcription_segments = self.processor.post_process_transcription(generated_text)
         except Exception as e:
             print(f"Warning: Failed to parse structured output: {e}")
             transcription_segments = []
-        
+
         return {
             "raw_text": generated_text,
             "segments": transcription_segments,
@@ -245,14 +247,14 @@ class VibeVoiceASRInference:
 
 
 def clip_and_encode_audio(
-    audio_data: np.ndarray,
-    sr: int,
-    start_time: float,
-    end_time: float,
-    segment_idx: int,
-    use_mp3: bool = True,
-    target_sr: int = 16000,  # Downsample to 16kHz for smaller size
-    mp3_bitrate: str = "32k"  # Use low bitrate for minimal transfer
+        audio_data: np.ndarray,
+        sr: int,
+        start_time: float,
+        end_time: float,
+        segment_idx: int,
+        use_mp3: bool = True,
+        target_sr: int = 16000,  # Downsample to 16kHz for smaller size
+        mp3_bitrate: str = "32k"  # Use low bitrate for minimal transfer
 ) -> Tuple[int, Optional[str], Optional[str]]:
     """
     Clip audio segment and encode to base64.
@@ -274,17 +276,17 @@ def clip_and_encode_audio(
         # Convert time to sample indices
         start_sample = int(start_time * sr)
         end_sample = int(end_time * sr)
-        
+
         # Ensure indices are within bounds
         start_sample = max(0, start_sample)
         end_sample = min(len(audio_data), end_sample)
-        
+
         if start_sample >= end_sample:
             return segment_idx, None, f"Invalid time range: [{start_time:.2f}s - {end_time:.2f}s]"
-        
+
         # Extract segment
         segment_data = audio_data[start_sample:end_sample]
-        
+
         # Downsample if needed (reduces data size significantly)
         if sr != target_sr and target_sr < sr:
             # Simple downsampling using linear interpolation
@@ -293,10 +295,10 @@ def clip_and_encode_audio(
             indices = np.linspace(0, len(segment_data) - 1, new_length)
             segment_data = np.interp(indices, np.arange(len(segment_data)), segment_data)
             sr = target_sr
-        
+
         # Convert float32 audio to int16 for encoding
         segment_data_int16 = (segment_data * 32768.0).astype(np.int16)
-        
+
         # Convert to MP3 if pydub is available and use_mp3 is True
         if use_mp3 and HAS_PYDUB:
             try:
@@ -304,7 +306,7 @@ def clip_and_encode_audio(
                 wav_buffer = io.BytesIO()
                 sf.write(wav_buffer, segment_data_int16, sr, format='WAV', subtype='PCM_16')
                 wav_buffer.seek(0)
-                
+
                 # Convert to MP3 with low bitrate
                 audio_segment = AudioSegment.from_wav(wav_buffer)
                 # Convert to mono if stereo (halves the size)
@@ -313,28 +315,28 @@ def clip_and_encode_audio(
                 mp3_buffer = io.BytesIO()
                 audio_segment.export(mp3_buffer, format='mp3', bitrate=mp3_bitrate)
                 mp3_buffer.seek(0)
-                
+
                 # Encode to base64
                 audio_bytes = mp3_buffer.read()
                 audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
                 audio_src = f"data:audio/mp3;base64,{audio_base64}"
-                
+
                 return segment_idx, audio_src, None
             except Exception as e:
                 # Fall back to WAV on error
                 print(f"MP3 conversion failed for segment {segment_idx}, using WAV: {e}")
-        
+
         # Fall back to WAV format (no temp file, use in-memory buffer)
         wav_buffer = io.BytesIO()
         sf.write(wav_buffer, segment_data_int16, sr, format='WAV', subtype='PCM_16')
         wav_buffer.seek(0)
-        
+
         audio_bytes = wav_buffer.read()
         audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
         audio_src = f"data:audio/wav;base64,{audio_base64}"
-        
+
         return segment_idx, audio_src, None
-        
+
     except Exception as e:
         error_msg = f"Error clipping segment {segment_idx}: {str(e)}"
         print(error_msg)
@@ -357,33 +359,33 @@ def extract_audio_segments(audio_path: str, segments: List[Dict]) -> List[Tuple[
         print(f"📂 Loading audio file: {audio_path}")
         audio_data, sr = load_audio_use_ffmpeg(audio_path, resample=False)
         print(f"✅ Audio loaded: {len(audio_data)} samples, {sr} Hz")
-        
+
         # Prepare tasks
         tasks = []
         use_mp3 = HAS_PYDUB  # Use MP3 if available
-        
+
         for i, seg in enumerate(segments):
             start_time = seg.get('start_time')
             end_time = seg.get('end_time')
-            
+
             # Skip if times are not available or invalid
-            if (not isinstance(start_time, (int, float)) or 
-                not isinstance(end_time, (int, float)) or 
-                start_time >= end_time):
+            if (not isinstance(start_time, (int, float)) or
+                    not isinstance(end_time, (int, float)) or
+                    start_time >= end_time):
                 tasks.append((i, None, None, None, None, None))  # Will be filtered later
                 continue
-            
+
             tasks.append((audio_data, sr, start_time, end_time, i, use_mp3))
-        
+
         # Process in parallel using ThreadPoolExecutor
         results = []
         total_segments = len(tasks)
         completed_count = 0
-        
+
         # Use CPU count for max workers
         max_workers = os.cpu_count() or 4
         print(f"🚀 Starting parallel processing with {max_workers} threads...")
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {}
             for task in tasks:
@@ -391,7 +393,7 @@ def extract_audio_segments(audio_path: str, segments: List[Dict]) -> List[Tuple[
                     continue
                 future = executor.submit(clip_and_encode_audio, *task)
                 futures[future] = task[4]  # segment_idx
-            
+
             for future in as_completed(futures):
                 try:
                     result = future.result()
@@ -399,18 +401,19 @@ def extract_audio_segments(audio_path: str, segments: List[Dict]) -> List[Tuple[
                     completed_count += 1
                     # Log progress every 100 segments or at completion
                     if completed_count % 100 == 0 or completed_count == len(futures):
-                        print(f"Progress: {completed_count}/{len(futures)} segments processed ({completed_count*100//len(futures)}%)")
+                        print(
+                            f"Progress: {completed_count}/{len(futures)} segments processed ({completed_count * 100 // len(futures)}%)")
                 except Exception as e:
                     idx = futures[future]
                     results.append((idx, None, f"Processing error: {str(e)}"))
                     completed_count += 1
                     print(f"Error on segment {idx}: {e}")
-        
+
         print(f"✅ Completed processing all {len(futures)} valid segments")
-        
+
         # Sort by segment index to maintain order
         results.sort(key=lambda x: x[0])
-        
+
         # Build output list with labels
         audio_segments = []
         for i, (idx, audio_src, error_msg) in enumerate(results):
@@ -418,12 +421,12 @@ def extract_audio_segments(audio_path: str, segments: List[Dict]) -> List[Tuple[
             start_time = seg.get('start_time', 'N/A')
             end_time = seg.get('end_time', 'N/A')
             speaker_id = seg.get('speaker_id', 'N/A')
-            
-            segment_label = f"Segment {idx+1}: [{start_time:.2f}s - {end_time:.2f}s] Speaker {speaker_id}"
+
+            segment_label = f"Segment {idx + 1}: [{start_time:.2f}s - {end_time:.2f}s] Speaker {speaker_id}"
             audio_segments.append((segment_label, audio_src, error_msg))
-        
+
         return audio_segments
-        
+
     except Exception as e:
         print(f"Error loading audio file: {e}")
         return []
@@ -438,6 +441,7 @@ stop_generation_flag = False
 
 class StopOnFlag(StoppingCriteria):
     """Custom stopping criteria that checks a global flag."""
+
     def __call__(self, input_ids, scores, **kwargs):
         global stop_generation_flag
         return stop_generation_flag
@@ -471,10 +475,10 @@ def parse_time_to_seconds(val: Optional[str]) -> Optional[float]:
 
 
 def slice_audio_to_temp(
-    audio_data: np.ndarray,
-    sample_rate: int,
-    start_sec: Optional[float],
-    end_sec: Optional[float]
+        audio_data: np.ndarray,
+        sample_rate: int,
+        start_sec: Optional[float],
+        end_sec: Optional[float]
 ) -> Tuple[Optional[str], Optional[str]]:
     """Slice audio_data to [start_sec, end_sec) and write to a temp WAV file."""
     n_samples = len(audio_data)
@@ -516,16 +520,16 @@ def initialize_model(model_path: str, device: str = "cuda", attn_implementation:
 
 
 def transcribe_audio(
-    audio_input,
-    audio_path_input: str,
-    start_time_input: str,
-    end_time_input: str,
-    max_new_tokens: int,
-    temperature: float,
-    top_p: float,
-    do_sample: bool,
-    repetition_penalty: float = 1.0,
-    context_info: str = ""
+        audio_input,
+        audio_path_input: str,
+        start_time_input: str,
+        end_time_input: str,
+        max_new_tokens: int,
+        temperature: float,
+        top_p: float,
+        do_sample: bool,
+        repetition_penalty: float = 1.0,
+        context_info: str = ""
 ) -> Generator[Tuple[str, str], None, None]:
     """
     Transcribe audio and return results with audio segments (streaming version).
@@ -544,11 +548,11 @@ def transcribe_audio(
     if asr_model is None:
         yield "❌ Please load a model first!", ""
         return
-    
+
     if not audio_path_input and audio_input is None:
         yield "❌ Please provide audio input!", ""
         return
-    
+
     try:
         print("[INFO] Transcription requested")
         start_sec = parse_time_to_seconds(start_time_input)
@@ -609,17 +613,17 @@ def transcribe_audio(
             audio_data_int16 = (audio_array * 32768.0).astype(np.int16)
             sf.write(audio_path, audio_data_int16, sample_rate, subtype='PCM_16')
             print(f"[INFO] Microphone audio saved to temp file: {audio_path}")
-        
+
         # Create streamer for real-time output
         streamer = TextIteratorStreamer(
-            asr_model.processor.tokenizer, 
-            skip_prompt=True, 
+            asr_model.processor.tokenizer,
+            skip_prompt=True,
             skip_special_tokens=True
         )
-        
+
         # Store result in a mutable container for the thread
         result_container = {"result": None, "error": None}
-        
+
         def run_transcription():
             try:
                 result_container["result"] = asr_model.transcribe(
@@ -635,13 +639,13 @@ def transcribe_audio(
             except Exception as e:
                 result_container["error"] = str(e)
                 traceback.print_exc()
-        
+
         # Start transcription in background thread
         print("[INFO] Starting model transcription (streaming mode)")
         start_time = time.time()
         transcription_thread = threading.Thread(target=run_transcription)
         transcription_thread.start()
-        
+
         # Yield streaming output
         generated_text = ""
         token_count = 0
@@ -653,24 +657,24 @@ def transcribe_audio(
             formatted_text = generated_text.replace('},', '},\n')
             streaming_output = f"--- 🔴 LIVE Streaming Output (tokens: {token_count}, time: {elapsed:.1f}s) ---\n{formatted_text}"
             yield streaming_output, "<div style='padding: 20px; text-align: center; color: #6c757d;'>⏳ Generating transcription... Audio segments will appear after completion.</div>"
-        
+
         # Wait for thread to complete
         transcription_thread.join()
-        
+
         if result_container["error"]:
             yield f"❌ Error during transcription: {result_container['error']}", ""
             return
-        
+
         result = result_container["result"]
         generation_time = time.time() - start_time
-        
+
         # Get input token statistics
         input_tokens = result.get('input_tokens', {})
         speech_tokens = input_tokens.get('speech', 0)
         text_tokens = input_tokens.get('text', 0)
         padding_tokens = input_tokens.get('padding', 0)
         total_input = input_tokens.get('total', 0)
-        
+
         # Format final raw output with input/output token stats
         raw_output = f"--- ✅ Raw Output ---\n"
         raw_output += f"📥 Input: {total_input} tokens (🎤 speech: {speech_tokens}, 📝 text: {text_tokens}, ⬜ pad: {padding_tokens})\n"
@@ -679,33 +683,33 @@ def transcribe_audio(
         # Format raw text for better readability: add newline after each dict (},)
         formatted_raw_text = result['raw_text'].replace('},', '},\n')
         raw_output += formatted_raw_text
-        
+
         # Debug: print raw output to console
         print(f"[DEBUG] Raw model output:")
         print(f"[DEBUG] {result['raw_text']}")
         print(f"[DEBUG] Found {len(result['segments'])} segments")
-        
+
         # Create audio segments with server-side encoding (low quality for minimal transfer)
         # Using: 16kHz mono MP3 @ 32kbps = ~4KB per second of audio
         audio_segments_html = ""
         segments = result['segments']
-        
+
         if segments:
             num_segments = len(segments)
             print(f"[INFO] Creating per-segment audio clips ({num_segments} segments, 16kHz mono MP3 @ 32kbps)")
-            
+
             # Extract all audio segments efficiently (load audio only once)
             audio_segments = extract_audio_segments(audio_path, segments)
             print("[INFO] Completed creating audio clips")
-            
+
             # Calculate approximate total size
             total_duration = sum(
-                (seg.get('end_time', 0) - seg.get('start_time', 0)) 
-                for seg in segments 
+                (seg.get('end_time', 0) - seg.get('start_time', 0))
+                for seg in segments
                 if isinstance(seg.get('start_time'), (int, float)) and isinstance(seg.get('end_time'), (int, float))
             )
             approx_size_kb = total_duration * 4  # ~4KB per second at 32kbps
-            
+
             # Add CSS for theme-aware styling
             theme_css = """
             <style>
@@ -818,31 +822,31 @@ def transcribe_audio(
             }
             </style>
             """
-            
+
             audio_segments_html = theme_css
             audio_segments_html += f"<div class='audio-segments-container'>"
-            
+
             # Add format info
             format_info = "MP3 32kbps 16kHz mono" if HAS_PYDUB else "WAV 16kHz"
             audio_segments_html += f"<h3 class='segments-title'>🔊 Audio Segments ({num_segments} segments)"
             audio_segments_html += f"<span class='size-badge'>📦 ~{approx_size_kb:.0f}KB ({format_info})</span></h3>"
             audio_segments_html += "<p class='segments-description'>🎵 Click the play button to listen to each segment directly!</p>"
-            
+
             for i, (label, audio_src, error_msg) in enumerate(audio_segments):
                 seg = segments[i] if i < len(segments) else {}
                 start_time = seg.get('start_time', 'N/A')
                 end_time = seg.get('end_time', 'N/A')
                 speaker_id = seg.get('speaker_id', 'N/A')
                 content = seg.get('text', '')
-                
+
                 # Format times nicely
                 start_str = f"{start_time:.2f}" if isinstance(start_time, (int, float)) else str(start_time)
                 end_str = f"{end_time:.2f}" if isinstance(end_time, (int, float)) else str(end_time)
-                
+
                 audio_segments_html += f"""
                 <div class='audio-segment'>
                     <div class='segment-header'>
-                        <h4 class='segment-title'>Segment {i+1}</h4>
+                        <h4 class='segment-title'>Segment {i + 1}</h4>
                         <div class='segment-meta'>
                             <strong>Time:</strong> [{start_str}s - {end_str}s] | 
                             <strong>Speaker:</strong> {speaker_id}
@@ -853,7 +857,7 @@ def transcribe_audio(
                         {content}
                     </div>
                 """
-                
+
                 if audio_src:
                     # Detect format from data URI
                     audio_type = 'audio/mp3' if 'audio/mp3' in audio_src else 'audio/wav'
@@ -875,9 +879,9 @@ def transcribe_audio(
                         <small>Audio playback unavailable for this segment</small>
                     </div>
                     """
-                
+
                 audio_segments_html += "</div>"
-            
+
             audio_segments_html += "</div>"
         else:
             audio_segments_html = """
@@ -904,10 +908,10 @@ def transcribe_audio(
                 <p>This could happen if the model output doesn't contain valid time stamps.</p>
             </div>
             """
-        
+
         # Final yield with complete results
         yield raw_output, audio_segments_html
-        
+
     except Exception as e:
         print(f"Error during transcription: {e}")
         print(traceback.format_exc())
@@ -915,8 +919,8 @@ def transcribe_audio(
 
 
 def _detect_device_and_attn(
-    device: str = "auto",
-    attn_implementation: str = "auto",
+        device: str = "auto",
+        attn_implementation: str = "auto",
 ):
     """
     Auto-detect the best device and attention implementation.
@@ -932,19 +936,21 @@ def _detect_device_and_attn(
     if device == "auto":
         if torch.cuda.is_available():
             device = "cuda"
+        elif torch.xpu.is_available():
+            device = "xpu"
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             device = "mps"
         else:
             device = "cpu"
     elif device == "mps" and not (
-        hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+            hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
     ):
         print("Warning: MPS requested but not available. Falling back to CPU.")
         device = "cpu"
 
     # --- resolve attention ---
     if attn_implementation == "auto":
-        if device == "cuda":
+        if device == "cuda" or device == "xpu":
             try:
                 import flash_attn  # noqa: F401
                 attn_implementation = "flash_attention_2"
@@ -952,7 +958,7 @@ def _detect_device_and_attn(
                 print("flash_attn not installed, falling back to sdpa")
                 attn_implementation = "sdpa"
         else:
-            # MPS / XPU / CPU don't support flash_attention_2
+            # MPS  / CPU don't support flash_attention_2
             attn_implementation = "sdpa"
 
     print(f"Using device: {device}, attn_implementation: {attn_implementation}")
@@ -960,10 +966,10 @@ def _detect_device_and_attn(
 
 
 def create_gradio_interface(
-    model_path: str,
-    default_max_tokens: int = 8192,
-    device: str = "auto",
-    attn_implementation: str = "auto",
+        model_path: str,
+        default_max_tokens: int = 8192,
+        device: str = "auto",
+        attn_implementation: str = "auto",
 ):
     """Create and launch Gradio interface.
     
@@ -973,25 +979,25 @@ def create_gradio_interface(
         device: Device to run inference on ('auto', 'cuda', 'mps', 'xpu', 'cpu')
         attn_implementation: Attention implementation to use ('auto', 'flash_attention_2', 'sdpa', 'eager')
     """
-    
+
     # Initialize model at startup
     device, attn_implementation = _detect_device_and_attn(device, attn_implementation)
     model_status = initialize_model(model_path, device, attn_implementation)
     print(model_status)
-    
+
     # Exit if model loading failed
     if model_status.startswith("❌"):
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("💥 FATAL ERROR: Model loading failed!")
-        print("="*80)
+        print("=" * 80)
         print("Cannot start demo without a valid model. Please check:")
         print("  1. Model path is correct")
         print("  2. Model files are not corrupted")
         print("  3. You have enough GPU memory")
         print("  4. CUDA is properly installed (if using GPU)")
-        print("="*80)
+        print("=" * 80)
         sys.exit(1)
-    
+
     # Custom CSS for Stop button styling
     custom_css = """
     #stop-btn {
@@ -1003,13 +1009,14 @@ def create_gradio_interface(
         background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
     }
     """
-    
+
     # Gradio 6.0+ moved theme/css to launch()
     with gr.Blocks(title="VibeVoice ASR Demo") as demo:
         gr.Markdown("# 🎙️ VibeVoice ASR Demo")
-        gr.Markdown("Upload audio files or record from microphone to get speech-to-text transcription with speaker diarization.")
+        gr.Markdown(
+            "Upload audio files or record from microphone to get speech-to-text transcription with speaker diarization.")
         gr.Markdown(f"**Model loaded from:** `{model_path}`")
-        
+
         with gr.Row():
             with gr.Column(scale=1):
                 # Generation parameters
@@ -1021,7 +1028,7 @@ def create_gradio_interface(
                     step=4096,
                     label="Max New Tokens"
                 )
-                
+
                 # Sampling parameters
                 gr.Markdown("### 🎲 Sampling")
                 do_sample_checkbox = gr.Checkbox(
@@ -1029,7 +1036,7 @@ def create_gradio_interface(
                     label="Enable Sampling",
                     info="Enable random sampling instead of deterministic decoding"
                 )
-                
+
                 with gr.Column(visible=False) as sampling_params:
                     temperature_slider = gr.Slider(
                         minimum=0.0,
@@ -1047,7 +1054,7 @@ def create_gradio_interface(
                         label="Top-p (Nucleus Sampling)",
                         info="1.0 = no filtering"
                     )
-                
+
                 # Repetition penalty (works with both greedy and sampling)
                 repetition_penalty_slider = gr.Slider(
                     minimum=1.0,
@@ -1057,7 +1064,7 @@ def create_gradio_interface(
                     label="Repetition Penalty",
                     info="1.0 = no penalty, higher = less repetition (works with greedy & sampling)"
                 )
-                
+
                 # Context information section
                 gr.Markdown("## 📋 Context Info (Optional)")
                 context_info_input = gr.Textbox(
@@ -1068,7 +1075,7 @@ def create_gradio_interface(
                     interactive=True,
                     info="Provide context like proper nouns, technical terms, or speaker names to improve accuracy"
                 )
-            
+
             with gr.Column(scale=2):
                 # Audio input section
                 gr.Markdown("## 🎵 Audio Input")
@@ -1079,7 +1086,7 @@ def create_gradio_interface(
                     interactive=True,
                     buttons=["download"]
                 )
-                
+
                 with gr.Accordion("📂 Advanced: Remote Path & Time Slicing", open=False):
                     audio_path_input = gr.Textbox(
                         label="Audio path (optional)",
@@ -1099,14 +1106,14 @@ def create_gradio_interface(
                             lines=1,
                             info="Leave empty to use full length"
                         )
-                
+
                 with gr.Row():
                     transcribe_button = gr.Button("🎯 Transcribe", variant="primary", size="lg", scale=3)
                     stop_button = gr.Button("⏹️ Stop", variant="secondary", size="lg", scale=1, elem_id="stop-btn")
-                
+
                 # Results section
                 gr.Markdown("## 📝 Results")
-                
+
                 with gr.Tabs():
                     with gr.TabItem("Raw Output"):
                         raw_output = gr.Textbox(
@@ -1115,30 +1122,30 @@ def create_gradio_interface(
                             max_lines=20,
                             interactive=False
                         )
-                    
+
                     with gr.TabItem("Audio Segments"):
                         audio_segments_output = gr.HTML(
                             label="Play individual segments to verify accuracy"
                         )
-        
+
         # Event handlers
         do_sample_checkbox.change(
             fn=lambda x: gr.update(visible=x),
             inputs=[do_sample_checkbox],
             outputs=[sampling_params]
         )
-        
+
         def reset_stop_flag():
             """Reset stop flag before starting transcription."""
             global stop_generation_flag
             stop_generation_flag = False
-        
+
         def set_stop_flag():
             """Set stop flag to interrupt generation."""
             global stop_generation_flag
             stop_generation_flag = True
             return "⏹️ Stop requested..."
-        
+
         transcribe_button.click(
             fn=reset_stop_flag,
             inputs=[],
@@ -1160,14 +1167,14 @@ def create_gradio_interface(
             ],
             outputs=[raw_output, audio_segments_output]
         )
-        
+
         stop_button.click(
             fn=set_stop_flag,
             inputs=[],
             outputs=[raw_output],
             queue=False
         )
-        
+
         # Add examples
         gr.Markdown("## 📋 Instructions")
         gr.Markdown(f"""
@@ -1186,15 +1193,15 @@ def create_gradio_interface(
         
         **Audio Segments**: Each segment shows the time range, speaker ID, transcribed content, and an embedded audio player for immediate verification.
         """)
-    
+
     return demo, custom_css
 
 
 def main():
     parser = argparse.ArgumentParser(description="VibeVoice ASR Gradio Demo")
     parser.add_argument(
-        "--model_path", 
-        type=str, 
+        "--model_path",
+        type=str,
         default="microsoft/VibeVoice-ASR",
         help="Path to the model (HuggingFace format directory or model name)"
     )
@@ -1235,9 +1242,9 @@ def main():
         action="store_true",
         help="Create a public link"
     )
-    
+
     args = parser.parse_args()
-    
+
     # Create and launch interface
     demo, custom_css = create_gradio_interface(
         model_path=args.model_path,
@@ -1245,10 +1252,10 @@ def main():
         device=args.device,
         attn_implementation=args.attn_implementation,
     )
-    
+
     print(f"🚀 Starting VibeVoice ASR Demo...")
     print(f"📍 Server will be available at: http://{args.host}:{args.port}")
-    
+
     # Gradio 6.0+ moved theme/css to launch()
     launch_kwargs = {
         "server_name": args.host,
@@ -1258,7 +1265,7 @@ def main():
         "theme": gr.themes.Soft(),
         "css": custom_css,
     }
-    
+
     # Enable queue for concurrent request handling
     demo.queue(default_concurrency_limit=3)
     demo.launch(**launch_kwargs)
