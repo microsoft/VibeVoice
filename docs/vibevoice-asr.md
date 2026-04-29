@@ -1,7 +1,7 @@
 # VibeVoice-ASR
 
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Collection-orange?logo=huggingface)](https://huggingface.co/microsoft/VibeVoice-ASR)
-[![Live Playground](https://img.shields.io/badge/Live-Playground-green?logo=gradio)](https://aka.ms/vibevoice-asr)
+[![Live Playground](https://img.shields.io/badge/Live-Playground-green?logo=gradio&logoSize=auto)](https://aka.ms/vibevoice-asr)
 
 **VibeVoice-ASR** is a unified speech-to-text model designed to handle **60-minute long-form audio** in a single pass, generating structured transcriptions containing **Who (Speaker), When (Timestamps), and What (Content)**, with support for **Customized Hotwords** and over **50 languages**.
 
