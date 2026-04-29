@@ -6,6 +6,7 @@ This script supports batch inference for ASR model and compares results
 between batch processing and single-sample processing.
 """
 
+import gc
 import os
 import sys
 import torch
@@ -202,9 +203,31 @@ class VibeVoiceASRBatchInference:
         
         print(f"  Total generation time: {generation_time:.2f}s")
         print(f"  Average time per sample: {generation_time/batch_size:.2f}s")
-        
+
+        # Release the large input/output tensors back to the CUDA allocator so that
+        # VRAM does not accumulate across consecutive batches when processing many files
+        # (see https://github.com/microsoft/VibeVoice/issues/368).
+        del inputs, output_ids
+        self._release_device_cache()
+
         return results
-    
+
+    def _release_device_cache(self) -> None:
+        """Return any cached device memory to the allocator and run a GC cycle."""
+        if self.device == "cuda" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
+    def close(self) -> None:
+        """Release the model and processor from device memory.
+
+        Call this when the instance is no longer needed — especially after processing
+        many files on GPU — to return all VRAM to the allocator before loading another
+        model in the same process.
+        """
+        del self.model, self.processor
+        self._release_device_cache()
+
     def transcribe_with_batching(
         self,
         audio_inputs: List,
@@ -246,7 +269,8 @@ class VibeVoiceASRBatchInference:
                 num_beams=num_beams,
             )
             all_results.extend(batch_results)
-        
+            self._release_device_cache()
+
         return all_results
 
 
@@ -558,16 +582,19 @@ def main():
     print(f"Processing {len(all_audio_inputs)} audio(s)")
     print("="*80)
     
-    all_results = asr.transcribe_with_batching(
-        all_audio_inputs,
-        batch_size=args.batch_size,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        top_p=args.top_p,
-        do_sample=do_sample,
-        num_beams=args.num_beams,
-    )
-    
+    try:
+        all_results = asr.transcribe_with_batching(
+            all_audio_inputs,
+            batch_size=args.batch_size,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            do_sample=do_sample,
+            num_beams=args.num_beams,
+        )
+    finally:
+        asr.close()
+
     # Print results
     print("\n" + "="*80)
     print("Results")
