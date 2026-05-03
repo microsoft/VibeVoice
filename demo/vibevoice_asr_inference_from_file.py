@@ -54,12 +54,12 @@ class VibeVoiceASRBatchInference:
         print(f"Using attention implementation: {attn_implementation}")
         self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
             model_path,
-            dtype=dtype,
+            torch_dtype=dtype,
             device_map=device if device == "auto" else None,
             attn_implementation=attn_implementation,
             trust_remote_code=True
         )
-        
+
         if device != "auto":
             self.model = self.model.to(device)
         
@@ -443,7 +443,7 @@ def main():
     parser.add_argument(
         "--device", 
         type=str, 
-        default="cuda" if torch.cuda.is_available() else ("xpu" if torch.backends.xpu.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu") ),
+        default="cuda" if torch.cuda.is_available() else ("xpu" if hasattr(torch.backends, 'xpu') and torch.backends.xpu.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu") ),
         choices=["cuda", "cpu", "mps","xpu", "auto"],
         help="Device to run inference on"
     )
@@ -533,7 +533,7 @@ def main():
     # Initialize model
     # Handle MPS device and dtype
     if args.device == "mps":
-        model_dtype = torch.float32  # MPS works better with float32
+        model_dtype = torch.float16  # float16 to fit within MPS memory (~14GB vs ~28GB for float32)
     elif args.device == "xpu":
         model_dtype = torch.float32
     elif args.device == "cpu":
