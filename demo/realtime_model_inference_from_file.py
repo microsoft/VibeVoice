@@ -222,7 +222,7 @@ def main():
     target_device = args.device if args.device != "cpu" else "cpu"
     voice_sample = voice_mapper.get_voice_path(args.speaker_name)
     print(f"Using voice preset for {args.speaker_name}: {voice_sample}")
-    all_prefilled_outputs = torch.load(voice_sample, map_location=target_device, weights_only=False)
+    all_prefilled_outputs = torch.load(voice_sample, map_location=target_device, weights_only=True)
 
     # Prepare inputs for the model
     inputs = processor.process_input_with_cached_prompt(
