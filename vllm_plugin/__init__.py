@@ -43,14 +43,14 @@ def register_vibevoice():
             slow_tokenizer_class=Qwen2Tokenizer,
             fast_tokenizer_class=VibeVoiceASRTextTokenizerFast,
         )
-    except Exception:
-        pass  # May already be registered
+    except ValueError:
+        pass  # Already registered
 
     # Register the processor with transformers
     try:
         AutoProcessor.register(VibeVoiceConfig, processor_class=Qwen2AudioProcessor)
-    except Exception:
-        pass  # May already be registered
+    except ValueError:
+        pass  # Already registered
 
     # Register the model class with the architecture name "VibeVoice"
     # This name must match the "architectures" list in config.json
