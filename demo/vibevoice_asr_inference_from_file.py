@@ -323,13 +323,8 @@ def load_dataset_and_concatenate(
             
             # Resample if needed
             if sr != target_sr:
-                duration = len(audio_array) / sr
-                new_length = int(duration * target_sr)
-                audio_array = np.interp(
-                    np.linspace(0, len(audio_array) - 1, new_length),
-                    np.arange(len(audio_array)),
-                    audio_array
-                )
+                import librosa
+                audio_array = librosa.resample(audio_array, orig_sr=sr, target_sr=target_sr)
             
             chunk_duration = len(audio_array) / target_sr
             
