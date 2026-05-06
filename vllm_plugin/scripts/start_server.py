@@ -22,19 +22,17 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import textwrap
 import time
 
 
-def run_command(cmd: list[str], description: str, shell: bool = False) -> None:
+def run_command(cmd: list[str], description: str) -> None:
     """Run a command with logging."""
     print(f"\n{'='*60}")
     print(f"  {description}")
     print(f"{'='*60}\n")
-    if shell:
-        subprocess.run(cmd, shell=True, check=True)
-    else:
-        subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True)
 
 
 def install_system_deps() -> None:
@@ -193,9 +191,9 @@ def _write_nginx_config(frontend_port: int, backend_ports: list[int],
             }}
         }}
     """)
-    config_path = "/tmp/nginx_vllm.conf"
-    with open(config_path, "w") as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False) as f:
         f.write(config)
+        config_path = f.name
     return config_path
 
 
@@ -216,10 +214,12 @@ def start_dp_server(model_path: str, frontend_port: int,
     num_gpus = torch.cuda.device_count()
     gpus_per_replica = tensor_parallel_size
     total_gpus_needed = data_parallel_size * gpus_per_replica
-    assert num_gpus >= total_gpus_needed, (
-        f"Need {total_gpus_needed} GPUs (dp={data_parallel_size} × tp={tensor_parallel_size}) "
-        f"but only {num_gpus} available"
-    )
+    if num_gpus < total_gpus_needed:
+        raise RuntimeError(
+            f"Need {total_gpus_needed} GPUs "
+            f"(dp={data_parallel_size} × tp={tensor_parallel_size}) "
+            f"but only {num_gpus} available"
+        )
 
     # Auto-tune per-worker env vars based on dp size
     ffmpeg_concurrency = max(
@@ -283,12 +283,14 @@ def start_dp_server(model_path: str, frontend_port: int,
 
     # Wait for all backends to be ready
     print("  Waiting for all backends to be ready ...")
-    import urllib.request
+    import http.client
     for port in backend_ports:
-        url = f"http://127.0.0.1:{port}/v1/models"
         for attempt in range(600):  # up to 10 minutes
             try:
-                urllib.request.urlopen(url, timeout=2)
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+                conn.request("GET", "/v1/models")
+                conn.getresponse()
+                conn.close()
                 print(f"    ✅ Backend on port {port} is ready")
                 break
             except Exception:
