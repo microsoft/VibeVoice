@@ -25,49 +25,54 @@ def load_lora_model(
     lora_path: str,
     device: str = "cuda",
     dtype: torch.dtype = torch.bfloat16,
+    attn_implementation: str = "flash_attention_2",
 ):
     """
     Load base model and merge with LoRA weights.
-    
+
     Args:
         base_model_path: Path to base pretrained model
         lora_path: Path to LoRA adapter weights
-        device: Device to load model on
+        device: Device to load model on (cuda, mps, xpu, cpu, auto)
         dtype: Data type for model
-        
+        attn_implementation: Attention implementation
+            ('flash_attention_2', 'sdpa', 'eager')
+
     Returns:
         Tuple of (model, processor)
     """
     print(f"Loading base model from {base_model_path}")
-    
+    print(f"Using attention implementation: {attn_implementation}")
+
     # Load processor
     processor = VibeVoiceASRProcessor.from_pretrained(
         base_model_path,
         language_model_pretrained_name="Qwen/Qwen2.5-7B"
     )
-    
-    # Load base model
+
+    # Load base model. MPS doesn't support device_map="mps", so load on CPU
+    # first and move afterwards (same pattern as the Gradio/batch demos).
     model = VibeVoiceASRForConditionalGeneration.from_pretrained(
         base_model_path,
         dtype=dtype,
         device_map=device if device == "auto" else None,
-        attn_implementation="flash_attention_2",
+        attn_implementation=attn_implementation,
         trust_remote_code=True,
     )
-    
+
     if device != "auto":
         model = model.to(device)
-    
+
     # Load LoRA adapter
     print(f"Loading LoRA adapter from {lora_path}")
     model = PeftModel.from_pretrained(model, lora_path)
-    
+
     # Optionally merge LoRA weights into base model for faster inference
     # model = model.merge_and_unload()
-    
+
     model.eval()
     print("Model loaded successfully")
-    
+
     return model, processor
 
 
@@ -186,19 +191,53 @@ def main():
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda" if torch.cuda.is_available() else "cpu",
+        default=(
+            "cuda" if torch.cuda.is_available()
+            else ("xpu" if getattr(torch.backends, "xpu", None) and torch.backends.xpu.is_available()
+                  else ("mps" if torch.backends.mps.is_available() else "cpu"))
+        ),
+        choices=["cuda", "cpu", "mps", "xpu", "auto"],
         help="Device to use"
     )
-    
+    parser.add_argument(
+        "--attn_implementation",
+        type=str,
+        default="auto",
+        choices=["flash_attention_2", "sdpa", "eager", "auto"],
+        help=(
+            "Attention implementation. 'auto' selects flash_attention_2 on "
+            "CUDA when available, otherwise sdpa."
+        ),
+    )
+
     args = parser.parse_args()
-    
-    # Load model
-    dtype = torch.bfloat16 if args.device != "cpu" else torch.float32
+
+    # Auto-detect attention implementation. flash_attention_2 is only
+    # supported on CUDA; MPS/XPU/CPU must fall back to sdpa.
+    if args.attn_implementation == "auto":
+        if args.device == "cuda" and torch.cuda.is_available():
+            try:
+                import flash_attn  # noqa: F401
+                args.attn_implementation = "flash_attention_2"
+            except ImportError:
+                print("flash_attn not installed, falling back to sdpa")
+                args.attn_implementation = "sdpa"
+        else:
+            args.attn_implementation = "sdpa"
+        print(f"Auto-detected attention implementation: {args.attn_implementation}")
+
+    # Choose dtype per device. MPS/XPU/CPU require float32; CUDA prefers bfloat16.
+    if args.device in ("cpu", "mps", "xpu"):
+        dtype = torch.float32
+    else:
+        dtype = torch.bfloat16
+
     model, processor = load_lora_model(
         base_model_path=args.base_model,
         lora_path=args.lora_path,
         device=args.device,
         dtype=dtype,
+        attn_implementation=args.attn_implementation,
     )
     
     # Transcribe
