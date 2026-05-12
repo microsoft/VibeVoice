@@ -107,6 +107,23 @@ When chunking, speaker labels may be local to each chunk. Applications that need
 globally consistent speaker identities should add a separate speaker-linking or
 diarization step across chunks.
 
+For single-pass runs near the context boundary, YaRN RoPE scaling can improve
+long-audio robustness when the model's existing context configuration is used as
+the base. In one 11-item long-form stress test, setting
+`rope_type=yarn`, `factor=1.5`, and
+`original_max_position_embeddings=131072` preserved 30-minute quality while
+removing the observed 90-minute collapse cases:
+
+| Setting | e22 90m WER | e22 coverage | TED 90m WER | TED coverage | 11-item mean WER | Collapses |
+|---|---:|---:|---:|---:|---:|---:|
+| No RoPE override | 0.5824 | 77.6% | 0.8250 | 21.8% | 0.2328 | 2 |
+| YaRN, factor=1.5, original_max=131072 | 0.4859 | 82.0% | 0.3422 | 91.0% | 0.2542 | 0 |
+
+This is a robustness trade-off rather than a memory optimization: YaRN changes
+position scaling, but it does not reduce KV-cache size or activation memory.
+Validate the factor on the target audio distribution before using it as the
+default path.
+
 For Hugging Face generation, memory use can also depend on prefill-time
 intermediate tensors. If your inference stack supports it, setting
 `logits_to_keep=1` can avoid computing full vocabulary logits for every prefill
