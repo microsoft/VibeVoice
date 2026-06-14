@@ -70,6 +70,7 @@ sudo docker run --privileged --net=host --ipc=host --ulimit memlock=-1:-1 --ulim
 git clone https://github.com/microsoft/VibeVoice.git
 cd VibeVoice
 
+python -m pip install --upgrade pip setuptools
 pip install -e .
 ```
 
@@ -129,6 +130,5 @@ LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetun
 ## 📄 License
 
 This project is licensed under the [MIT License](../LICENSE).
-
 
 

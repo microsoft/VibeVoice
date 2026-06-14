@@ -6,6 +6,7 @@ This directory contains scripts for LoRA (Low-Rank Adaptation) fine-tuning of th
 
 ```bash
 # Install vibevoice first
+python -m pip install --upgrade pip setuptools
 pip install -e .
 
 pip install peft
