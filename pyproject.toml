@@ -33,7 +33,7 @@ dependencies = [
     "av",
     "aiortc",
     "uvicorn[standard]",
-    "fastapi",
+    "fastapi>=0.137.0",
     "pydub",
     "requests",
 ]
