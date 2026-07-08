@@ -59,7 +59,7 @@ from vibevoice.processor.audio_utils import load_audio_use_ffmpeg, COMMON_AUDIO_
 class VibeVoiceASRInference:
     """Simple inference wrapper for VibeVoice ASR model."""
     
-    def __init__(self, model_path: str, device: str = "cuda", dtype: torch.dtype = torch.bfloat16, attn_implementation: str = "flash_attention_2"):
+    def __init__(self, model_path: str, device: str = "cpu", dtype: torch.dtype = torch.float32, attn_implementation: str = "flash_attention_2"):
         """
         Initialize the ASR inference pipeline.
         

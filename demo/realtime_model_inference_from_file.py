@@ -114,7 +114,7 @@ def parse_args():
     parser.add_argument(
         "--device",
         type=str,
-        default=("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")),
+        default="cpu",
         help="Device for inference: cuda | mps | cpu",
     )
     parser.add_argument(

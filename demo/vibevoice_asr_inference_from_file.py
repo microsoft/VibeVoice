@@ -29,8 +29,8 @@ class VibeVoiceASRBatchInference:
     def __init__(
         self, 
         model_path: str, 
-        device: str = "cuda", 
-        dtype: torch.dtype = torch.bfloat16,
+        device: str = "cpu", 
+        dtype: torch.dtype = torch.float32,
         attn_implementation: str = "sdpa"
     ):
         """

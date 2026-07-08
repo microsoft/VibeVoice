@@ -44,7 +44,7 @@ class StreamingTTSService:
     def __init__(
         self,
         model_path: str,
-        device: str = "cuda",
+        device: str = "cpu",
         inference_steps: int = 5,
     ) -> None:
         # Keep model_path as string for HuggingFace repo IDs (Path() converts / to \ on Windows)
