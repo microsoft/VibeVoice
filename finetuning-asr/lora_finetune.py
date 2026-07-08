@@ -409,7 +409,7 @@ def setup_model_for_training(
         model_path,
         dtype=dtype,
         device_map=device if device == "auto" else None,
-        attn_implementation="flash_attention_2",
+        attn_implementation="sdpa",
         trust_remote_code=True,
     )
     

@@ -166,13 +166,11 @@ def main():
     # Decide dtype & attention implementation
     if args.device == "mps":
         load_dtype = torch.float32  # MPS requires float32
-        attn_impl_primary = "sdpa"  # flash_attention_2 not supported on MPS
     elif args.device == "cuda":
         load_dtype = torch.bfloat16
-        attn_impl_primary = "flash_attention_2"
     else:  # cpu
         load_dtype = torch.float32
-        attn_impl_primary = "sdpa"
+    attn_impl_primary = "sdpa"
     print(f"Using device: {args.device}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
     # Load model with device-specific logic
     try:

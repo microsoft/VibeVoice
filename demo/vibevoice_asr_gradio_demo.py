@@ -944,16 +944,8 @@ def _detect_device_and_attn(
 
     # --- resolve attention ---
     if attn_implementation == "auto":
-        if device == "cuda":
-            try:
-                import flash_attn  # noqa: F401
-                attn_implementation = "flash_attention_2"
-            except ImportError:
-                print("flash_attn not installed, falling back to sdpa")
-                attn_implementation = "sdpa"
-        else:
-            # MPS / XPU / CPU don't support flash_attention_2
-            attn_implementation = "sdpa"
+        # Always use sdpa for consistency
+        attn_implementation = "sdpa"
 
     print(f"Using device: {device}, attn_implementation: {attn_implementation}")
     return device, attn_implementation
@@ -1208,9 +1200,9 @@ def main():
     parser.add_argument(
         "--attn_implementation",
         type=str,
-        default="auto",
-        choices=["auto", "flash_attention_2", "sdpa", "eager"],
-        help="Attention implementation to use. 'auto' selects the best for your device (default: auto)"
+        default="sdpa",
+        choices=["flash_attention_2", "sdpa", "eager"],
+        help="Attention implementation to use (default: sdpa)"
     )
     parser.add_argument(
         "--max_new_tokens",

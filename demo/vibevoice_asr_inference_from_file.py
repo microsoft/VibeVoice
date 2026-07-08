@@ -474,26 +474,18 @@ def main():
     parser.add_argument(
         "--attn_implementation",
         type=str,
-        default="auto",
-        choices=["flash_attention_2", "sdpa", "eager", "auto"],
-        help="Attention implementation to use. 'auto' will select the best available for your device (flash_attention_2 for CUDA, sdpa for MPS/CPU/XPU)"
+        default="sdpa",
+        choices=["flash_attention_2", "sdpa", "eager"],
+        help="Attention implementation to use (default: sdpa)"
     )
     
     args = parser.parse_args()
     
     # Auto-detect best attention implementation based on device
     if args.attn_implementation == "auto":
-        if args.device == "cuda" and torch.cuda.is_available():
-            try:
-                import flash_attn
-                args.attn_implementation = "flash_attention_2"
-            except ImportError:
-                print("flash_attn not installed, falling back to sdpa")
-                args.attn_implementation = "sdpa"
-        else:
-            # MPS/XPU/CPU don't support flash_attention_2
-            args.attn_implementation = "sdpa"
-        print(f"Auto-detected attention implementation: {args.attn_implementation}")
+        # Always use sdpa for consistency
+        args.attn_implementation = "sdpa"
+        print(f"Using attention implementation: {args.attn_implementation}")
     
     # Collect audio files
     audio_files = []

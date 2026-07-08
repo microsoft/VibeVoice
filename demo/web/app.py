@@ -76,15 +76,13 @@ class StreamingTTSService:
         if self.device == "mps":
             load_dtype = torch.float32
             device_map = None
-            attn_impl_primary = "sdpa"
         elif self.device == "cuda":
             load_dtype = torch.bfloat16
             device_map = 'cuda'
-            attn_impl_primary = "flash_attention_2"
         else:
             load_dtype = torch.float32
             device_map = 'cpu'
-            attn_impl_primary = "sdpa"
+        attn_impl_primary = "sdpa"
         print(f"Using device: {device_map}, torch_dtype: {load_dtype}, attn_implementation: {attn_impl_primary}")
         # Load model
         try:
@@ -98,18 +96,8 @@ class StreamingTTSService:
             if self.device == "mps":
                 self.model.to("mps")
         except Exception as e:
-            if attn_impl_primary == 'flash_attention_2':
-                print("Error loading the model. Trying to use SDPA. However, note that only flash_attention_2 has been fully tested, and using SDPA may result in lower audio quality.")
-                
-                self.model = VibeVoiceStreamingForConditionalGenerationInference.from_pretrained(
-                    self.model_path,
-                    torch_dtype=load_dtype,
-                    device_map=self.device,
-                    attn_implementation='sdpa',
-                )
-                print("Load model with SDPA successfully ")
-            else:
-                raise e
+            print(f"Error loading the model: {e}")
+            raise e
 
         self.model.eval()
 
