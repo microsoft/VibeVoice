@@ -261,6 +261,14 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
                 else:
                     semantic_tokens = self.model.semantic_tokenizer.encode(speech_tensors.unsqueeze(1)).mean
                     semantic_features = self.model.semantic_connector(semantic_tokens)
+                
+                # Ensure acoustic and semantic features have matching temporal dimensions.
+                # Different tokenizer architectures can produce slightly different
+                # frame counts, causing tensor size mismatches on concatenation.
+                min_len = min(acoustic_features.shape[1], semantic_features.shape[1])
+                if acoustic_features.shape[1] != semantic_features.shape[1]:
+                    acoustic_features = acoustic_features[:, :min_len]
+                    semantic_features = semantic_features[:, :min_len]
             else:
                 # Long audio: streaming processing
                 # print(f"Using streaming processing for long audio: {total_samples/sample_rate:.1f}s "
@@ -328,6 +336,15 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
                 
                 # Concatenate all semantic means
                 semantic_tokens = torch.cat(semantic_mean_segments, dim=1).contiguous()
+                semantic_features = self.model.semantic_connector(semantic_tokens)
+                
+                # Ensure acoustic and semantic features have matching temporal dimensions.
+                # Different segment boundaries can cause slight frame-count mismatches
+                # between the two tokenizers (e.g. tensor a (228) vs tensor b (223)).
+                min_len = min(acoustic_features.shape[1], semantic_features.shape[1])
+                if acoustic_features.shape[1] != semantic_features.shape[1]:
+                    acoustic_features = acoustic_features[:, :min_len]
+                    semantic_features = semantic_features[:, :min_len]
                 semantic_features = self.model.semantic_connector(semantic_tokens)
             
             # Combine acoustic and semantic features
