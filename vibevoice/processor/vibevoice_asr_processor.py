@@ -27,6 +27,25 @@ logger = logging.get_logger(__name__)
 SYSTEM_PROMPT = "You are a helpful assistant that transcribes audio input into text output in JSON format."
 
 
+def _get_model_speech_tok_compress_ratio(model_config: Dict[str, Any]) -> Optional[int]:
+    acoustic_config = model_config.get("acoustic_tokenizer_config", {})
+    encoder_ratios = acoustic_config.get("encoder_ratios")
+    if not encoder_ratios:
+        return None
+    return math.prod(int(ratio) for ratio in encoder_ratios)
+
+
+def _resolve_speech_tok_compress_ratio(
+    processor_config: Dict[str, Any],
+    model_config: Dict[str, Any],
+    default: int = 3200,
+) -> int:
+    model_speech_tok_compress_ratio = _get_model_speech_tok_compress_ratio(model_config)
+    if model_speech_tok_compress_ratio is not None:
+        return model_speech_tok_compress_ratio
+    return int(processor_config.get("speech_tok_compress_ratio", default))
+
+
 class VibeVoiceASRProcessor: 
     """
     Processor for VibeVoice ASR (Automatic Speech Recognition) models.
@@ -109,9 +128,17 @@ class VibeVoiceASRProcessor:
         from transformers.utils import cached_file
         from vibevoice.modular.modular_vibevoice_text_tokenizer import VibeVoiceASRTextTokenizerFast
         
-        # Try to load configuration
+        # Try to load processor and model configuration. The ASR prompt must
+        # reserve one speech placeholder per audio-tokenizer frame, so prefer
+        # the tokenizer stride from the model config when it is available.
         config_path = os.path.join(pretrained_model_name_or_path, "preprocessor_config.json")
         config = {}
+        model_config = {}
+        cached_file_kwargs = {
+            key: value
+            for key, value in kwargs.items()
+            if key not in {"language_model_pretrained_name"}
+        }
         
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
@@ -121,16 +148,32 @@ class VibeVoiceASRProcessor:
                 config_file = cached_file(
                     pretrained_model_name_or_path,
                     "preprocessor_config.json",
-                    **kwargs
+                    **cached_file_kwargs
                 )
                 with open(config_file, 'r') as f:
                     config = json.load(f)
             except Exception as e:
                 logger.warning(f"Could not load preprocessor_config.json: {e}")
                 logger.warning("Using default configuration")
-        
+
+        model_config_path = os.path.join(pretrained_model_name_or_path, "config.json")
+        if os.path.exists(model_config_path):
+            with open(model_config_path, 'r') as f:
+                model_config = json.load(f)
+        else:
+            try:
+                model_config_file = cached_file(
+                    pretrained_model_name_or_path,
+                    "config.json",
+                    **cached_file_kwargs
+                )
+                with open(model_config_file, 'r') as f:
+                    model_config = json.load(f)
+            except Exception as e:
+                logger.warning(f"Could not load config.json: {e}")
+
         # Extract parameters
-        speech_tok_compress_ratio = config.get("speech_tok_compress_ratio", 3200)
+        speech_tok_compress_ratio = _resolve_speech_tok_compress_ratio(config, model_config)
         target_sample_rate = config.get("target_sample_rate", 24000)
         normalize_audio = config.get("normalize_audio", True)
         
