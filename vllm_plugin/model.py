@@ -90,7 +90,7 @@ from transformers import BatchFeature
 from transformers.models.whisper import WhisperFeatureExtractor
 from vllm.config import VllmConfig
 from vllm.multimodal import MULTIMODAL_REGISTRY
-from vllm.multimodal.parse import MultiModalDataParser
+from vllm.multimodal.parse import MultiModalDataParser, MultiModalDataItems, AudioProcessorItems
 from vllm.sequence import IntermediateTensors
 from vllm.model_executor.models.interfaces import SupportsMultiModal, SupportsPP, MultiModalEmbeddings
 from vllm.model_executor.models.utils import (
@@ -553,6 +553,9 @@ class VibeVoiceProcessingInfo(BaseProcessingInfo):
         
         return tokens
 
+    def get_data_parser(self) -> MultiModalDataParser:
+        return MultiModalDataParser(target_sr=24000)
+
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
         return {"audio": 1}
 
@@ -670,9 +673,12 @@ class VibeVoiceDummyInputsBuilder(BaseDummyInputsBuilder[VibeVoiceProcessingInfo
         mm_options: Mapping[str, Any] | None = None,
     ) -> ProcessorInputs:
         """Build ProcessorInputs for dummy profiling."""
+        dummy_mm_data = self.get_dummy_mm_data(seq_len, mm_counts, mm_options)
         return ProcessorInputs(
             prompt=self.get_dummy_text(mm_counts),
-            mm_data=self.get_dummy_mm_data(seq_len, mm_counts, mm_options),
+            mm_data_items=MultiModalDataItems({
+                "audio": AudioProcessorItems(dummy_mm_data.get("audio", [])),
+            }),
         )
 
 
@@ -707,9 +713,8 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
     and manages the prompt token replacement for audio placeholders.
     """
     
-    def _get_data_parser(self) -> MultiModalDataParser:
+    def get_data_parser(self) -> MultiModalDataParser:
         """Create a data parser with the correct target sample rate (24kHz)."""
-        # VibeVoice requires 24kHz, not 16kHz (Whisper default)
         target_sr = 24000
         return MultiModalDataParser(target_sr=target_sr)
     
