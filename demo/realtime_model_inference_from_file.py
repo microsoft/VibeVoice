@@ -28,11 +28,11 @@ class VoiceMapper:
 
     def setup_voice_presets(self):
         """Setup voice presets by scanning the voices directory."""
-        voices_dir = os.path.join(os.path.dirname(__file__), "voices/streaming_model")
+        self.voices_dir = os.path.join(os.path.dirname(__file__), "voices/streaming_model")
         
         # Check if voices directory exists
-        if not os.path.exists(voices_dir):
-            print(f"Warning: Voices directory not found at {voices_dir}")
+        if not os.path.exists(self.voices_dir):
+            print(f"Warning: Voices directory not found at {self.voices_dir}")
             self.voice_presets = {}
             self.available_voices = {}
             return
@@ -41,7 +41,7 @@ class VoiceMapper:
         self.voice_presets = {}
         
         # Get all .pt files in the voices directory
-        pt_files = glob.glob(os.path.join(voices_dir, "**", "*.pt"), recursive=True)
+        pt_files = glob.glob(os.path.join(self.voices_dir, "**", "*.pt"), recursive=True)
         
         # Create dictionary with filename (without extension) as key
         for pt_file in pt_files:
@@ -59,7 +59,7 @@ class VoiceMapper:
             if os.path.exists(path)
         }
         
-        print(f"Found {len(self.available_voices)} voice files in {voices_dir}")
+        print(f"Found {len(self.available_voices)} voice files in {self.voices_dir}")
         print(f"Available voices: {', '.join(self.available_voices.keys())}")
 
     def get_voice_path(self, speaker_name: str) -> str:
@@ -80,6 +80,8 @@ class VoiceMapper:
             return matched_path
         
         # Default to first voice if no match found
+        if not self.voice_presets:
+            raise ValueError(f"No voice preset (.pt) files found under {self.voices_dir}.")
         default_voice = list(self.voice_presets.values())[0]
         print(f"Warning: No voice preset found for '{speaker_name}', using default voice: {default_voice}")
         return default_voice
