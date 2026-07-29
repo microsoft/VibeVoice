@@ -161,7 +161,11 @@ class AsyncAudioStreamer(AudioStreamer):
         super().__init__(batch_size, stop_signal, timeout)
         # Replace regular queues with async queues
         self.audio_queues = [asyncio.Queue() for _ in range(batch_size)]
-        self.loop = asyncio.get_running_loop()
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         
     def put(self, audio_chunks: torch.Tensor, sample_indices: torch.Tensor):
         """Put audio chunks in the appropriate async queues."""
