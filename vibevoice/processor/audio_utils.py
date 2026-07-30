@@ -183,21 +183,30 @@ class AudioNormalizer:
     def avoid_clipping(self, audio: np.ndarray, scalar: Optional[float] = None) -> tuple:
         """
         Avoid clipping by scaling down if necessary.
-        
+
+        Peaks above `knee` are compressed with a tanh soft-knee instead of a
+        hard on/off threshold at 1.0, so a peak that lands just below vs. just
+        above 1.0 (e.g. from a fraction of a dB of upstream gain) no longer
+        flips between "untouched" and "scaled down by ~max_val", which was
+        producing an outsized swing in overall level for near-identical inputs.
+
         Args:
             audio (np.ndarray): Input audio signal
             scalar (float, optional): Explicit scaling factor
-            
+
         Returns:
             tuple: (normalized_audio, scalar)
         """
         if scalar is None:
             max_val = np.max(np.abs(audio))
-            if max_val > 1.0:
-                scalar = max_val + self.eps
+            knee = 0.95
+            if max_val > knee:
+                headroom = 1.0 - knee
+                peak = knee + headroom * np.tanh((max_val - knee) / headroom)
+                scalar = max_val / peak
             else:
                 scalar = 1.0
-        
+
         return audio / scalar, scalar
     
     def __call__(self, audio: np.ndarray) -> np.ndarray:
