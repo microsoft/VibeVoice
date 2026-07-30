@@ -24,7 +24,7 @@
 
 <h3>📰 News</h3>
 
-<strong>2026-07-23: ⚡ We released <a href="https://github.com/microsoft/VibeASR.cpp">VibeVoice-ASR-BitNet</a>, an edge CPU inference engine for VibeVoice-ASR. Through heterogeneous quantization (I8_S + I2_S), the model is compressed from 4.62 GB to 1.58 GB with real-time inference (RTF < 1) on 3+ CPU threads — no GPU required. [<a href="https://github.com/microsoft/VibeASR.cpp">Code</a>] [<a href="https://huggingface.co/microsoft/VibeVoice-ASR-BitNet">Models</a>] [<a href="https://arxiv.org/abs/2607.21075">Report</a>]</strong>
+<strong>2026-07-23: ⚡ We released <a href="https://github.com/microsoft/VibeASR.cpp">VibeVoice-ASR-BitNet</a>, an edge CPU inference engine for VibeVoice-ASR. Through heterogeneous quantization (I8_S + I2_S), the model is compressed from 4.62 GB to 1.58 GB with real-time inference (RTF < 1) on 3+ CPU threads — no GPU required. [<a href="https://github.com/microsoft/VibeASR.cpp">Code</a>] [<a href="https://huggingface.co/microsoft/VibeVoice-ASR-BitNet">Models</a>] [<a href="https://huggingface.co/spaces/microsoft/vibevoice-asr-bitnet-demo">Demo</a>] [<a href="https://arxiv.org/abs/2607.21075">Report</a>]</strong>
 
 <strong>2026-03-12: 🚀 VibeVoice-ASR is now integrated into <a href="https://labs.ai.azure.com/innovations/vibevoice-asr/">Azure AI Foundry Labs</a>! You can now explore and test our unified speech-to-text capabilities directly through Microsoft Foundry.</strong>
 
