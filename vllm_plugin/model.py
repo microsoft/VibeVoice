@@ -476,7 +476,17 @@ class VibeVoiceAudioEncoder(nn.Module):
 
 class VibeVoiceProcessingInfo(BaseProcessingInfo):
     """Processing info for VibeVoice multimodal model."""
-    
+
+    def get_data_parser(self) -> MultiModalDataParser:
+        """Override data parser to set VibeVoice's target sample rate (24kHz).
+
+        In vLLM < 0.16 this lived on the processor as ``_get_data_parser``.
+        vLLM 0.16 moved it here (BaseProcessingInfo.get_data_parser).
+        We override it in *both* places with a version guard so the same
+        codebase works on 0.14.x and 0.16.x.
+        """
+        return MultiModalDataParser(target_sr=24000)
+
     def get_hf_config(self):
         return self.ctx.get_hf_config()
 
@@ -663,17 +673,12 @@ class VibeVoiceDummyInputsBuilder(BaseDummyInputsBuilder[VibeVoiceProcessingInfo
             )
         }
 
-    def get_dummy_processor_inputs(
-        self,
-        seq_len: int,
-        mm_counts: Mapping[str, int],
-        mm_options: Mapping[str, Any] | None = None,
-    ) -> ProcessorInputs:
-        """Build ProcessorInputs for dummy profiling."""
-        return ProcessorInputs(
-            prompt=self.get_dummy_text(mm_counts),
-            mm_data=self.get_dummy_mm_data(seq_len, mm_counts, mm_options),
-        )
+    # get_dummy_processor_inputs is intentionally NOT overridden.
+    # The base class (BaseDummyInputsBuilder) implementation handles the
+    # correct ProcessorInputs construction for both vLLM 0.14 and 0.16.
+    # In 0.14 it uses mm_data=; in 0.16 it uses mm_items= via parse_mm_data.
+    # Our get_dummy_text() and get_dummy_mm_data() are still called by the
+    # base implementation.
 
 
 def _vibevoice_field_config(hf_inputs: Mapping[str, torch.Tensor]):
@@ -707,12 +712,12 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
     and manages the prompt token replacement for audio placeholders.
     """
     
-    def _get_data_parser(self) -> MultiModalDataParser:
-        """Create a data parser with the correct target sample rate (24kHz)."""
-        # VibeVoice requires 24kHz, not 16kHz (Whisper default)
-        target_sr = 24000
-        return MultiModalDataParser(target_sr=target_sr)
-    
+    # NOTE: In vLLM 0.16, _get_data_parser was moved from
+    # BaseMultiModalProcessor to BaseProcessingInfo.get_data_parser().
+    # vLLM 0.16 raises ValueError if _get_data_parser exists on the processor.
+    # We conditionally define it only for vLLM < 0.16 backward compatibility.
+    # The canonical definition is VibeVoiceProcessingInfo.get_data_parser().
+
     def _call_hf_processor(
         self,
         prompt: str,
@@ -916,6 +921,23 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
             )
         ]
 
+
+# ============================================================================
+# Backward compat: vLLM < 0.16 reads _get_data_parser from the *processor*,
+# while vLLM >= 0.16 reads get_data_parser from the *processing info* and
+# raises ValueError if _get_data_parser still exists on the processor.
+# We add the old-style method only when running on pre-0.16 vLLM.
+# ============================================================================
+try:
+    import vllm
+    _vllm_version = tuple(int(x) for x in vllm.__version__.split(".")[:2])
+except Exception:
+    _vllm_version = (0, 14)  # conservative fallback
+
+if _vllm_version < (0, 16):
+    def _compat_get_data_parser(self) -> MultiModalDataParser:
+        return MultiModalDataParser(target_sr=24000)
+    VibeVoiceMultiModalProcessor._get_data_parser = _compat_get_data_parser  # type: ignore[attr-defined]
 
 # ============================================================================
 # Main Model Class
