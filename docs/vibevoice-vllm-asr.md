@@ -1,6 +1,6 @@
 # VibeVoice vLLM ASR Deployment
 
-<a href="https://huggingface.co/microsoft/VibeVoice-ASR"><img alt="Huggingface" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-VibeVoice--ASR-blue"></a>
+<a href="https://huggingface.co/microsoft/VibeVoice-ASR"><img alt="Huggingface" src="https://img.shields.io/badge/Hugging%20Face-VibeVoice--ASR-blue?logo=huggingface"></a>
 
 Deploy VibeVoice ASR model as a high-performance API service using [vLLM](https://github.com/vllm-project/vllm). This plugin provides OpenAI-compatible API endpoints for speech-to-text transcription with streaming support.
 
