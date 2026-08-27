@@ -90,7 +90,7 @@ from transformers import BatchFeature
 from transformers.models.whisper import WhisperFeatureExtractor
 from vllm.config import VllmConfig
 from vllm.multimodal import MULTIMODAL_REGISTRY
-from vllm.multimodal.parse import MultiModalDataParser
+from vllm.multimodal.parse import AudioProcessorItems, MultiModalDataParser
 from vllm.sequence import IntermediateTensors
 from vllm.model_executor.models.interfaces import SupportsMultiModal, SupportsPP, MultiModalEmbeddings
 from vllm.model_executor.models.utils import (
@@ -474,9 +474,27 @@ class VibeVoiceAudioEncoder(nn.Module):
 # vLLM Multimodal Processing Infrastructure
 # ============================================================================
 
+def _cfg_get(hf_config, key: str, default):
+    """Read a key from an HF config that may be a dict or an object."""
+    if isinstance(hf_config, dict):
+        return hf_config.get(key, default)
+    return getattr(hf_config, key, default)
+
+
+def _is_streaming_asr(hf_config) -> bool:
+    """Whether the checkpoint interleaves audio and text (streaming ASR).
+
+    Derived from the architecture name rather than a separate config flag so
+    that a checkpoint cannot be served under the wrong protocol by mistake:
+    streaming checkpoints declare "VibeVoiceForASRStreamingTraining".
+    """
+    archs = _cfg_get(hf_config, "architectures", None) or []
+    return any("Streaming" in str(a) for a in archs)
+
+
 class VibeVoiceProcessingInfo(BaseProcessingInfo):
     """Processing info for VibeVoice multimodal model."""
-    
+
     def get_hf_config(self):
         return self.ctx.get_hf_config()
 
@@ -553,7 +571,28 @@ class VibeVoiceProcessingInfo(BaseProcessingInfo):
         
         return tokens
 
+    def get_streaming_geometry(self):
+        """The window a streaming checkpoint was trained on, or None.
+
+        Read off the checkpoint rather than configured, so the engine sizes its
+        multimodal budget for exactly the window a client cuts. The budget is a
+        hard limit: a client cutting larger windows than the engine sized for is
+        rejected, not merely mismatched.
+        """
+        if not _is_streaming_asr(self.get_hf_config()):
+            return None
+        if not hasattr(self, "_streaming_geometry"):
+            from .asr_streaming import ChunkGeometry
+            self._streaming_geometry = ChunkGeometry.from_pretrained(
+                self.ctx.model_config.model)
+        return self._streaming_geometry
+
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
+        # Streaming prompts interleave one audio window per chunk, so a single
+        # prompt carries N audio items rather than one. None means no fixed cap
+        # here; the real bound comes from --limit-mm-per-prompt.
+        if _is_streaming_asr(self.get_hf_config()):
+            return {"audio": None}
         return {"audio": 1}
 
     def get_mm_max_tokens_per_item(
@@ -582,6 +621,14 @@ class VibeVoiceProcessingInfo(BaseProcessingInfo):
 
         compress_ratio = int(_cfg("speech_tok_compress_ratio", 3200))
         sample_rate = int(_cfg("target_sample_rate", 24000))
+
+        # Streaming items are one fixed-size window each, never a whole
+        # utterance, so the 61-minute bound below would overstate the encoder
+        # budget by ~4 orders of magnitude.
+        geometry = self.get_streaming_geometry()
+        if geometry is not None:
+            # speech_start + window frames + speech_end
+            return {"audio": geometry.window_frames + 2}
 
         # Upper bound: 61-minute audio at 24 kHz
         max_audio_samples = 61 * 60 * sample_rate  # 88,464,000
@@ -620,6 +667,13 @@ class VibeVoiceDummyInputsBuilder(BaseDummyInputsBuilder[VibeVoiceProcessingInfo
 
         compress_ratio = int(_cfg("speech_tok_compress_ratio", 3200))
         sample_rate = int(_cfg("target_sample_rate", 24000))
+
+        # Must mirror get_mm_max_tokens_per_item: profiling a 61-minute clip
+        # per item would try to VAE-encode ~88M samples N times over and OOM at
+        # startup, long before serving a single request.
+        geometry = self.info.get_streaming_geometry()
+        if geometry is not None:
+            return geometry.window_samples
 
         # Upper bound: 61-minute audio at 24 kHz
         max_hour_samples = 61 * 60 * sample_rate  # 88,464,000
@@ -699,6 +753,45 @@ def _vibevoice_field_config(hf_inputs: Mapping[str, torch.Tensor]):
     return config
 
 
+class _NoneTolerantAudioParser(MultiModalDataParser):
+    """Let a per-item ``None`` survive audio parsing.
+
+    A streaming session re-sends its whole audio list every turn, with the
+    windows vLLM has already processed replaced by ``None`` and pinned by a
+    stable ``multi_modal_uuids`` entry. That keeps the per-turn payload flat
+    instead of growing O(N) with the number of chunks.
+
+    vLLM's cache layer is built for exactly this -- ``_get_cache_missing_items``
+    raises "data is not provided" only for a ``None`` it genuinely needs to
+    re-encode -- and ``_parse_image_data`` passes list elements through
+    untouched. ``_parse_audio_data`` is the odd one out: it feeds every element
+    to ``_get_audio_with_sr``, which ends in ``assert_never`` on ``None``. So
+    resample only the real items and stitch the ``None`` holes back afterwards.
+    """
+
+    def _parse_audio_data(self, data):
+        # A list specifically, not a tuple: upstream reads a bare
+        # ``(audio, sr)`` tuple as one item, and ``sr=None`` is how a caller
+        # says "already at the target rate" -- which for this model, at 24 kHz,
+        # is the ordinary case. Matching tuples here would read that lone
+        # sample rate as a second audio item and hand the engine a hole that was
+        # never there. Holes only ever arrive in the list a session sends.
+        if not isinstance(data, list) or not any(x is None for x in data):
+            return super()._parse_audio_data(data)
+
+        present = [x for x in data if x is not None]
+        parsed = super()._parse_audio_data(present) if present else None
+        if parsed is not None and not isinstance(parsed, AudioProcessorItems):
+            # Embeddings take a different branch upstream and have no per-item
+            # holes to fill; don't try to interleave into them.
+            return parsed
+
+        processed = iter(parsed.data if parsed is not None else ())
+        return AudioProcessorItems(
+            [None if x is None else next(processed) for x in data]
+        )
+
+
 class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingInfo]):
     """
     Multimodal processor for VibeVoice.
@@ -711,7 +804,7 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
         """Create a data parser with the correct target sample rate (24kHz)."""
         # VibeVoice requires 24kHz, not 16kHz (Whisper default)
         target_sr = 24000
-        return MultiModalDataParser(target_sr=target_sr)
+        return _NoneTolerantAudioParser(target_sr=target_sr)
     
     def _call_hf_processor(
         self,
@@ -777,11 +870,18 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
         result["raw_audio_lengths"] = torch.tensor(audio_lengths, dtype=torch.long)
         
         # Add a random salt to ensure unique hash and bypass cache
-        import uuid
-        # Use a random integer for salt
-        salt_val = hash(str(uuid.uuid4())) % 100000
-        result["salt"] = torch.tensor([salt_val], dtype=torch.long).expand(len(raw_audio_list))
-        
+        #
+        # Streaming is the exception, and needs the opposite. A session re-sends
+        # its whole audio list every turn and pins the already-encoded windows
+        # by ``multi_modal_uuids``; a per-call random salt would change their
+        # hash every turn, so vLLM would re-encode every window it was just told
+        # it could reuse -- turning a flat per-turn cost into an O(N) one.
+        if not _is_streaming_asr(self.info.get_hf_config()):
+            import uuid
+            # Use a random integer for salt
+            salt_val = hash(str(uuid.uuid4())) % 100000
+            result["salt"] = torch.tensor([salt_val], dtype=torch.long).expand(len(raw_audio_list))
+
         return result
 
     def _hf_processor_applies_updates(
@@ -873,7 +973,9 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
                 # If a full tensor is passed accidentally, fall back to its length
                 return int(x.shape[0])
             return int(x)
-        
+
+        is_streaming = _is_streaming_asr(hf_config)
+
         def get_replacement(item_idx: int):
             if raw_audio_lengths and item_idx < len(raw_audio_lengths):
                 audio_len = _to_int_len(raw_audio_lengths[item_idx])
@@ -890,10 +992,16 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
             # Build replacement token sequence:
             #   <|speech_start|> + N * <|speech_pad|> + <|speech_end|> + \n
             # The newline is important for correct prompt structure.
+            #
+            # Streaming is the exception: there the audio window is followed
+            # directly by the transcript of that chunk, with no separator (see
+            # modeling_vibevoice_asr.py building [sp_start, feat, sp_end]).
+            # Emitting a stray '\n' would put every chunk off-distribution.
             newline_id = 198  # '\n' token
+            trailer = [] if is_streaming else [newline_id]
             if speech_start_id is not None and speech_pad_id is not None and speech_end_id is not None:
                 embed_id = int(speech_pad_id)
-                replacement_ids = [int(speech_start_id)] + [embed_id] * num_features + [int(speech_end_id), newline_id]
+                replacement_ids = [int(speech_start_id)] + [embed_id] * num_features + [int(speech_end_id)] + trailer
             # Fallback: add audio BOS/EOS boundaries around repeated <|AUDIO|>.
             elif audio_bos_id is not None and audio_eos_id is not None:
                 embed_id = int(audio_token_id)

@@ -52,6 +52,22 @@ VIBEVOICE_AUDIO_TOKENS = {
 # All extended tokens (Qwen2.5 + VibeVoice)
 ALL_EXTENDED_TOKENS = {**QWEN25_EXTENDED_TOKENS, **VIBEVOICE_AUDIO_TOKENS}
 
+# Streaming checkpoints train <|text_chunk_end|> into the first free slot after
+# Qwen2.5, so their audio tokens all sit one id higher.
+VIBEVOICE_STREAMING_AUDIO_TOKENS = {
+    "<|text_chunk_end|>": 151665,
+    "<|AUDIO|>": 151666,
+    "<|audio_bos|>": 151667,
+    "<|audio_eos|>": 151668,
+}
+
+
+def _token_maps(streaming: bool):
+    """(audio tokens, every extended token) for the requested layout."""
+    audio = VIBEVOICE_STREAMING_AUDIO_TOKENS if streaming else VIBEVOICE_AUDIO_TOKENS
+    return audio, {**QWEN25_EXTENDED_TOKENS, **audio}
+
+
 # Chat template with audio support
 # Key modification: handles part['type'] == 'audio' or 'audio_url' -> '<|AUDIO|>'
 VIBEVOICE_CHAT_TEMPLATE = """{%- if tools %}
@@ -174,20 +190,21 @@ def download_qwen_tokenizer_files(output_dir: str, qwen_model: str = DEFAULT_QWE
         )
 
 
-def patch_tokenizer_config(output_dir: str) -> None:
+def patch_tokenizer_config(output_dir: str, streaming: bool = False) -> None:
     """
     Patch tokenizer_config.json with VibeVoice audio tokens and chat template.
     """
+    audio_tokens, all_tokens = _token_maps(streaming)
     config_path = os.path.join(output_dir, "tokenizer_config.json")
-    
+
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
-    
+
     # 1. Add ALL extended tokens to added_tokens_decoder (Qwen2.5 + VibeVoice audio)
     if "added_tokens_decoder" not in config:
         config["added_tokens_decoder"] = {}
-    
-    for token, token_id in ALL_EXTENDED_TOKENS.items():
+
+    for token, token_id in all_tokens.items():
         if str(token_id) not in config["added_tokens_decoder"]:
             # Determine if token should be marked as "special" 
             # tool_call tokens are NOT special in Qwen2.5
@@ -207,7 +224,7 @@ def patch_tokenizer_config(output_dir: str) -> None:
     if "additional_special_tokens" not in config:
         config["additional_special_tokens"] = []
     
-    for token in VIBEVOICE_AUDIO_TOKENS.keys():
+    for token in audio_tokens.keys():
         if token not in config["additional_special_tokens"]:
             config["additional_special_tokens"].append(token)
     
@@ -251,10 +268,11 @@ def patch_tokenizer_config(output_dir: str) -> None:
     print(f"Patched {config_path}")
 
 
-def patch_tokenizer_json(output_dir: str) -> None:
+def patch_tokenizer_json(output_dir: str, streaming: bool = False) -> None:
     """
     Patch tokenizer.json with VibeVoice audio tokens.
     """
+    _, all_tokens = _token_maps(streaming)
     tokenizer_path = os.path.join(output_dir, "tokenizer.json")
     
     with open(tokenizer_path, "r", encoding="utf-8") as f:
@@ -267,7 +285,7 @@ def patch_tokenizer_json(output_dir: str) -> None:
             existing_ids.add(token_entry.get("id"))
     
     # Add ALL extended tokens (Qwen2.5 + VibeVoice audio)
-    for token, token_id in ALL_EXTENDED_TOKENS.items():
+    for token, token_id in all_tokens.items():
         if token_id not in existing_ids:
             # Determine if token should be marked as "special"
             is_special = token not in ("<tool_call>", "</tool_call>", "<|fim_prefix|>", 
@@ -312,10 +330,11 @@ def generate_added_tokens_json(output_dir: str) -> None:
     print(f"Generated {output_path}")
 
 
-def generate_special_tokens_map_json(output_dir: str) -> None:
+def generate_special_tokens_map_json(output_dir: str, streaming: bool = False) -> None:
     """
     Generate special_tokens_map.json with VibeVoice special tokens.
     """
+    audio_tokens, _ = _token_maps(streaming)
     # Build the special tokens map
     special_tokens_map = {
         "additional_special_tokens": [],
@@ -325,7 +344,7 @@ def generate_special_tokens_map_json(output_dir: str) -> None:
     }
     
     # Add audio tokens as additional_special_tokens
-    for token in VIBEVOICE_AUDIO_TOKENS.keys():
+    for token in audio_tokens.keys():
         special_tokens_map["additional_special_tokens"].append({
             "content": token,
             "lstrip": False,
@@ -352,10 +371,11 @@ def generate_special_tokens_map_json(output_dir: str) -> None:
     print(f"Generated {output_path}")
 
 
-def generate_vibevoice_tokenizer_files(output_dir: str, qwen_model: str = DEFAULT_QWEN_MODEL) -> None:
+def generate_vibevoice_tokenizer_files(output_dir: str, qwen_model: str = DEFAULT_QWEN_MODEL,
+                                       streaming: bool = False) -> None:
     """
     Generate all 6 VibeVoice tokenizer files.
-    
+
     Files generated:
     1. vocab.json - from Qwen2.5 (unchanged)
     2. merges.txt - from Qwen2.5 (unchanged)
@@ -365,21 +385,21 @@ def generate_vibevoice_tokenizer_files(output_dir: str, qwen_model: str = DEFAUL
     6. special_tokens_map.json - generated with VibeVoice tokens
     """
     print(f"=== Generating VibeVoice tokenizer files to {output_dir} ===\n")
-    
+
     # Step 1: Download base files from Qwen2
     download_qwen_tokenizer_files(output_dir, qwen_model)
-    
+
     # Step 2: Patch tokenizer_config.json
-    patch_tokenizer_config(output_dir)
-    
+    patch_tokenizer_config(output_dir, streaming)
+
     # Step 3: Patch tokenizer.json
-    patch_tokenizer_json(output_dir)
-    
+    patch_tokenizer_json(output_dir, streaming)
+
     # Step 4: Generate added_tokens.json
     generate_added_tokens_json(output_dir)
-    
+
     # Step 5: Generate special_tokens_map.json
-    generate_special_tokens_map_json(output_dir)
+    generate_special_tokens_map_json(output_dir, streaming)
     
     print(f"\n✅ All 6 tokenizer files generated in {output_dir}")
 
@@ -544,6 +564,12 @@ def main():
         help=f"Qwen model to download base tokenizer from (default: {DEFAULT_QWEN_MODEL})"
     )
     
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Use the streaming token layout (<|text_chunk_end|> at 151665)"
+    )
+
     args = parser.parse_args()
     
     # Determine output directory
@@ -556,7 +582,7 @@ def main():
     
     try:
         # Generate files
-        generate_vibevoice_tokenizer_files(output_dir, args.qwen_model)
+        generate_vibevoice_tokenizer_files(output_dir, args.qwen_model, args.streaming)
         
         # Compare if requested
         if args.compare:
