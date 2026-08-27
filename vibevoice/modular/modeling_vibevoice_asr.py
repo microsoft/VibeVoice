@@ -1,6 +1,8 @@
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
+import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from transformers.models.auto import AutoModel, AutoModelForCausalLM
 
@@ -422,6 +424,280 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @torch.no_grad()
+    def streaming_generate(
+        self,
+        audio_tensor: torch.FloatTensor,
+        tokenizer,
+        prompt_text: str = None,
+        chunk_duration: float = 2.0,
+        text_audio_delay: float = None,
+        sample_rate: int = 24000,
+        max_new_tokens_per_chunk: int = 256,
+        temperature: float = 0.0,
+        context_info: str = None,
+        encode_mode: str = "split_then_encode",
+        repetition_penalty: float = 1.0,
+        pad_last_chunk: bool = True,
+    ):
+        """Streaming model: chunked ASR inference over a full audio tensor."""
+        device = next(self.parameters()).device
+
+        sp_start_id = tokenizer.speech_start_id
+        sp_end_id = tokenizer.speech_end_id
+        text_chunk_end_id = tokenizer.text_chunk_end_id
+        eos_id = tokenizer.eos_token_id
+
+        embed_tokens = self.get_input_embeddings()
+
+        if prompt_text is None:
+            keys_str = "speaker, content"
+            if context_info:
+                prompt_text = (
+                    "You are a helpful assistant that transcribes audio input into text output. "
+                    f"Please transcribe the following audios streamingly with these keys: {keys_str} "
+                    f"and extra info: {context_info}\n"
+                )
+            else:
+                prompt_text = (
+                    "You are a helpful assistant that transcribes audio input into text output. "
+                    f"Please transcribe the following audios streamingly with these keys: {keys_str}\n"
+                )
+
+        prompt_ids = tokenizer.encode(prompt_text, add_special_tokens=False)
+        prompt_tensor = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+        prompt_embeds = embed_tokens(prompt_tensor)
+
+        if audio_tensor.ndim == 1:
+            audio_tensor = audio_tensor.unsqueeze(0)
+        audio_tensor = audio_tensor.to(device)
+
+        if encode_mode == "encode_then_split":
+            all_features = self.encode_speech(audio_tensor)
+            total_tokens = all_features.shape[1]
+            audio_duration = audio_tensor.shape[1] / sample_rate
+            tps = total_tokens / audio_duration if audio_duration > 0 else 7.5
+            tokens_per_chunk = max(1, math.ceil(chunk_duration * tps))
+
+            _frame_dur = 3200 / sample_rate
+            _delay = text_audio_delay if text_audio_delay is not None else 0.5
+            lookahead_sec = round(_delay / _frame_dur) * _frame_dur
+            lookahead_tokens = int(round(lookahead_sec * tps))
+
+            feature_chunks = []
+            text_start = 0
+            while text_start < total_tokens:
+                audio_end = min(text_start + tokens_per_chunk + lookahead_tokens, total_tokens)
+                if audio_end > text_start:
+                    feature_chunks.append(all_features[:, text_start:audio_end, :])
+                text_start = min(text_start + tokens_per_chunk, total_tokens)
+        else:
+            total_samples = audio_tensor.shape[1]
+            chunk_samples = int(chunk_duration * sample_rate)
+
+            _frame_dur = 3200 / sample_rate
+            _delay = text_audio_delay if text_audio_delay is not None else 0.5
+            lookahead_sec = round(_delay / _frame_dur) * _frame_dur
+            lookahead_samples = int(lookahead_sec * sample_rate)
+
+            feature_chunks = []
+            text_start_sample = 0
+            _target_samples = chunk_samples + lookahead_samples
+            while text_start_sample < total_samples:
+                audio_end_sample = min(text_start_sample + chunk_samples + lookahead_samples, total_samples)
+                if audio_end_sample > text_start_sample:
+                    seg = audio_tensor[:, text_start_sample:audio_end_sample]
+                    if pad_last_chunk and seg.shape[1] < _target_samples:
+                        seg = F.pad(seg, (0, _target_samples - seg.shape[1]))
+                    chunk_features = self.encode_speech(seg)
+                    feature_chunks.append(chunk_features)
+                text_start_sample = min(text_start_sample + chunk_samples, total_samples)
+
+        total_chunks = len(feature_chunks)
+
+        outputs = self(
+            inputs_embeds=prompt_embeds,
+            use_cache=True,
+            return_dict=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        sp_start_embed = embed_tokens(torch.tensor([[sp_start_id]], device=device))
+        sp_end_embed = embed_tokens(torch.tensor([[sp_end_id]], device=device))
+
+        for chunk_idx, feat_chunk in enumerate(feature_chunks):
+            audio_embeds = torch.cat([sp_start_embed, feat_chunk, sp_end_embed], dim=1)
+
+            outputs = self(
+                inputs_embeds=audio_embeds,
+                past_key_values=past_key_values,
+                use_cache=True,
+                return_dict=True,
+            )
+            past_key_values = outputs.past_key_values
+            next_logits = outputs.logits[:, -1:, :]
+
+            chunk_tokens = []
+            for _ in range(max_new_tokens_per_chunk):
+                logits = next_logits[:, -1, :]
+
+                if repetition_penalty != 1.0 and chunk_tokens:
+                    prev_ids = torch.tensor(chunk_tokens, device=logits.device)
+                    prev_logits = logits[:, prev_ids]
+                    prev_logits = torch.where(
+                        prev_logits > 0,
+                        prev_logits / repetition_penalty,
+                        prev_logits * repetition_penalty,
+                    )
+                    logits[:, prev_ids] = prev_logits
+
+                if temperature <= 0:
+                    next_token_id = torch.argmax(logits, dim=-1).item()
+                else:
+                    probs = F.softmax(logits / temperature, dim=-1)
+                    next_token_id = torch.multinomial(probs, num_samples=1).squeeze(-1).item()
+
+                if next_token_id == text_chunk_end_id or next_token_id == eos_id:
+                    break
+
+                chunk_tokens.append(next_token_id)
+
+                next_embed = embed_tokens(torch.tensor([[next_token_id]], device=device))
+                outputs = self(
+                    inputs_embeds=next_embed,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                    return_dict=True,
+                )
+                past_key_values = outputs.past_key_values
+                next_logits = outputs.logits
+
+            tce_embed = embed_tokens(torch.tensor([[text_chunk_end_id]], device=device))
+            outputs = self(
+                inputs_embeds=tce_embed,
+                past_key_values=past_key_values,
+                use_cache=True,
+                return_dict=True,
+            )
+            past_key_values = outputs.past_key_values
+
+            chunk_text = tokenizer.decode(chunk_tokens, skip_special_tokens=True)
+            for _st in ['<|text_chunk_end|>', '<|object_ref_start|>', '<|object_ref_end|>',
+                        '<|box_start|>', '<|speech_start|>', '<|speech_end|>', '<|speech_pad|>']:
+                chunk_text = chunk_text.replace(_st, '')
+            yield chunk_idx, total_chunks, chunk_text
+
+    @torch.no_grad()
+    def init_streaming_state(self, tokenizer, context_info: str = None):
+        """Streaming model: build the initial KV cache and cached embeddings."""
+        device = next(self.parameters()).device
+        embed_tokens = self.get_input_embeddings()
+
+        keys_str = "speaker, content"
+        if context_info:
+            prompt_text = (
+                "You are a helpful assistant that transcribes audio input into text output. "
+                f"Please transcribe the following audios streamingly with these keys: {keys_str} "
+                f"and extra info: {context_info}\n"
+            )
+        else:
+            prompt_text = (
+                "You are a helpful assistant that transcribes audio input into text output. "
+                f"Please transcribe the following audios streamingly with these keys: {keys_str}\n"
+            )
+
+        prompt_ids = tokenizer.encode(prompt_text, add_special_tokens=False)
+        prompt_tensor = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+        prompt_embeds = embed_tokens(prompt_tensor)
+
+        outputs = self(
+            inputs_embeds=prompt_embeds,
+            use_cache=True,
+            return_dict=True,
+        )
+
+        return {
+            "past_key_values": outputs.past_key_values,
+            "sp_start_embed": embed_tokens(torch.tensor([[tokenizer.speech_start_id]], device=device)),
+            "sp_end_embed": embed_tokens(torch.tensor([[tokenizer.speech_end_id]], device=device)),
+            "text_chunk_end_id": tokenizer.text_chunk_end_id,
+            "eos_id": tokenizer.eos_token_id,
+            "embed_tokens": embed_tokens,
+        }
+
+    @torch.no_grad()
+    def streaming_generate_step(
+        self,
+        audio_features: torch.FloatTensor,
+        streaming_state: dict,
+        tokenizer,
+        max_new_tokens: int = 256,
+        temperature: float = 0.0,
+        on_first_token: Optional[Callable[[int], None]] = None,
+    ) -> Tuple[str, dict]:
+        """Streaming model: advance one audio chunk against the running KV cache."""
+        device = next(self.parameters()).device
+        past_key_values = streaming_state["past_key_values"]
+        sp_start_embed = streaming_state["sp_start_embed"]
+        sp_end_embed = streaming_state["sp_end_embed"]
+        text_chunk_end_id = streaming_state["text_chunk_end_id"]
+        eos_id = streaming_state["eos_id"]
+        embed_tokens = streaming_state["embed_tokens"]
+
+        audio_embeds = torch.cat([sp_start_embed, audio_features, sp_end_embed], dim=1)
+
+        outputs = self(
+            inputs_embeds=audio_embeds,
+            past_key_values=past_key_values,
+            use_cache=True,
+            return_dict=True,
+        )
+        past_key_values = outputs.past_key_values
+        next_logits = outputs.logits[:, -1:, :]
+
+        chunk_tokens = []
+        for _ in range(max_new_tokens):
+            if temperature <= 0:
+                next_token_id = torch.argmax(next_logits[:, -1, :], dim=-1).item()
+            else:
+                probs = F.softmax(next_logits[:, -1, :] / temperature, dim=-1)
+                next_token_id = torch.multinomial(probs, num_samples=1).squeeze(-1).item()
+
+            if next_token_id == text_chunk_end_id or next_token_id == eos_id:
+                break
+
+            chunk_tokens.append(next_token_id)
+            if len(chunk_tokens) == 1 and on_first_token is not None:
+                on_first_token(next_token_id)
+
+            next_embed = embed_tokens(torch.tensor([[next_token_id]], device=device))
+            outputs = self(
+                inputs_embeds=next_embed,
+                past_key_values=past_key_values,
+                use_cache=True,
+                return_dict=True,
+            )
+            past_key_values = outputs.past_key_values
+            next_logits = outputs.logits
+
+        tce_embed = embed_tokens(torch.tensor([[text_chunk_end_id]], device=device))
+        outputs = self(
+            inputs_embeds=tce_embed,
+            past_key_values=past_key_values,
+            use_cache=True,
+            return_dict=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        streaming_state["past_key_values"] = past_key_values
+
+        chunk_text = tokenizer.decode(chunk_tokens, skip_special_tokens=True)
+        for _st in ['<|text_chunk_end|>', '<|object_ref_start|>', '<|object_ref_end|>',
+                    '<|box_start|>', '<|speech_start|>', '<|speech_end|>', '<|speech_pad|>']:
+            chunk_text = chunk_text.replace(_st, '')
+
+        return chunk_text, streaming_state
 
     def prepare_inputs_for_generation(
         self,
