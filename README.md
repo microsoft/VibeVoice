@@ -34,6 +34,7 @@
 - ⭐️ VibeVoice-ASR is natively multilingual, supporting over 50 languages — check the [supported languages](docs/vibevoice-asr.md#language-distribution) for details.
 - 🔥 The VibeVoice-ASR [finetuning code](finetuning-asr/README.md) is now available!
 - ⚡️ **vLLM inference** is now supported for faster inference; see [vllm-asr](docs/vibevoice-vllm-asr.md) for more details.
+- 🎤 **Streaming recognition** transcribes while the audio is still arriving, emitting text once per chunk; see [asr-streaming](docs/vibevoice-asr-streaming.md), or [vllm-asr-streaming](docs/vibevoice-vllm-asr-streaming.md) to serve it.
 - 📑 [VibeVoice-ASR Technique Report](https://arxiv.org/pdf/2601.18184) is available.
 
 2025-12-16: 📣 We added experimental speakers to <a href="docs/vibevoice-realtime-0.5b.md"><strong>VibeVoice‑Realtime‑0.5B</strong></a> for exploration, including multilingual voices in nine languages (DE, FR, IT, JP, KR, NL, PL, PT, ES) and 11 distinct English style voices. [Try it](docs/vibevoice-realtime-0.5b.md#optional-more-experimental-voices). More speaker types will be added over time.
@@ -62,6 +63,7 @@ For more information, demos, and examples, please visit our [Project Page](https
 | Model |   Weight | Quick Try |
 |-------|--------------|---------|
 | VibeVoice-ASR-7B | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR) |  [Playground](https://aka.ms/vibevoice-asr) |
+| VibeVoice-ASR-Streaming | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR-Streaming) | [Documentation](docs/vibevoice-asr-streaming.md) |
 | VibeVoice-ASR-BitNet (CPU) | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR-BitNet) | [VibeASR.cpp](https://github.com/microsoft/VibeASR.cpp) |
 | VibeVoice-TTS-1.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-1.5B) | Disabled |
 | VibeVoice-Realtime-0.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B) | [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb) |
@@ -84,7 +86,10 @@ For more information, demos, and examples, please visit our [Project Page](https
 - **📝 Rich Transcription (Who, When, What)**:
   The model jointly performs ASR, diarization, and timestamping, producing a structured output that indicates *who* said *what* and *when*.
 
-[📖 Documentation](docs/vibevoice-asr.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-ASR) | [🎮 Playground](https://aka.ms/vibevoice-asr) | [🛠️ Finetuning](finetuning-asr/README.md) |  [📊 Paper](docs/VibeVoice-ASR-Report.pdf)
+- **🎤 Streaming Recognition**:
+  A [streaming variant](docs/vibevoice-asr-streaming.md) transcribes while the audio is still arriving, emitting text once per audio chunk rather than waiting for the recording to end.
+
+[📖 Documentation](docs/vibevoice-asr.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-ASR) | [🎮 Playground](https://aka.ms/vibevoice-asr) | [🛠️ Finetuning](finetuning-asr/README.md) |  [📊 Paper](docs/VibeVoice-ASR-Report.pdf) | [🎤 Streaming](docs/vibevoice-asr-streaming.md)
 
 
 <p align="center">
