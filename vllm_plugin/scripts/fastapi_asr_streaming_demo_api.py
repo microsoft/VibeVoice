@@ -228,6 +228,61 @@ PAGE = """<!doctype html>
          gap:10px; flex-wrap:wrap; margin-bottom:12px; }
   .bar button { min-height:32px; padding:6px 12px; font-size:13px; }
   .mut { color:var(--faint); font-weight:400; }
+
+  @media (max-width: 720px) {
+    header {
+      padding: 14px 16px;
+    }
+
+    main {
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 12px;
+      min-height: auto;
+    }
+
+    .panel {
+      padding: 14px;
+    }
+
+    button {
+      min-height: 44px;
+    }
+
+    .panel > .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+    }
+
+    .panel > .row button {
+      width: 100%;
+    }
+
+    .bar {
+      align-items: flex-start;
+    }
+
+    .bar > .row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      width: 100%;
+    }
+
+    .bar button {
+      width: 100%;
+    }
+
+    input[type=text],
+    input[type=number],
+    input[type=file] {
+      font-size: 16px;
+    }
+
+    #out {
+      min-height: 240px;
+    }
+  }
 </style>
 <script>
 // Runs before first paint so the page does not flash the wrong theme. Follows
