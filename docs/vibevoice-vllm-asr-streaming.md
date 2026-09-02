@@ -1,6 +1,6 @@
 # VibeVoice vLLM Streaming ASR Deployment
 
-<a href="https://huggingface.co/microsoft/VibeVoice-ASR-Streaming"><img alt="Huggingface" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-VibeVoice--ASR--Streaming-blue"></a>
+<a href="https://huggingface.co/microsoft/VibeVoice-ASR-Streaming-7B"><img alt="Huggingface" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-VibeVoice--ASR--Streaming-blue"></a>
 
 Deploy VibeVoice ASR Streaming model as a high-performance API service using [vLLM](https://github.com/vllm-project/vllm). A session pushes audio while it is still being spoken and gets one transcript back per chunk, so text appears before the audio ends.
 

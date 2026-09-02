@@ -27,12 +27,15 @@ cd VibeVoice
 pip install -e .
 ```
 
+3. Install ffmpeg, which both usages below need to decode audio
+```bash
+apt update && apt install ffmpeg -y
+```
+
 ## Usages
 
 ### Usage 1: Launch the FastAPI demo
 ```bash
-apt update && apt install ffmpeg -y # for demo
-
 python demo/vibevoice_asr_streaming_fastapi_demo.py --model_path [add the checkpoint path here]
 ```
 
