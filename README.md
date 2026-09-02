@@ -24,6 +24,8 @@
 
 <h3>📰 News</h3>
 
+<strong>2026-09-03: 🚀 We released <a href="https://huggingface.co/microsoft/VibeVoice-ASR-Streaming">VibeVoice-ASR-Streaming</a>, a unified streaming ASR model that continuously transcribes ''who said what'' as speech arrives, with support for customized hotwords and 10 languages. [<a href="https://github.com/microsoft/VibeVoice">Code</a>] [<a href="https://aka.ms/vibeasr">Demo</a>] [<a href="https://huggingface.co/collections/microsoft/vibevoice-68a2ef24a875c44be47b034f">Models</a>] [<a href="./docs/VibeVoiceASR_Streaming_Technical_Report.pdf">Report</a>]</strong>
+
 <strong>2026-07-23: ⚡ We released <a href="https://github.com/microsoft/VibeASR.cpp">VibeVoice-ASR-BitNet</a>, an edge CPU inference engine for VibeVoice-ASR. Through heterogeneous quantization (I8_S + I2_S), the model is compressed from 4.62 GB to 1.58 GB with real-time inference (RTF < 1) on 3+ CPU threads — no GPU required. [<a href="https://github.com/microsoft/VibeASR.cpp">Code</a>] [<a href="https://huggingface.co/microsoft/VibeVoice-ASR-BitNet">Models</a>] [<a href="https://arxiv.org/abs/2607.21075">Report</a>]</strong>
 
 <strong>2026-03-12: 🚀 VibeVoice-ASR is now integrated into <a href="https://labs.ai.azure.com/innovations/vibevoice-asr/">Azure AI Foundry Labs</a>! You can now explore and test our unified speech-to-text capabilities directly through Microsoft Foundry.</strong>
@@ -34,6 +36,7 @@
 - ⭐️ VibeVoice-ASR is natively multilingual, supporting over 50 languages — check the [supported languages](docs/vibevoice-asr.md#language-distribution) for details.
 - 🔥 The VibeVoice-ASR [finetuning code](finetuning-asr/README.md) is now available!
 - ⚡️ **vLLM inference** is now supported for faster inference; see [vllm-asr](docs/vibevoice-vllm-asr.md) for more details.
+- 🎤 **Streaming recognition** transcribes while the audio is still arriving, emitting text once per chunk; see [asr-streaming](docs/vibevoice-asr-streaming.md), or [vllm-asr-streaming](docs/vibevoice-vllm-asr-streaming.md) to serve it.
 - 📑 [VibeVoice-ASR Technique Report](https://arxiv.org/pdf/2601.18184) is available.
 
 2025-12-16: 📣 We added experimental speakers to <a href="docs/vibevoice-realtime-0.5b.md"><strong>VibeVoice‑Realtime‑0.5B</strong></a> for exploration, including multilingual voices in nine languages (DE, FR, IT, JP, KR, NL, PL, PT, ES) and 11 distinct English style voices. [Try it](docs/vibevoice-realtime-0.5b.md#optional-more-experimental-voices). More speaker types will be added over time.
@@ -62,6 +65,7 @@ For more information, demos, and examples, please visit our [Project Page](https
 | Model |   Weight | Quick Try |
 |-------|--------------|---------|
 | VibeVoice-ASR-7B | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR) |  [Playground](https://aka.ms/vibevoice-asr) |
+| VibeVoice-ASR-Streaming | [HF Link](https://huggingface.co/collections/microsoft/vibevoice-68a2ef24a875c44be47b034f) | [Documentation](docs/vibevoice-asr-streaming.md) |
 | VibeVoice-ASR-BitNet (CPU) | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR-BitNet) | [VibeASR.cpp](https://github.com/microsoft/VibeASR.cpp) |
 | VibeVoice-TTS-1.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-1.5B) | Disabled |
 | VibeVoice-Realtime-0.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B) | [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb) |
@@ -84,7 +88,10 @@ For more information, demos, and examples, please visit our [Project Page](https
 - **📝 Rich Transcription (Who, When, What)**:
   The model jointly performs ASR, diarization, and timestamping, producing a structured output that indicates *who* said *what* and *when*.
 
-[📖 Documentation](docs/vibevoice-asr.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-ASR) | [🎮 Playground](https://aka.ms/vibevoice-asr) | [🛠️ Finetuning](finetuning-asr/README.md) |  [📊 Paper](docs/VibeVoice-ASR-Report.pdf)
+- **🎤 Streaming Recognition**:
+  A [streaming variant](docs/vibevoice-asr-streaming.md) transcribes while the audio is still arriving, emitting text once per audio chunk rather than waiting for the recording to end.
+
+[📖 Documentation](docs/vibevoice-asr.md) | [🤗 Hugging Face](https://huggingface.co/microsoft/VibeVoice-ASR) | [🎮 Playground](https://aka.ms/vibevoice-asr) | [🛠️ Finetuning](finetuning-asr/README.md) |  [📊 Paper](docs/VibeVoice-ASR-Report.pdf) | [🎤 Streaming](docs/vibevoice-asr-streaming.md)
 
 
 <p align="center">

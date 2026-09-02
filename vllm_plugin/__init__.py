@@ -56,6 +56,10 @@ def register_vibevoice():
     # This name must match the "architectures" list in config.json
     ModelRegistry.register_model("VibeVoice", VibeVoiceForCausalLM)
     ModelRegistry.register_model("VibeVoiceForASRTraining", VibeVoiceForCausalLM)
+    # Streaming checkpoints declare their own architecture name. The decoder is
+    # identical -- streaming only changes how audio and text interleave in the
+    # prompt, which is handled in _get_prompt_updates.
+    ModelRegistry.register_model("VibeVoiceForASRStreamingTraining", VibeVoiceForCausalLM)
 
 
 # Note: This function is called via vllm.general_plugins entry point

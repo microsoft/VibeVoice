@@ -27,6 +27,21 @@ logger = logging.get_logger(__name__)
 SYSTEM_PROMPT = "You are a helpful assistant that transcribes audio input into text output in JSON format."
 
 
+def _ships_tokenizer(pretrained_model_name_or_path, **kwargs) -> bool:
+    """Whether a checkpoint carries its own tokenizer files."""
+    from transformers.utils import cached_file
+
+    if os.path.exists(os.path.join(str(pretrained_model_name_or_path),
+                                   "tokenizer_config.json")):
+        return True
+    try:
+        cached_file(pretrained_model_name_or_path, "tokenizer_config.json",
+                    **kwargs)
+        return True
+    except Exception:
+        return False
+
+
 class VibeVoiceASRProcessor: 
     """
     Processor for VibeVoice ASR (Automatic Speech Recognition) models.
@@ -134,11 +149,28 @@ class VibeVoiceASRProcessor:
         target_sample_rate = config.get("target_sample_rate", 24000)
         normalize_audio = config.get("normalize_audio", True)
         
-        # Load tokenizer
-        language_model_pretrained_name = config.get("language_model_pretrained_name", None) or kwargs.pop("language_model_pretrained_name", "Qwen/Qwen2.5-1.5B")
+        # Streaming model: its own tokenizer files win over any base-LM name,
+        # because <|text_chunk_end|> lives in them and not in the base vocabulary.
+        explicit_name = kwargs.pop("language_model_pretrained_name", None)
+        own_tokenizer = _ships_tokenizer(pretrained_model_name_or_path, **kwargs)
+        if own_tokenizer:
+            language_model_pretrained_name = pretrained_model_name_or_path
+        else:
+            language_model_pretrained_name = (
+                config.get("language_model_pretrained_name", None)
+                or explicit_name
+                or "Qwen/Qwen2.5-1.5B")
+        if explicit_name and explicit_name != language_model_pretrained_name:
+            # Dropping it silently surfaces much later as a vocabulary mismatch,
+            # by which point the argument looks like it was honoured.
+            logger.warning(
+                f"ignoring language_model_pretrained_name={explicit_name!r}: "
+                f"loading the tokenizer from {language_model_pretrained_name}, "
+                + ("which ships its own tokenizer files" if own_tokenizer
+                   else "as named in preprocessor_config.json"))
         logger.info(f"Loading tokenizer from {language_model_pretrained_name}")
-        
-        if 'qwen' in language_model_pretrained_name.lower():
+
+        if own_tokenizer or 'qwen' in str(language_model_pretrained_name).lower():
             tokenizer = VibeVoiceASRTextTokenizerFast.from_pretrained(
                 language_model_pretrained_name,
                 **kwargs
