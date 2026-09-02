@@ -143,8 +143,8 @@ so a checkpoint always runs at the geometry it was trained on.
     )
     parser.add_argument(
         "--model", "-m",
-        default="microsoft/VibeVoice-ASR-Streaming",
-        help="HuggingFace model ID or local path (default: microsoft/VibeVoice-ASR-Streaming)"
+        default="microsoft/VibeVoice-ASR-Streaming-7B",
+        help="HuggingFace model ID or local path (default: microsoft/VibeVoice-ASR-Streaming-7B)"
     )
     parser.add_argument(
         "--port", "-p",
