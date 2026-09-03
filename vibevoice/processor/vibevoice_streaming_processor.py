@@ -1,4 +1,6 @@
+import io
 import math
+import pickle
 import warnings
 from typing import List, Optional, Union, Dict, Any, Tuple
 import os
@@ -12,6 +14,71 @@ from transformers.utils import TensorType, logging
 from .vibevoice_tokenizer_processor import AudioNormalizer
 
 logger = logging.get_logger(__name__)
+
+
+# Globals that legitimately appear in the cached voice-prompt (.pt) files. Any
+# other global (e.g. os.system) is refused, so a tampered preset cannot execute
+# arbitrary code when it is loaded (CWE-502).
+_VOICE_PRESET_SAFE_GLOBALS = {
+    ("collections", "OrderedDict"),
+    ("transformers.modeling_outputs", "BaseModelOutputWithPast"),
+    ("transformers.cache_utils", "DynamicCache"),
+}
+
+
+class _VoicePresetUnpickler(pickle.Unpickler):
+    """Unpickler that only resolves the classes used by voice presets."""
+
+    def find_class(self, module, name):
+        if (module, name) in _VOICE_PRESET_SAFE_GLOBALS:
+            return super().find_class(module, name)
+        # torch tensor-rebuilding primitives; the storages they reference are
+        # restored by torch.load's persistent_load, not through find_class.
+        if module == "torch._utils" and name.startswith("_rebuild_"):
+            return super().find_class(module, name)
+        if module == "torch" and name.endswith("Storage"):
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(
+            f"Refusing to load disallowed global '{module}.{name}' from voice preset"
+        )
+
+
+class _RestrictedPickleModule:
+    """``pickle_module`` exposing the restricted unpickler to ``torch.load``.
+
+    ``torch.load`` uses ``Unpickler`` for the main payload and the module-level
+    ``load``/``loads`` for legacy-format metadata, so all three must enforce the
+    same restriction.
+    """
+
+    Unpickler = _VoicePresetUnpickler
+
+    @staticmethod
+    def load(file, **kwargs):
+        return _VoicePresetUnpickler(file, **kwargs).load()
+
+    @staticmethod
+    def loads(data, **kwargs):
+        return _VoicePresetUnpickler(io.BytesIO(data), **kwargs).load()
+
+
+def load_voice_preset(path, map_location=None):
+    """Load a cached voice-prompt file produced for streaming TTS.
+
+    The presets store ``transformers`` ``BaseModelOutputWithPast`` /
+    ``DynamicCache`` objects (``dict`` subclasses), which
+    ``torch.load(weights_only=True)`` cannot rebuild because its unpickler
+    forbids ``SETITEMS`` on ``dict`` subclasses. A restricted unpickler is used
+    instead: it permits only those container classes and torch's tensor
+    primitives, keeping the protection against arbitrary code execution that
+    ``weights_only=True`` was added for (CWE-502).
+    """
+    return torch.load(
+        path,
+        map_location=map_location,
+        pickle_module=_RestrictedPickleModule,
+        weights_only=False,
+    )
 
 
 class VibeVoiceStreamingProcessor:
