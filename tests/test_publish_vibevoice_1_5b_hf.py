@@ -71,7 +71,39 @@ class PublishVibeVoiceTests(unittest.TestCase):
                     ),
                 ],
             ):
-                with self.assertRaisesRegex(PUBLISH.ConversionError, "tracked changes"):
+                with self.assertRaisesRegex(PUBLISH.ConversionError, "uncommitted changes"):
+                    PUBLISH.assert_transformers_revision(checkout)
+
+    def test_rejects_untracked_transformers_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            checkout = Path(temporary_directory)
+            converter = (
+                checkout
+                / "src"
+                / "transformers"
+                / "models"
+                / "vibevoice"
+                / "convert_vibevoice_to_hf.py"
+            )
+            converter.parent.mkdir(parents=True)
+            converter.touch()
+            with patch.object(
+                PUBLISH.subprocess,
+                "run",
+                side_effect=[
+                    PUBLISH.subprocess.CompletedProcess(
+                        args=[],
+                        returncode=0,
+                        stdout=f"{PUBLISH.TRANSFORMERS_REVISION}\n",
+                    ),
+                    PUBLISH.subprocess.CompletedProcess(
+                        args=[],
+                        returncode=0,
+                        stdout="?? src/transformers/sidecar.py\n",
+                    ),
+                ],
+            ):
+                with self.assertRaisesRegex(PUBLISH.ConversionError, "uncommitted changes"):
                     PUBLISH.assert_transformers_revision(checkout)
 
     def test_reads_metadata_from_indexed_safetensors_headers(self) -> None:

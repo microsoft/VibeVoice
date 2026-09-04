@@ -204,7 +204,7 @@ def assert_transformers_revision(transformers_source: Path) -> Path:
         )
 
     clean_result = subprocess.run(
-        ["git", "-C", str(transformers_source), "status", "--porcelain", "--untracked-files=no"],
+        ["git", "-C", str(transformers_source), "status", "--porcelain"],
         check=False,
         capture_output=True,
         text=True,
@@ -212,7 +212,7 @@ def assert_transformers_revision(transformers_source: Path) -> Path:
     if clean_result.returncode:
         raise ConversionError(f"Cannot inspect Transformers checkout: {clean_result.stderr.strip()}")
     if clean_result.stdout:
-        raise ConversionError("Transformers checkout has tracked changes; use a clean pinned checkout.")
+        raise ConversionError("Transformers checkout has uncommitted changes; use a clean pinned checkout.")
     return converter_path
 
 
