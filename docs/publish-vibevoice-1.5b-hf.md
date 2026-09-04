@@ -43,7 +43,8 @@ python tools/release/convert_vibevoice_1_5b_hf.py \
 The output includes native safetensor shards, config, generation config,
 tokenizer, processor, chat template, model card, and
 `conversion-manifest.json`. The manifest records every pinned input and the
-strict tensor-alignment digest. The script has no upload option.
+strict tensor-alignment digest, including the clean VibeVoice release-tool
+commit. The script has no upload option.
 
 Only an owner authorized for the Microsoft Hugging Face namespace should
 publish the reviewed local artifact:

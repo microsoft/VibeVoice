@@ -106,6 +106,22 @@ class PublishVibeVoiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(PUBLISH.ConversionError, "uncommitted changes"):
                     PUBLISH.assert_transformers_revision(checkout)
 
+    def test_records_clean_release_tool_checkout(self) -> None:
+        expected_revision = "a" * 40
+        with patch.object(
+            PUBLISH.subprocess,
+            "run",
+            side_effect=[
+                PUBLISH.subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout=f"{expected_revision}\n",
+                ),
+                PUBLISH.subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+            ],
+        ):
+            self.assertEqual(PUBLISH.release_tool_revision(), expected_revision)
+
     def test_reads_metadata_from_indexed_safetensors_headers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             checkpoint = Path(temporary_directory)
@@ -217,7 +233,7 @@ class PublishVibeVoiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory)
             (output / "config.json").write_text("{}", encoding="utf-8")
-            PUBLISH.write_manifest(output, "f" * 64)
+            PUBLISH.write_manifest(output, "f" * 64, "a" * 40)
             manifest = json.loads((output / "conversion-manifest.json").read_text(encoding="utf-8"))
 
         self.assertEqual(
@@ -228,6 +244,7 @@ class PublishVibeVoiceTests(unittest.TestCase):
             manifest["canonical_converter"]["revision"],
             PUBLISH.TRANSFORMERS_REVISION,
         )
+        self.assertEqual(manifest["release_tool"]["revision"], "a" * 40)
         self.assertEqual(manifest["tensor_alignment"]["source_tensor_count"], 1204)
         self.assertEqual(
             manifest["native_reference"]["revision"],

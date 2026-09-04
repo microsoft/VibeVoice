@@ -23,6 +23,7 @@ QWEN_TOKENIZER_REPOSITORY = "Qwen/Qwen2.5-1.5B"
 QWEN_TOKENIZER_REVISION = "8faed761d45a263340a0528343f099c05c9a4323"
 NATIVE_REFERENCE_REPOSITORY = "vibevoice/VibeVoice-1.5B-hf"
 NATIVE_REFERENCE_REVISION = "edc39f80f5cae656da37baf8faa8f5502bf7081f"
+RELEASE_TOOL_REPOSITORY = "https://github.com/microsoft/VibeVoice.git"
 EXPECTED_TENSOR_COUNT = 1204
 
 REQUIRED_OUTPUT_FILES = (
@@ -176,6 +177,29 @@ def assert_tensor_metadata_matches(
     return mapping_digest(mapped)
 
 
+def git_head_from_clean_checkout(checkout: Path, description: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise ConversionError(f"Cannot resolve {description} checkout: {result.stderr.strip()}")
+
+    clean_result = subprocess.run(
+        ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=all"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if clean_result.returncode:
+        raise ConversionError(f"Cannot inspect {description} checkout: {clean_result.stderr.strip()}")
+    if clean_result.stdout:
+        raise ConversionError(f"{description} checkout has uncommitted changes; use a clean checkout.")
+    return result.stdout.strip()
+
+
 def assert_transformers_revision(transformers_source: Path) -> Path:
     transformers_source = transformers_source.resolve()
     converter_path = (
@@ -189,31 +213,17 @@ def assert_transformers_revision(transformers_source: Path) -> Path:
     if not converter_path.is_file():
         raise ConversionError(f"Pinned VibeVoice converter is absent: {converter_path}")
 
-    result = subprocess.run(
-        ["git", "-C", str(transformers_source), "rev-parse", "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode:
-        raise ConversionError(f"Cannot resolve the Transformers checkout: {result.stderr.strip()}")
-    actual_revision = result.stdout.strip()
+    actual_revision = git_head_from_clean_checkout(transformers_source, "Transformers")
     if actual_revision != TRANSFORMERS_REVISION:
         raise ConversionError(
             f"Transformers must be at {TRANSFORMERS_REVISION}, got {actual_revision}."
         )
-
-    clean_result = subprocess.run(
-        ["git", "-C", str(transformers_source), "status", "--porcelain"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if clean_result.returncode:
-        raise ConversionError(f"Cannot inspect Transformers checkout: {clean_result.stderr.strip()}")
-    if clean_result.stdout:
-        raise ConversionError("Transformers checkout has uncommitted changes; use a clean pinned checkout.")
     return converter_path
+
+
+def release_tool_revision() -> str:
+    repository_root = Path(__file__).resolve().parents[2]
+    return git_head_from_clean_checkout(repository_root, "VibeVoice release tooling")
 
 
 def import_canonical_converter(transformers_source: Path) -> Any:
@@ -348,7 +358,7 @@ complete release provenance and strict tensor-alignment result.
     )
 
 
-def write_manifest(output_dir: Path, mapping_sha256: str) -> None:
+def write_manifest(output_dir: Path, mapping_sha256: str, tool_revision: str) -> None:
     manifest = {
         "format_version": 1,
         "source": {
@@ -358,6 +368,10 @@ def write_manifest(output_dir: Path, mapping_sha256: str) -> None:
         "canonical_converter": {
             "repository": TRANSFORMERS_REPOSITORY,
             "revision": TRANSFORMERS_REVISION,
+        },
+        "release_tool": {
+            "repository": RELEASE_TOOL_REPOSITORY,
+            "revision": tool_revision,
         },
         "tokenizer_source": {
             "repository": QWEN_TOKENIZER_REPOSITORY,
@@ -430,6 +444,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    tool_revision = release_tool_revision()
     output_dir = args.output_dir.resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ConversionError(f"Output directory must be empty: {output_dir}")
@@ -448,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
         native_metadata,
         converter.map_old_key_to_new,
     )
-    write_manifest(output_dir, mapping_sha256)
+    write_manifest(output_dir, mapping_sha256, tool_revision)
     assert_native_auto_loading(output_dir)
     print(f"Validated {EXPECTED_TENSOR_COUNT} tensors and wrote {output_dir}")
     return 0
