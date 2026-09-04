@@ -1,0 +1,13 @@
+{
+  "audio_duration": 3.27,
+  "audio_path": "1.wav",
+  "segments": [
+    {
+      "speaker": 0,
+      "text": "wach kayn chi khdma khawya",
+      "start": 0.0,
+      "end": 3.27
+    }
+  ],
+  "customized_context": ["Moroccan Darija", "khdma", "khawya"]
+}

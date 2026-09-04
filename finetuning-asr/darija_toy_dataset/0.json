@@ -1,0 +1,13 @@
+{
+  "audio_duration": 2.97,
+  "audio_path": "0.wav",
+  "segments": [
+    {
+      "speaker": 0,
+      "text": "wach 3ndk lkhdma",
+      "start": 0.0,
+      "end": 2.97
+    }
+  ],
+  "customized_context": ["Moroccan Darija", "labas", "khdma", "bezzaf"]
+}
