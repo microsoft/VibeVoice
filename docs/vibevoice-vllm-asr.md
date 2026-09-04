@@ -150,6 +150,40 @@ docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api_auto_recover.p
 > - The audio/video file must be inside the mounted directory (`/app` in the container). Copy your files to the VibeVoice folder before testing.
 > - Hotwords help improve recognition of domain-specific terms like proper nouns, technical terms, and speaker names.
 
+### Direct API Request with Hotwords
+
+When calling `/v1/chat/completions` directly, pass customized hotwords in the user prompt.
+There is no separate `hotwords` field; the helper scripts embed them as extra context:
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "vibevoice",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant that transcribes audio input into text output in JSON format."
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "This is a 12.34 seconds audio, with extra info: Microsoft,VibeVoice\n\nPlease transcribe it with these keys: Start time, End time, Speaker ID, Content"
+          },
+          {
+            "type": "audio_url",
+            "audio_url": {
+              "url": "data:audio/wav;base64,<BASE64_AUDIO>"
+            }
+          }
+        ]
+      }
+    ]
+  }'
+```
+
 ### Environment Variables
 
 | Variable | Description | Default |
@@ -185,5 +219,4 @@ docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api_auto_recover.p
 4. **"Plugin not loaded"**
    - Verify installation: `pip show vibevoice`
    - Check entry point: `pip show -f vibevoice | grep entry`
-
 
