@@ -8,6 +8,7 @@ between batch processing and single-sample processing.
 
 import os
 import sys
+import gc
 import torch
 import numpy as np
 from pathlib import Path
@@ -68,7 +69,26 @@ class VibeVoiceASRBatchInference:
         self.model.eval()
         
         print(f"Model loaded successfully on {self.device}")
-    
+
+    def _release_memory(self):
+        """
+        Release cached device memory after a batch.
+
+        Each file/batch can produce very differently shaped tensors (audio
+        length varies), so the caching allocator's freed blocks from one
+        batch often can't be reused for the next batch's shapes. Left
+        unchecked, this fragmentation accumulates across files in a single
+        process and can OOM well before the model's true peak usage would.
+        """
+        gc.collect()
+        device_type = self.device.type if isinstance(self.device, torch.device) else str(self.device)
+        if device_type == "cuda" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        elif device_type == "xpu" and torch.xpu.is_available():
+            torch.xpu.empty_cache()
+        elif device_type == "mps" and torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+
     def _prepare_generation_config(
         self,
         max_new_tokens: int = 512,
@@ -202,7 +222,10 @@ class VibeVoiceASRBatchInference:
         
         print(f"  Total generation time: {generation_time:.2f}s")
         print(f"  Average time per sample: {generation_time/batch_size:.2f}s")
-        
+
+        del inputs, output_ids
+        self._release_memory()
+
         return results
     
     def transcribe_with_batching(
