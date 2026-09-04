@@ -8,6 +8,7 @@
 
 **Model:** [VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)<br>
 **Report:** [Technical Report](https://arxiv.org/pdf/2508.19205)<br>
+**Transformers-native publication:** [VibeVoice-1.5B-HF](https://huggingface.co/microsoft/VibeVoice-1.5B-HF) ([owner workflow](publish-vibevoice-1.5b-hf.md))<br>
 
 
 <div align="center">
