@@ -160,11 +160,26 @@ class StreamingTTSService:
             preset_path = self.voice_presets[key]
             print(f"[startup] Loading voice preset {key} from {preset_path}")
             print(f"[startup] Loading prefilled prompt from {preset_path}")
-            with torch.serialization.safe_globals([BaseModelOutputWithPast, DynamicCache]):
-                prefilled_outputs = torch.load(
-                    preset_path,
-                    map_location=self._torch_device,
-                    weights_only=True,
+            # Preset files store only plain dict/list/int/Tensor values (no
+            # custom classes), so this loads under weights_only=True with no
+            # safe_globals needed. BaseModelOutputWithPast/DynamicCache are
+            # reconstructed here instead of being unpickled directly, since
+            # torch's weights-only unpickler cannot rebuild those classes
+            # (see https://github.com/microsoft/VibeVoice/issues/392).
+            raw = torch.load(
+                preset_path,
+                map_location=self._torch_device,
+                weights_only=True,
+            )
+            prefilled_outputs = {}
+            for lm_key, lm_value in raw.items():
+                cache = DynamicCache()
+                cache._seen_tokens = lm_value["past_key_values"]["seen_tokens"]
+                cache.key_cache = lm_value["past_key_values"]["key_cache"]
+                cache.value_cache = lm_value["past_key_values"]["value_cache"]
+                prefilled_outputs[lm_key] = BaseModelOutputWithPast(
+                    last_hidden_state=lm_value["last_hidden_state"],
+                    past_key_values=cache,
                 )
             self._voice_cache[key] = prefilled_outputs
 
