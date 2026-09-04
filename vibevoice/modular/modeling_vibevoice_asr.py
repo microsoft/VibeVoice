@@ -332,6 +332,11 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
             
             # Combine acoustic and semantic features
             if speech_masks is not None:
+                # Under device_map="auto", acoustic_connector/semantic_connector can be
+                # dispatched to a different device than speech_masks (e.g. multi-GPU
+                # pipeline parallelism), and boolean-indexing requires the mask to be
+                # on the same device as the indexed tensor.
+                speech_masks = speech_masks.to(acoustic_features.device)
                 combined_features = acoustic_features[speech_masks] + semantic_features[speech_masks]
             else:
                 combined_features = acoustic_features + semantic_features
