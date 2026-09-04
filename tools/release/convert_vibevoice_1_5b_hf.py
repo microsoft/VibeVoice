@@ -202,6 +202,17 @@ def assert_transformers_revision(transformers_source: Path) -> Path:
         raise ConversionError(
             f"Transformers must be at {TRANSFORMERS_REVISION}, got {actual_revision}."
         )
+
+    clean_result = subprocess.run(
+        ["git", "-C", str(transformers_source), "status", "--porcelain", "--untracked-files=no"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if clean_result.returncode:
+        raise ConversionError(f"Cannot inspect Transformers checkout: {clean_result.stderr.strip()}")
+    if clean_result.stdout:
+        raise ConversionError("Transformers checkout has tracked changes; use a clean pinned checkout.")
     return converter_path
 
 

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +41,38 @@ class PublishVibeVoiceTests(unittest.TestCase):
             PUBLISH.NATIVE_REFERENCE_REVISION,
         ):
             self.assertRegex(revision, r"^[0-9a-f]{40}$")
+
+    def test_rejects_dirty_transformers_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            checkout = Path(temporary_directory)
+            converter = (
+                checkout
+                / "src"
+                / "transformers"
+                / "models"
+                / "vibevoice"
+                / "convert_vibevoice_to_hf.py"
+            )
+            converter.parent.mkdir(parents=True)
+            converter.touch()
+            with patch.object(
+                PUBLISH.subprocess,
+                "run",
+                side_effect=[
+                    PUBLISH.subprocess.CompletedProcess(
+                        args=[],
+                        returncode=0,
+                        stdout=f"{PUBLISH.TRANSFORMERS_REVISION}\n",
+                    ),
+                    PUBLISH.subprocess.CompletedProcess(
+                        args=[],
+                        returncode=0,
+                        stdout=" M src/transformers/models/vibevoice/modular_vibevoice.py\n",
+                    ),
+                ],
+            ):
+                with self.assertRaisesRegex(PUBLISH.ConversionError, "tracked changes"):
+                    PUBLISH.assert_transformers_revision(checkout)
 
     def test_reads_metadata_from_indexed_safetensors_headers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
