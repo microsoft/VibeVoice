@@ -295,7 +295,8 @@ def clip_and_encode_audio(
             sr = target_sr
         
         # Convert float32 audio to int16 for encoding
-        segment_data_int16 = (segment_data * 32768.0).astype(np.int16)
+        # Use 32767.0 instead of 32768.0 to avoid potential overflow
+        segment_data_int16 = np.clip(segment_data * 32767.0, -32767, 32767).astype(np.int16)
         
         # Convert to MP3 if pydub is available and use_mp3 is True
         if use_mp3 and HAS_PYDUB:
@@ -488,7 +489,8 @@ def slice_audio_to_temp(
     segment = audio_data[start_idx:end_idx]
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
     temp_file.close()
-    segment_int16 = (segment * 32768.0).astype(np.int16)
+    # Use 32767.0 instead of 32768.0 to avoid potential overflow
+    segment_int16 = np.clip(segment * 32767.0, -32767, 32767).astype(np.int16)
     sf.write(temp_file.name, segment_int16, sample_rate, subtype='PCM_16')
     return temp_file.name, None
 
