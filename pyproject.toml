@@ -23,7 +23,7 @@ dependencies = [
     "llvmlite>=0.40.0",
     "numba>=0.57.0",
     "diffusers",
-    "tqdm",
+    "tqdm>=4.68.2",
     "numpy",
     "scipy",
     "librosa",
