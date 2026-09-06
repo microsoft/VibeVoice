@@ -335,17 +335,16 @@ class StreamingTTSService:
         return pcm.tobytes()
 
 
-app = FastAPI()
+from contextlib import asynccontextmanager
 
-
-@app.on_event("startup")
-async def _startup() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     model_path = os.environ.get("MODEL_PATH")
     if not model_path:
         raise RuntimeError("MODEL_PATH not set in environment")
 
     device = os.environ.get("MODEL_DEVICE", "cuda")
-    
+
     service = StreamingTTSService(
         model_path=model_path,
         device=device
@@ -357,6 +356,10 @@ async def _startup() -> None:
     app.state.device = device
     app.state.websocket_lock = asyncio.Lock()
     print("[startup] Model ready.")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 def streaming_tts(text: str, **kwargs) -> Iterator[np.ndarray]:
