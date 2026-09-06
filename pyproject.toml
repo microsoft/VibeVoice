@@ -43,6 +43,9 @@ dependencies = [
 streamingtts = [
   "transformers==4.51.3", 
 ]
+vllm = [
+  "vllm==0.14.1",
+]
 
 [project.entry-points."vllm.general_plugins"]
 vibevoice = "vllm_plugin:register_vibevoice"
