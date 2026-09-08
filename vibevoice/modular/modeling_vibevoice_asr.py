@@ -439,10 +439,27 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
         context_info: str = None,
         encode_mode: str = "split_then_encode",
         repetition_penalty: float = 1.0,
+        exempt_numeral_tokens: bool = False,
         pad_last_chunk: bool = True,
     ):
         """Streaming model: chunked ASR inference over a full audio tensor."""
         device = next(self.parameters()).device
+
+        numeral_token_ids = None
+        if exempt_numeral_tokens and repetition_penalty != 1.0:
+            numeral_chars = set("0123456789０１２３４５６７８９零一二三四五六七八九十百千萬亿")
+            try:
+                vocab = tokenizer.get_vocab()
+                ids = [
+                    tid
+                    for token, tid in vocab.items()
+                    if (s := tokenizer.convert_tokens_to_string([token]).strip())
+                    and all(ch in numeral_chars for ch in s)
+                ]
+                if ids:
+                    numeral_token_ids = torch.tensor(sorted(set(ids)), device=device)
+            except Exception:
+                numeral_token_ids = None
 
         sp_start_id = tokenizer.speech_start_id
         sp_end_id = tokenizer.speech_end_id
@@ -544,13 +561,16 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
 
                 if repetition_penalty != 1.0 and chunk_tokens:
                     prev_ids = torch.tensor(chunk_tokens, device=logits.device)
-                    prev_logits = logits[:, prev_ids]
-                    prev_logits = torch.where(
-                        prev_logits > 0,
-                        prev_logits / repetition_penalty,
-                        prev_logits * repetition_penalty,
-                    )
-                    logits[:, prev_ids] = prev_logits
+                    if numeral_token_ids is not None:
+                        prev_ids = prev_ids[~torch.isin(prev_ids, numeral_token_ids)]
+                    if prev_ids.numel() > 0:
+                        prev_logits = logits[:, prev_ids]
+                        prev_logits = torch.where(
+                            prev_logits > 0,
+                            prev_logits / repetition_penalty,
+                            prev_logits * repetition_penalty,
+                        )
+                        logits[:, prev_ids] = prev_logits
 
                 if temperature <= 0:
                     next_token_id = torch.argmax(logits, dim=-1).item()
