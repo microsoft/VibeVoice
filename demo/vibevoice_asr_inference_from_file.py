@@ -8,6 +8,7 @@ between batch processing and single-sample processing.
 
 import os
 import sys
+import gc
 import torch
 import numpy as np
 from pathlib import Path
@@ -202,7 +203,15 @@ class VibeVoiceASRBatchInference:
         
         print(f"  Total generation time: {generation_time:.2f}s")
         print(f"  Average time per sample: {generation_time/batch_size:.2f}s")
-        
+
+        # Release per-batch tensors (inputs, KV cache, generated ids) so that
+        # freed CUDA blocks are returned to the allocator's free pool instead
+        # of accumulating as unreachable-but-cached memory across iterations.
+        del inputs, output_ids
+        if self.device == "cuda" or (isinstance(self.device, torch.device) and self.device.type == "cuda"):
+            torch.cuda.empty_cache()
+        gc.collect()
+
         return results
     
     def transcribe_with_batching(
