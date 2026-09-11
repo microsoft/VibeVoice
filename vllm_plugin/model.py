@@ -495,6 +495,20 @@ def _is_streaming_asr(hf_config) -> bool:
 class VibeVoiceProcessingInfo(BaseProcessingInfo):
     """Processing info for VibeVoice multimodal model."""
 
+    def get_data_parser(self) -> MultiModalDataParser:
+        """Data parser hook for vLLM releases where the processor's own
+        ``_get_data_parser`` (see ``VibeVoiceMultiModalProcessor`` below) is
+        dead code.
+
+        ``BaseMultiModalProcessor.__init__`` builds its data parser by
+        calling ``self._get_data_parser()`` on itself in vLLM <=0.14.x, but
+        calls ``self.info.get_data_parser()`` on this Info class from
+        vLLM 0.15+ onward. Defining the method in both places keeps 24kHz
+        resampling and the streaming "None hole" tolerance working across
+        that split without needing to know which vLLM version is installed.
+        """
+        return _NoneTolerantAudioParser(target_sr=24000)
+
     def get_hf_config(self):
         return self.ctx.get_hf_config()
 
@@ -717,17 +731,17 @@ class VibeVoiceDummyInputsBuilder(BaseDummyInputsBuilder[VibeVoiceProcessingInfo
             )
         }
 
-    def get_dummy_processor_inputs(
-        self,
-        seq_len: int,
-        mm_counts: Mapping[str, int],
-        mm_options: Mapping[str, Any] | None = None,
-    ) -> ProcessorInputs:
-        """Build ProcessorInputs for dummy profiling."""
-        return ProcessorInputs(
-            prompt=self.get_dummy_text(mm_counts),
-            mm_data=self.get_dummy_mm_data(seq_len, mm_counts, mm_options),
-        )
+    # Deliberately no `get_dummy_processor_inputs` override here.
+    #
+    # `ProcessorInputs` itself changed shape across vLLM releases: it takes a
+    # raw `mm_data` dict in vLLM <=0.14.x, but a pre-parsed `mm_data_items`
+    # (`MultiModalDataItems`, built via `info.parse_mm_data`) from vLLM 0.15+
+    # onward. `BaseDummyInputsBuilder.get_dummy_processor_inputs` already
+    # builds the right one for whichever vLLM is installed -- overriding it
+    # here (as this used to) pins the plugin to the old `mm_data=` shape and
+    # breaks the `mm_data_items` one on newer vLLM with a `TypeError` before
+    # profiling even starts. Falling through to the base implementation keeps
+    # both working.
 
 
 def _vibevoice_field_config(hf_inputs: Mapping[str, torch.Tensor]):
@@ -950,8 +964,24 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
         )
 
         if audio_token_id is None:
-            return []
-        
+            # An empty return here looks harmless, but it isn't: vLLM still
+            # expects one prompt-update entry per audio item further down the
+            # pipeline, and an empty list makes it index into an empty
+            # sequence inside `_merge_mm_kwargs`, surfacing as an opaque
+            # `IndexError: list index out of range` far from the real cause.
+            # Fail loudly here instead, with a fix a user can actually act on.
+            raise ValueError(
+                "The tokenizer for this model is missing the '<|AUDIO|>' "
+                "special token, so VibeVoice cannot expand the audio "
+                "placeholder in the prompt. This almost always means the "
+                "server was started without generating VibeVoice's "
+                "tokenizer files. Start vLLM via "
+                "`vllm_plugin/scripts/start_server.py` (which runs "
+                "`vllm_plugin/tools/generate_tokenizer_files.py` first) "
+                "instead of calling `vllm serve` directly, or run that "
+                "script against --model_path yourself before serving."
+            )
+
         # Get raw audio lengths (in samples, after resampling to 24kHz) from our stored data
         out_mm_data = out_mm_kwargs.get_data()
         raw_audio_lengths = out_mm_data.get("raw_audio_lengths", [])
