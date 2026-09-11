@@ -100,6 +100,12 @@ cd VibeVoice/
 pip install -e .[streamingtts]
 ```
 
+> **Troubleshooting:**
+> - `Directory cannot be installed in editable mode` / `editable mode currently requires a setuptools-based build`: your `pip`/`setuptools` predate [PEP 660](https://peps.python.org/pep-0660/) editable-install support. Upgrade them first, then retry:
+>   ```bash
+>   python -m pip install --upgrade "pip>=24.0" "setuptools>=64.0" wheel
+>   ```
+> - `zsh: no matches found: .[streamingtts]`: zsh treats the brackets as a glob pattern. Quote the argument instead: `pip install -e ".[streamingtts]"`.
 
 ## Usages
 
