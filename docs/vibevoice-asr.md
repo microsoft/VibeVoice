@@ -73,6 +73,11 @@ cd VibeVoice
 pip install -e .
 ```
 
+> **Troubleshooting:** if this fails with `Directory cannot be installed in editable mode` / `editable mode currently requires a setuptools-based build`, your `pip`/`setuptools` predate [PEP 660](https://peps.python.org/pep-0660/) editable-install support. Upgrade them first, then retry:
+> ```bash
+> python -m pip install --upgrade "pip>=24.0" "setuptools>=64.0" wheel
+> ```
+
 ## Usages
 
 ### Usage 1: Launch Gradio demo
