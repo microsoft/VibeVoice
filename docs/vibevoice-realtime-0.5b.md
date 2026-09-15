@@ -100,6 +100,12 @@ cd VibeVoice/
 pip install -e .[streamingtts]
 ```
 
+> **Troubleshooting:** on a non-NVIDIA-container base image (e.g. Ubuntu 24.04 / Debian-based), the system Python may refuse `pip install -e .` with an "externally-managed-environment" error ([PEP 668](https://peps.python.org/pep-0668/)), or conflict with distro-managed packages like `cryptography`. Install into a clean venv instead:
+> ```bash
+> python3 -m venv .venv
+> source .venv/bin/activate
+> pip install -e .[streamingtts]
+> ```
 
 ## Usages
 
