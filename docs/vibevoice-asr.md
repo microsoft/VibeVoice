@@ -73,6 +73,21 @@ cd VibeVoice
 pip install -e .
 ```
 
+### Hardware requirements: VRAM vs. audio duration
+
+The "60-minute single-pass" figure above assumes enough VRAM for the full 64K-token context — realistically an H100/A100-class (80GB) GPU, which is what the recommended `nvcr.io/nvidia/pytorch` container targets. On a 24GB consumer/prosumer card, the practical ceiling is lower. One user (see [issue #367](https://github.com/microsoft/VibeVoice/issues/367)) measured the following on an RTX 4090 (24GB VRAM) with default `sdpa` attention:
+
+| Audio duration | Result | Notes |
+|---|---|---|
+| 30 min | ✅ Success (~22GB peak VRAM) | |
+| 50 min | ❌ `torch.OutOfMemoryError` | |
+| 92 min | ❌ `torch.OutOfMemoryError` | |
+| 25 min chunks | ✅ Success per chunk | Separate invocations; each chunk gets independent speaker IDs, so cross-chunk speaker continuity needs manual stitching |
+
+Setting `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` did not change this. Whether `flash_attention_2` (see the install step above) raises the ceiling on 24GB cards has not been independently verified — if you've measured this, please share data on the issue.
+
+If you're VRAM-constrained, chunking the audio into shorter segments and stitching speaker labels afterward is the documented workaround for now.
+
 ## Usages
 
 ### Usage 1: Launch Gradio demo
