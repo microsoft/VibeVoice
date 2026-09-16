@@ -116,7 +116,7 @@ def main():
     model_dtype = torch.bfloat16 if args.device == "cuda" else torch.float32
     model = VibeVoiceASRForConditionalGeneration.from_pretrained(
         args.model_path,
-        dtype=model_dtype,
+        torch_dtype=model_dtype,
         attn_implementation=args.attn_implementation,
     ).to(args.device).eval()
 

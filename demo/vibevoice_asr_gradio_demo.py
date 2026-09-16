@@ -80,7 +80,7 @@ class VibeVoiceASRInference:
             # MPS: load onto CPU first, then move (device_map="mps" is not supported)
             self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
                 model_path,
-                dtype=dtype,
+                torch_dtype=dtype,
                 device_map=None,
                 attn_implementation=attn_implementation,
                 trust_remote_code=True
@@ -89,7 +89,7 @@ class VibeVoiceASRInference:
         elif device == "auto":
             self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
                 model_path,
-                dtype=dtype,
+                torch_dtype=dtype,
                 device_map="auto",
                 attn_implementation=attn_implementation,
                 trust_remote_code=True
@@ -97,7 +97,7 @@ class VibeVoiceASRInference:
         else:
             self.model = VibeVoiceASRForConditionalGeneration.from_pretrained(
                 model_path,
-                dtype=dtype,
+                torch_dtype=dtype,
                 device_map=device if device != "auto" else None,
                 attn_implementation=attn_implementation,
                 trust_remote_code=True
