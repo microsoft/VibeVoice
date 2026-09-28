@@ -1,0 +1,12 @@
+FROM vllm/vllm-openai:v0.14.1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -e .
+
+EXPOSE 8000
+ENTRYPOINT ["python3", "vllm_plugin/scripts/start_streaming_server.py", "--skip-deps"]
