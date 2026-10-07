@@ -14,6 +14,8 @@ from transformers.cache_utils import DynamicCache
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.utils import logging
 
+torch.serialization.add_safe_globals([BaseModelOutputWithPast, DynamicCache])
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 

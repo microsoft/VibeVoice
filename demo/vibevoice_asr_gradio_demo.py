@@ -5,6 +5,7 @@ VibeVoice ASR Gradio Demo
 
 import os
 import sys
+import uuid
 import torch
 import numpy as np
 import soundfile as sf
@@ -125,6 +126,7 @@ class VibeVoiceASRInference:
         repetition_penalty: float = 1.0,
         context_info: str = None,
         streamer: Optional[TextIteratorStreamer] = None,
+        stop_event: Optional[threading.Event] = None,
     ) -> dict:
         """
         Transcribe audio to text.
@@ -174,8 +176,9 @@ class VibeVoiceASRInference:
         if streamer is not None:
             generation_config["streamer"] = streamer
         
-        # Add stopping criteria for stop button support
-        generation_config["stopping_criteria"] = StoppingCriteriaList([StopOnFlag()])
+        # Add stopping criteria for stop button support (per-request event)
+        if stop_event is not None:
+            generation_config["stopping_criteria"] = StoppingCriteriaList([StopOnEvent(stop_event)])
         
         # Remove None values
         generation_config = {k: v for k, v in generation_config.items() if v is not None}
@@ -432,15 +435,38 @@ def extract_audio_segments(audio_path: str, segments: List[Dict]) -> List[Tuple[
 # Global variable to store the ASR model
 asr_model = None
 
-# Global stop flag for generation
-stop_generation_flag = False
+# Thread-safe registry of active per-request stop events keyed by request id.
+# The Stop button fires in its own Gradio event; it looks up the event via
+# gr.State-held request id so that only that request is stopped (concurrent
+# users are unaffected).
+_active_events: Dict[str, threading.Event] = {}
+_active_events_lock = threading.Lock()
 
 
-class StopOnFlag(StoppingCriteria):
-    """Custom stopping criteria that checks a global flag."""
+def _register_active_event(req_id: str, event: threading.Event) -> None:
+    with _active_events_lock:
+        _active_events[req_id] = event
+
+
+def _unregister_active_event(req_id: str) -> None:
+    with _active_events_lock:
+        _active_events.pop(req_id, None)
+
+
+def _stop_active_event(req_id: str) -> None:
+    with _active_events_lock:
+        evt = _active_events.get(req_id)
+    if evt is not None:
+        evt.set()
+
+
+class StopOnEvent(StoppingCriteria):
+    """Stopping criteria that checks a per-request threading.Event."""
+    def __init__(self, stop_event: threading.Event):
+        self.stop_event = stop_event
+
     def __call__(self, input_ids, scores, **kwargs):
-        global stop_generation_flag
-        return stop_generation_flag
+        return self.stop_event.is_set()
 
 
 def parse_time_to_seconds(val: Optional[str]) -> Optional[float]:
@@ -525,29 +551,28 @@ def transcribe_audio(
     top_p: float,
     do_sample: bool,
     repetition_penalty: float = 1.0,
-    context_info: str = ""
-) -> Generator[Tuple[str, str], None, None]:
+    context_info: str = "",
+    active_req_state: str = "",
+) -> Generator[Tuple[str, str, str], None, None]:
     """
     Transcribe audio and return results with audio segments (streaming version).
-    
-    Args:
-        audio_input: Audio file path or tuple (sample_rate, audio_data)
-        max_new_tokens: Maximum tokens to generate
-        temperature: Temperature for sampling (0 for greedy)
-        top_p: Top-p for nucleus sampling
-        do_sample: Whether to use sampling
-        context_info: Optional context information (e.g., hotwords, speaker names, topics)
-    
+    Uses a fresh per-request threading.Event so that concurrent requests don't
+    interfere when the Stop button is pressed.
+
     Yields:
-        Tuple of (raw_text, audio_segments_html)
+        Tuple of (raw_text, audio_segments_html, req_id_state)
     """
     if asr_model is None:
-        yield "❌ Please load a model first!", ""
+        yield "❌ Please load a model first!", "", active_req_state
         return
-    
+
     if not audio_path_input and audio_input is None:
-        yield "❌ Please provide audio input!", ""
+        yield "❌ Please provide audio input!", "", active_req_state
         return
+
+    req_id = uuid.uuid4().hex
+    stop_event = threading.Event()
+    _register_active_event(req_id, stop_event)
     
     try:
         print("[INFO] Transcription requested")
@@ -555,7 +580,7 @@ def transcribe_audio(
         end_sec = parse_time_to_seconds(end_time_input)
         print(f"[INFO] Parsed time range: start={start_sec}, end={end_sec}")
         if (start_time_input and start_sec is None) or (end_time_input and end_sec is None):
-            yield "❌ Invalid time format. Use seconds or hh:mm:ss.", ""
+            yield "❌ Invalid time format. Use seconds or hh:mm:ss.", "", req_id
             return
 
         audio_path = None
@@ -564,28 +589,24 @@ def transcribe_audio(
 
         if audio_path_input:
             candidate = Path(audio_path_input.strip())
-            # Security: validate file extension to prevent arbitrary file probing
             if candidate.suffix.lower() not in {e.lower() for e in COMMON_AUDIO_EXTS}:
-                yield "❌ Unsupported audio format.", ""
+                yield "❌ Unsupported audio format.", "", req_id
                 return
             if not candidate.exists():
-                yield f"❌ Provided path does not exist: {candidate}", ""
+                yield f"❌ Provided path does not exist: {candidate}", "", req_id
                 return
             audio_path = str(candidate)
             print(f"[INFO] Using provided audio path: {audio_path}")
-        # Get audio file path (Gradio Audio component returns tuple (sample_rate, audio_data) or file path)
         elif isinstance(audio_input, str):
             audio_path = audio_input
             print(f"[INFO] Using uploaded audio path: {audio_path}")
         elif isinstance(audio_input, tuple):
-            # Audio from microphone: (sample_rate, audio_data)
             sample_rate, audio_array = audio_input
             print(f"[INFO] Received microphone audio with sample_rate={sample_rate}")
         elif audio_path is None:
-            yield "❌ Invalid audio input format!", ""
+            yield "❌ Invalid audio input format!", "", req_id
             return
 
-        # If slicing is requested, load and slice audio
         if start_sec is not None or end_sec is not None:
             print("[INFO] Slicing audio per requested time range")
             if audio_array is None or sample_rate is None:
@@ -593,31 +614,28 @@ def transcribe_audio(
                     audio_array, sample_rate = load_audio_use_ffmpeg(audio_path, resample=False)
                     print("[INFO] Loaded audio for slicing via ffmpeg")
                 except Exception as exc:
-                    yield f"❌ Failed to load audio for slicing: {exc}", ""
+                    yield f"❌ Failed to load audio for slicing: {exc}", "", req_id
                     return
             sliced_path, err = slice_audio_to_temp(audio_array, sample_rate, start_sec, end_sec)
             if err:
-                yield f"❌ {err}", ""
+                yield f"❌ {err}", "", req_id
                 return
             audio_path = sliced_path
             print(f"[INFO] Sliced audio written to temp file: {audio_path}")
         elif audio_array is not None and sample_rate is not None:
-            # no slicing but microphone input: write to temp file
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
             audio_path = temp_file.name
             temp_file.close()
             audio_data_int16 = (audio_array * 32768.0).astype(np.int16)
             sf.write(audio_path, audio_data_int16, sample_rate, subtype='PCM_16')
             print(f"[INFO] Microphone audio saved to temp file: {audio_path}")
-        
-        # Create streamer for real-time output
+
         streamer = TextIteratorStreamer(
             asr_model.processor.tokenizer, 
             skip_prompt=True, 
             skip_special_tokens=True
         )
         
-        # Store result in a mutable container for the thread
         result_container = {"result": None, "error": None}
         
         def run_transcription():
@@ -630,63 +648,58 @@ def transcribe_audio(
                     do_sample=do_sample,
                     repetition_penalty=repetition_penalty,
                     context_info=context_info if context_info and context_info.strip() else None,
-                    streamer=streamer
+                    streamer=streamer,
+                    stop_event=stop_event,
                 )
             except Exception as e:
                 result_container["error"] = str(e)
                 traceback.print_exc()
         
-        # Start transcription in background thread
         print("[INFO] Starting model transcription (streaming mode)")
         start_time = time.time()
         transcription_thread = threading.Thread(target=run_transcription)
         transcription_thread.start()
         
-        # Yield streaming output
         generated_text = ""
         token_count = 0
         for new_text in streamer:
+            if stop_event.is_set():
+                break
             generated_text += new_text
             token_count += 1
             elapsed = time.time() - start_time
-            # Show streaming output with live stats, format for readability
             formatted_text = generated_text.replace('},', '},\n')
             streaming_output = f"--- 🔴 LIVE Streaming Output (tokens: {token_count}, time: {elapsed:.1f}s) ---\n{formatted_text}"
-            yield streaming_output, "<div style='padding: 20px; text-align: center; color: #6c757d;'>⏳ Generating transcription... Audio segments will appear after completion.</div>"
+            if stop_event.is_set():
+                streaming_output += "\n⏹️ Generation stopped by user."
+            yield streaming_output, "<div style='padding: 20px; text-align: center; color: #6c757d;'>⏳ Generating transcription... Audio segments will appear after completion.</div>", req_id
         
-        # Wait for thread to complete
         transcription_thread.join()
         
         if result_container["error"]:
-            yield f"❌ Error during transcription: {result_container['error']}", ""
+            yield f"❌ Error during transcription: {result_container['error']}", "", req_id
             return
         
         result = result_container["result"]
         generation_time = time.time() - start_time
         
-        # Get input token statistics
         input_tokens = result.get('input_tokens', {})
         speech_tokens = input_tokens.get('speech', 0)
         text_tokens = input_tokens.get('text', 0)
         padding_tokens = input_tokens.get('padding', 0)
         total_input = input_tokens.get('total', 0)
         
-        # Format final raw output with input/output token stats
         raw_output = f"--- ✅ Raw Output ---\n"
         raw_output += f"📥 Input: {total_input} tokens (🎤 speech: {speech_tokens}, 📝 text: {text_tokens}, ⬜ pad: {padding_tokens})\n"
         raw_output += f"📤 Output: {token_count} tokens | ⏱️ Time: {generation_time:.2f}s\n"
         raw_output += f"---\n"
-        # Format raw text for better readability: add newline after each dict (},)
         formatted_raw_text = result['raw_text'].replace('},', '},\n')
         raw_output += formatted_raw_text
         
-        # Debug: print raw output to console
         print(f"[DEBUG] Raw model output:")
         print(f"[DEBUG] {result['raw_text']}")
         print(f"[DEBUG] Found {len(result['segments'])} segments")
         
-        # Create audio segments with server-side encoding (low quality for minimal transfer)
-        # Using: 16kHz mono MP3 @ 32kbps = ~4KB per second of audio
         audio_segments_html = ""
         segments = result['segments']
         
@@ -694,19 +707,16 @@ def transcribe_audio(
             num_segments = len(segments)
             print(f"[INFO] Creating per-segment audio clips ({num_segments} segments, 16kHz mono MP3 @ 32kbps)")
             
-            # Extract all audio segments efficiently (load audio only once)
             audio_segments = extract_audio_segments(audio_path, segments)
             print("[INFO] Completed creating audio clips")
             
-            # Calculate approximate total size
             total_duration = sum(
                 (seg.get('end_time', 0) - seg.get('start_time', 0)) 
                 for seg in segments 
                 if isinstance(seg.get('start_time'), (int, float)) and isinstance(seg.get('end_time'), (int, float))
             )
-            approx_size_kb = total_duration * 4  # ~4KB per second at 32kbps
+            approx_size_kb = total_duration * 4
             
-            # Add CSS for theme-aware styling
             theme_css = """
             <style>
             :root {
@@ -822,7 +832,6 @@ def transcribe_audio(
             audio_segments_html = theme_css
             audio_segments_html += f"<div class='audio-segments-container'>"
             
-            # Add format info
             format_info = "MP3 32kbps 16kHz mono" if HAS_PYDUB else "WAV 16kHz"
             audio_segments_html += f"<h3 class='segments-title'>🔊 Audio Segments ({num_segments} segments)"
             audio_segments_html += f"<span class='size-badge'>📦 ~{approx_size_kb:.0f}KB ({format_info})</span></h3>"
@@ -835,7 +844,6 @@ def transcribe_audio(
                 speaker_id = seg.get('speaker_id', 'N/A')
                 content = seg.get('text', '')
                 
-                # Format times nicely
                 start_str = f"{start_time:.2f}" if isinstance(start_time, (int, float)) else str(start_time)
                 end_str = f"{end_time:.2f}" if isinstance(end_time, (int, float)) else str(end_time)
                 
@@ -855,7 +863,6 @@ def transcribe_audio(
                 """
                 
                 if audio_src:
-                    # Detect format from data URI
                     audio_type = 'audio/mp3' if 'audio/mp3' in audio_src else 'audio/wav'
                     audio_segments_html += f"""
                     <audio controls class='segment-audio' preload='none'>
@@ -905,13 +912,16 @@ def transcribe_audio(
             </div>
             """
         
-        # Final yield with complete results
-        yield raw_output, audio_segments_html
+        if stop_event.is_set():
+            raw_output += "\n⏹️ Generation stopped by user."
+        yield raw_output, audio_segments_html, req_id
         
     except Exception as e:
         print(f"Error during transcription: {e}")
         print(traceback.format_exc())
-        yield f"❌ Error during transcription: {str(e)}", ""
+        yield f"❌ Error during transcription: {str(e)}", "", req_id
+    finally:
+        _unregister_active_event(req_id)
 
 
 def _detect_device_and_attn(
@@ -1120,31 +1130,24 @@ def create_gradio_interface(
                         audio_segments_output = gr.HTML(
                             label="Play individual segments to verify accuracy"
                         )
-        
+
+        # Per-session state holding the active request id (so Stop only halts the
+        # current user's transcription, even with default_concurrency_limit=3).
+        active_req_state = gr.State(value="")
+
         # Event handlers
         do_sample_checkbox.change(
             fn=lambda x: gr.update(visible=x),
             inputs=[do_sample_checkbox],
             outputs=[sampling_params]
         )
-        
-        def reset_stop_flag():
-            """Reset stop flag before starting transcription."""
-            global stop_generation_flag
-            stop_generation_flag = False
-        
-        def set_stop_flag():
-            """Set stop flag to interrupt generation."""
-            global stop_generation_flag
-            stop_generation_flag = True
+
+        def _request_stop(req_id: str):
+            if req_id:
+                _stop_active_event(req_id)
             return "⏹️ Stop requested..."
-        
+
         transcribe_button.click(
-            fn=reset_stop_flag,
-            inputs=[],
-            outputs=[],
-            queue=False
-        ).then(
             fn=transcribe_audio,
             inputs=[
                 audio_input,
@@ -1156,14 +1159,15 @@ def create_gradio_interface(
                 top_p_slider,
                 do_sample_checkbox,
                 repetition_penalty_slider,
-                context_info_input
+                context_info_input,
+                active_req_state,
             ],
-            outputs=[raw_output, audio_segments_output]
+            outputs=[raw_output, audio_segments_output, active_req_state]
         )
-        
+
         stop_button.click(
-            fn=set_stop_flag,
-            inputs=[],
+            fn=_request_stop,
+            inputs=[active_req_state],
             outputs=[raw_output],
             queue=False
         )
