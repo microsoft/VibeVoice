@@ -58,7 +58,7 @@ def load_model(model_path: str, device: str, attn_implementation: str):
 
     model = VibeVoiceASRForConditionalGeneration.from_pretrained(
         model_path,
-        dtype=torch.bfloat16,
+        torch_dtype=torch.bfloat16,
         device_map=device,
         attn_implementation=attn_implementation,
     ).eval()
