@@ -27,6 +27,7 @@ Run:
 import argparse
 import asyncio
 import base64
+import binascii
 import json
 import logging
 import re
@@ -35,10 +36,8 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
-from urllib.parse import urlparse
 
 import numpy as np
-import requests
 import uvicorn
 from fastapi import (FastAPI, HTTPException, Request, WebSocket,
                      WebSocketDisconnect)
@@ -351,27 +350,26 @@ class StreamingSession:
 
 # --- transport ------------------------------------------------------------
 
-def _fetch_url(url: str, timeout: int) -> bytes:
-    """Fetch audio over http(s), refusing other schemes and oversized bodies."""
-    if urlparse(url).scheme not in ("http", "https"):
-        raise HTTPException(status_code=400,
-                            detail="audio_url must be http or https")
+def _decode_audio_base64(encoded: str) -> bytes:
+    """Decode inline audio, rejecting malformed or oversized input."""
+    if len(encoded) > 4 * ((MAX_AUDIO_BYTES + 2) // 3):
+        raise HTTPException(status_code=413,
+                            detail=f"Audio exceeds {MAX_AUDIO_BYTES} bytes")
     try:
-        resp = requests.get(url, timeout=timeout, stream=True)
-        resp.raise_for_status()
-        body = resp.raw.read(MAX_AUDIO_BYTES + 1, decode_content=True)
-    except requests.RequestException as exc:
+        body = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
         raise HTTPException(status_code=400,
-                            detail=f"Failed to fetch audio_url: {exc}") from None
+                            detail="Invalid base64 audio") from None
+    if not body:
+        raise HTTPException(status_code=400, detail="Audio is empty")
     if len(body) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413,
-                            detail=f"audio_url body exceeds {MAX_AUDIO_BYTES} bytes")
+                            detail=f"Audio exceeds {MAX_AUDIO_BYTES} bytes")
     return body
 
 
 class TranscribeRequest(BaseModel):
     audio_base64: Optional[str] = Field(None, description="Base64 audio bytes.")
-    audio_url: Optional[str] = Field(None, description="Audio URL if no base64.")
     context_info: Optional[str] = Field(None, description="Hotwords / context.")
     max_tokens: int = Field(256, ge=1, le=2048)
     # Greedy is the reference decoding config; 2.0 is where the demo's slider
@@ -383,11 +381,10 @@ class TranscribeRequest(BaseModel):
 
     def audio_bytes(self) -> bytes:
         if self.audio_base64:
-            return base64.b64decode(self.audio_base64)
-        if self.audio_url:
-            return _fetch_url(self.audio_url, timeout=10)
+            return _decode_audio_base64(self.audio_base64)
         raise HTTPException(status_code=400,
-                            detail="audio_base64 or audio_url is required")
+                            detail="audio_base64 is required; remote audio URLs "
+                                   "are not supported")
 
 
 class TranscribeResponse(BaseModel):
@@ -403,7 +400,6 @@ class TranscribeResponse(BaseModel):
 
 class BatchAudioItem(BaseModel):
     audio_base64: Optional[str] = None
-    audio_url: Optional[str] = None
 
 
 class BatchTranscribeRequest(BaseModel):
@@ -436,9 +432,8 @@ def _new_session(engine: VibeVoiceAsyncEngine,
 
 async def _run_clip(engine: VibeVoiceAsyncEngine,
                     req: TranscribeRequest) -> TranscribeResponse:
-    # Both of these block, and both go to a thread for the same reason: a URL
-    # fetch waits on the network and ffmpeg shells out, either of which would
-    # otherwise stall the event loop for every other in-flight session.
+    # Decode base64 and run ffmpeg off the event loop so large clips do not
+    # stall every other in-flight session.
     raw = await asyncio.to_thread(req.audio_bytes)
     sample_rate = engine.geometry.sample_rate
     audio = await asyncio.to_thread(load_audio_bytes, raw, sample_rate)
@@ -489,10 +484,18 @@ def _audio_from_messages(messages: list) -> bytes:
         for part in content:
             if part.get("type") != "audio_url":
                 continue
-            url = (part.get("audio_url") or {}).get("url", "")
-            if url.startswith("data:"):
-                return base64.b64decode(url.split(",", 1)[1])
-            return _fetch_url(url, timeout=30)
+            audio_url = part.get("audio_url")
+            url = audio_url.get("url") if isinstance(audio_url, dict) else None
+            if not isinstance(url, str) or not url.startswith("data:"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="audio_url must be a base64 data URI; remote audio "
+                           "URLs are not supported")
+            header, separator, encoded = url.partition(",")
+            if not separator or not header.endswith(";base64"):
+                raise HTTPException(status_code=400,
+                                    detail="audio_url must be a base64 data URI")
+            return _decode_audio_base64(encoded)
     raise HTTPException(status_code=400, detail="No audio_url part in messages")
 
 
@@ -603,7 +606,6 @@ def create_app(config: ServerConfig) -> FastAPI:
         subs = [
             TranscribeRequest(
                 audio_base64=item.audio_base64,
-                audio_url=item.audio_url,
                 context_info=req.context_info,
                 max_tokens=req.max_tokens,
                 temperature=req.temperature,
@@ -642,8 +644,7 @@ def create_app(config: ServerConfig) -> FastAPI:
             # malformed body or an out-of-range temperature returns 500, which
             # reads as a server fault for what is a client mistake.
             raise HTTPException(status_code=400, detail=str(exc))
-        # To a thread for the same reason as _run_clip: an audio_url part is
-        # fetched over the network, and a stall here stalls every other session.
+        # Decode inline base64 off the event loop, as in _run_clip.
         audio_bytes = await asyncio.to_thread(_audio_from_messages, messages)
         cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
         sample_rate = geometry.sample_rate

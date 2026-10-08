@@ -173,6 +173,20 @@ relaying to http://localhost:8000, open http://localhost:7860
 | `POST /v1/chat/completions` | OpenAI-compatible, for existing clients |
 | `GET /v1/config` | Sample rate and chunk geometry of the loaded checkpoint |
 
+### Audio inputs
+
+The HTTP endpoints accept inline audio only:
+
+- `/v1/transcribe`: send the file contents in `audio_base64`.
+- `/v1/transcribe_batch`: send `audio_base64` in each item of `audios`.
+- `/v1/chat/completions`: use an `audio_url` message part whose `url` is a
+  base64 data URI, for example `data:audio/wav;base64,...`.
+
+HTTP(S) audio URLs are not supported. Clients using remote files must download
+them on the client side and send the audio contents. Decoded audio is limited to
+256 MiB per file. WebSocket PCM streaming and the demo's file upload and
+microphone inputs continue to work as before.
+
 ### Environment Variables
 
 | Variable | Description | Default |
