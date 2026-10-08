@@ -200,6 +200,34 @@ _SENTENCE_END_RE = re.compile(
 # merged into one card, which is why this runs here and not per block.
 _REPEAT_TAG_RE = re.compile(r"(\[[^\[\]]*\])(?:\s*\1)+")
 
+# A decode loop -- the model failure behind issue #415, usually triggered by a
+# stretch of non-speech -- emits the same text chunk after chunk, which renders
+# as that clause repeated down the transcript. A run of REPEAT_LOOP_MIN or more
+# byte-identical consecutive chunks is that loop: a real audio window rarely
+# transcribes identically twice, let alone three times running. One or two
+# repeats stay, since they can be genuine speech.
+REPEAT_LOOP_MIN = 3
+
+
+def mute_looped_chunks(chunk_texts: List[str]) -> List[str]:
+    """Blank all but the first of each long run of identical consecutive chunks.
+
+    Blanking, not dropping: chunk k's timestamp is ``k * chunk_seconds``, so the
+    slots have to stay. An emptied chunk folds into the open segment exactly as a
+    silent one does, which is what keeps a loop from repeating across the cards.
+    """
+    out = list(chunk_texts)
+    i = 0
+    while i < len(out):
+        j = i + 1
+        while j < len(out) and out[j] == out[i]:
+            j += 1
+        if out[i].strip() and j - i >= REPEAT_LOOP_MIN:
+            for k in range(i + 1, j):
+                out[k] = ""
+        i = j
+    return out
+
 # A card is one paragraph, so the line breaks the model emits inside a block
 # fold to single spaces -- except between two CJK characters, where a space is
 # not a word separator and just leaves a visible gap.
@@ -230,6 +258,7 @@ def chunk_segments(chunk_texts: List[str],
     ``duration`` only ever clamps the tail. While a clip is still streaming its
     real duration is unknown, and the chunk count is what defines the timeline.
     """
+    chunk_texts = mute_looped_chunks(chunk_texts)
     advance = geometry.chunk_seconds
     segments: List[Dict] = []
     cur_start = 0.0
