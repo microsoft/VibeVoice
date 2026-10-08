@@ -13,6 +13,21 @@ from .vibevoice_tokenizer_processor import AudioNormalizer
 
 logger = logging.get_logger(__name__)
 
+CHINESE_PUNCTUATION_TRANSLATION = str.maketrans(
+    {
+        "，": ",",
+        "。": ".",
+        "！": "!",
+        "？": "?",
+        "：": ":",
+        "；": ";",
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+    }
+)
+
 
 class VibeVoiceProcessor:
     r"""
@@ -595,6 +610,7 @@ class VibeVoiceProcessor:
 
     def _parse_script(self, script: str) -> List[Tuple[int, str]]:
         """Parse script into list of (speaker_id, text) tuples."""
+        script = script.translate(CHINESE_PUNCTUATION_TRANSLATION)
         lines = script.strip().split("\n")
         parsed_lines = []
         speaker_ids = []
