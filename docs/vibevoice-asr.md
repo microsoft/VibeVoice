@@ -87,6 +87,49 @@ python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --
 python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add an audio path here] 
 ```
 
+### Practical notes for long audio
+
+For recordings that exceed the configured single-pass limit, or when GPU memory
+is constrained, a practical fallback is to split the audio into bounded chunks
+and stitch the structured outputs after inference.
+
+A robust chunked workflow should:
+
+1. keep each chunk within the duration and token length validated for the target
+   deployment, for example 30-minute chunks;
+2. run ASR independently for each chunk;
+3. add the chunk start time back to every predicted segment timestamp;
+4. concatenate the timestamp-adjusted segments;
+5. validate timestamp coverage, timestamp monotonicity, and repeated-text loops,
+   not only WER.
+
+When chunking, speaker labels may be local to each chunk. Applications that need
+globally consistent speaker identities should add a separate speaker-linking or
+diarization step across chunks.
+
+For single-pass runs near the context boundary, YaRN RoPE scaling can improve
+long-audio robustness when the model's existing context configuration is used as
+the base. In one 11-item long-form stress test, setting
+`rope_type=yarn`, `factor=1.5`, and
+`original_max_position_embeddings=131072` preserved 30-minute quality while
+removing the observed 90-minute collapse cases:
+
+| Setting | e22 90m WER | e22 coverage | TED 90m WER | TED coverage | 11-item mean WER | Collapses |
+|---|---:|---:|---:|---:|---:|---:|
+| No RoPE override | 0.5824 | 77.6% | 0.8250 | 21.8% | 0.2328 | 2 |
+| YaRN, factor=1.5, original_max=131072 | 0.4859 | 82.0% | 0.3422 | 91.0% | 0.2542 | 0 |
+
+This is a robustness trade-off rather than a memory optimization: YaRN changes
+position scaling, but it does not reduce KV-cache size or activation memory.
+Validate the factor on the target audio distribution before using it as the
+default path.
+
+For Hugging Face generation, memory use can also depend on prefill-time
+intermediate tensors. If your inference stack supports it, setting
+`logits_to_keep=1` can avoid computing full vocabulary logits for every prefill
+position. Chunked prefill can further reduce activation peaks, at the cost of
+additional runtime.
+
 
 ## Finetuning
 LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetuning-asr/README.md) for detailed guide.
