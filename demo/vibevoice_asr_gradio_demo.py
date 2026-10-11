@@ -13,7 +13,7 @@ import argparse
 import time
 import json
 import gradio as gr
-from typing import List, Dict, Tuple, Optional, Generator
+from typing import List, Dict, Set, Tuple, Optional, Generator
 import tempfile
 import base64
 import io
@@ -125,6 +125,7 @@ class VibeVoiceASRInference:
         repetition_penalty: float = 1.0,
         context_info: str = None,
         streamer: Optional[TextIteratorStreamer] = None,
+        stop_event: Optional[threading.Event] = None,
     ) -> dict:
         """
         Transcribe audio to text.
@@ -141,6 +142,7 @@ class VibeVoiceASRInference:
             repetition_penalty: Repetition penalty (1.0 for no penalty)
             context_info: Optional context information (e.g., hotwords, speaker names, topics) to help transcription
             streamer: Optional TextIteratorStreamer for streaming output
+            stop_event: Optional event used to stop this generation
             
         Returns:
             Dictionary with transcription results
@@ -175,7 +177,8 @@ class VibeVoiceASRInference:
             generation_config["streamer"] = streamer
         
         # Add stopping criteria for stop button support
-        generation_config["stopping_criteria"] = StoppingCriteriaList([StopOnFlag()])
+        if stop_event is not None:
+            generation_config["stopping_criteria"] = StoppingCriteriaList([StopOnFlag(stop_event)])
         
         # Remove None values
         generation_config = {k: v for k, v in generation_config.items() if v is not None}
@@ -432,15 +435,50 @@ def extract_audio_segments(audio_path: str, segments: List[Dict]) -> List[Tuple[
 # Global variable to store the ASR model
 asr_model = None
 
-# Global stop flag for generation
-stop_generation_flag = False
+# Active generation stop events, isolated by Gradio session
+stop_events: Dict[str, Set[threading.Event]] = {}
+stop_events_lock = threading.Lock()
 
 
 class StopOnFlag(StoppingCriteria):
-    """Custom stopping criteria that checks a global flag."""
+    """Custom stopping criteria that checks one generation's event."""
+    def __init__(self, stop_event: threading.Event):
+        self.stop_event = stop_event
+
     def __call__(self, input_ids, scores, **kwargs):
-        global stop_generation_flag
-        return stop_generation_flag
+        return self.stop_event.is_set()
+
+
+def register_stop_event(session_hash: Optional[str]) -> threading.Event:
+    stop_event = threading.Event()
+    if session_hash is not None:
+        with stop_events_lock:
+            stop_events.setdefault(session_hash, set()).add(stop_event)
+    return stop_event
+
+
+def request_stop(session_hash: Optional[str]) -> bool:
+    if session_hash is None:
+        return False
+    with stop_events_lock:
+        session_stop_events = stop_events.get(session_hash)
+        if not session_stop_events:
+            return False
+        for stop_event in session_stop_events:
+            stop_event.set()
+        return True
+
+
+def clear_stop_event(session_hash: Optional[str], stop_event: threading.Event) -> None:
+    if session_hash is None:
+        return
+    with stop_events_lock:
+        session_stop_events = stop_events.get(session_hash)
+        if session_stop_events is None:
+            return
+        session_stop_events.discard(stop_event)
+        if not session_stop_events:
+            del stop_events[session_hash]
 
 
 def parse_time_to_seconds(val: Optional[str]) -> Optional[float]:
@@ -525,7 +563,8 @@ def transcribe_audio(
     top_p: float,
     do_sample: bool,
     repetition_penalty: float = 1.0,
-    context_info: str = ""
+    context_info: str = "",
+    request: gr.Request = None,
 ) -> Generator[Tuple[str, str], None, None]:
     """
     Transcribe audio and return results with audio segments (streaming version).
@@ -548,6 +587,9 @@ def transcribe_audio(
     if not audio_path_input and audio_input is None:
         yield "❌ Please provide audio input!", ""
         return
+
+    session_hash = request.session_hash if request is not None else None
+    stop_event = register_stop_event(session_hash)
     
     try:
         print("[INFO] Transcription requested")
@@ -630,7 +672,8 @@ def transcribe_audio(
                     do_sample=do_sample,
                     repetition_penalty=repetition_penalty,
                     context_info=context_info if context_info and context_info.strip() else None,
-                    streamer=streamer
+                    streamer=streamer,
+                    stop_event=stop_event,
                 )
             except Exception as e:
                 result_container["error"] = str(e)
@@ -912,6 +955,9 @@ def transcribe_audio(
         print(f"Error during transcription: {e}")
         print(traceback.format_exc())
         yield f"❌ Error during transcription: {str(e)}", ""
+    finally:
+        stop_event.set()
+        clear_stop_event(session_hash, stop_event)
 
 
 def _detect_device_and_attn(
@@ -1128,23 +1174,13 @@ def create_gradio_interface(
             outputs=[sampling_params]
         )
         
-        def reset_stop_flag():
-            """Reset stop flag before starting transcription."""
-            global stop_generation_flag
-            stop_generation_flag = False
-        
-        def set_stop_flag():
-            """Set stop flag to interrupt generation."""
-            global stop_generation_flag
-            stop_generation_flag = True
-            return "⏹️ Stop requested..."
+        def set_stop_flag(request: gr.Request):
+            """Stop the active transcription for this session."""
+            if request_stop(request.session_hash):
+                return "⏹️ Stop requested..."
+            return "ℹ️ No transcription in progress."
         
         transcribe_button.click(
-            fn=reset_stop_flag,
-            inputs=[],
-            outputs=[],
-            queue=False
-        ).then(
             fn=transcribe_audio,
             inputs=[
                 audio_input,
