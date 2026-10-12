@@ -306,11 +306,13 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
                     raise NotImplementedError(f"Speech type {speech_type} not implemented")
                 
                 if torch.isnan(self.model.speech_scaling_factor) or torch.isnan(self.model.speech_bias_factor):
-                    scaling_factor = 1. / audio_tokens[speech_masks].flatten().std()
-                    bias_factor = -audio_tokens[speech_masks].flatten().mean()
+                    scaling_factor = torch.tensor(1. / audio_tokens[speech_masks].flatten().std())
+                    bias_factor = torch.tensor(-audio_tokens[speech_masks].flatten().mean())
                     
                     # Only use distributed operations if the process group is initialized
                     if dist.is_available() and dist.is_initialized():
+                        scaling_factor = scaling_factor.to(audio_tokens.device)
+                        bias_factor = bias_factor.to(audio_tokens.device)
                         dist.all_reduce(scaling_factor, op=dist.ReduceOp.SUM)
                         dist.all_reduce(bias_factor, op=dist.ReduceOp.SUM)
                         world_size = dist.get_world_size()
@@ -415,6 +417,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel):
 
         # --- Diffusion Loss Calculation ---
         diffusion_loss = None
+        speech_len = 0
         # This block is executed only if we are in a context that involves speech.
         if speech_tensors is not None and acoustic_loss_mask.sum().item() > 0:
             condition_features = hidden_states[acoustic_loss_mask]
