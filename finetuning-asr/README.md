@@ -137,6 +137,31 @@ python inference_lora.py \
     --context_info "Tea Brew, Aiden Host"
 ```
 
+## Darija (Moroccan Arabic) Example
+
+`darija_toy_dataset/` contains Darija speech samples. Train and run inference the same way:
+
+```bash
+torchrun --nproc_per_node=1 lora_finetune.py \
+    --model_path microsoft/VibeVoice-ASR \
+    --data_dir ./darija_toy_dataset \
+    --output_dir ./output_darija \
+    --num_train_epochs 3 \
+    --per_device_train_batch_size 1 \
+    --learning_rate 1e-4 \
+    --gradient_checkpointing \
+    --bf16 \
+    --report_to none
+```
+
+```bash
+python inference_lora.py \
+    --base_model microsoft/VibeVoice-ASR \
+    --lora_path ./output_darija \
+    --audio_file ./darija_toy_dataset/0.wav \
+    --context_info "Moroccan Darija, labas, bezzaf"
+```
+
 ## Merging LoRA Weights (Optional)
 
 To merge LoRA weights into the base model for faster inference:
