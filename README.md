@@ -67,7 +67,8 @@ For more information, demos, and examples, please visit our [Project Page](https
 | VibeVoice-ASR-7B | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR) |  [Playground](https://aka.ms/vibevoice-asr) |
 | VibeVoice-ASR-Streaming | [HF Link](https://huggingface.co/collections/microsoft/vibevoice-68a2ef24a875c44be47b034f) | [Documentation](docs/vibevoice-asr-streaming.md) |
 | VibeVoice-ASR-BitNet (CPU) | [HF Link](https://huggingface.co/microsoft/VibeVoice-ASR-BitNet) | [VibeASR.cpp](https://github.com/microsoft/VibeASR.cpp) |
-| VibeVoice-TTS-1.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-1.5B) | Disabled |
+| VibeVoice-TTS-1.5B (legacy source) | [HF Link](https://huggingface.co/microsoft/VibeVoice-1.5B) | Disabled |
+| VibeVoice-TTS-1.5B (Transformers-native) | [HF Link](https://huggingface.co/microsoft/VibeVoice-1.5B-HF) | [Publication workflow](docs/publish-vibevoice-1.5b-hf.md) |
 | VibeVoice-Realtime-0.5B | [HF Link](https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B) | [Colab](https://colab.research.google.com/github/microsoft/VibeVoice/blob/main/demo/vibevoice_realtime_colab.ipynb) |
 
 </div>
