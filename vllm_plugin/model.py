@@ -46,43 +46,65 @@ def _ffmpeg_load_file(filepath) -> tuple[np.ndarray, int]:
     return audio, sr
 
 # Register FFmpeg-based audio loader
+#
+# Locating AudioMediaIO can fail two different ways depending on the
+# installed vLLM version: the module path may not exist at all (ImportError),
+# or the module may exist but no longer define AudioMediaIO because vLLM
+# moved/renamed it (AttributeError). Both must be caught at each fallback
+# level, or an incompatible vLLM version crashes the whole plugin at import
+# time instead of just skipping this optional FFmpeg-decoding override
+# (see https://github.com/microsoft/VibeVoice/issues/222).
+_OriginalAudioMediaIO = None
 try:
     # Try new location (vLLM >= 0.6.x)
     from vllm.multimodal.media.audio import AudioMediaIO as _OriginalAudioMediaIO
-except ImportError:
-    # Fall back to old location (vLLM < 0.6.x)
-    import vllm.multimodal.audio as _vllm_audio_module
-    _OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
-
-class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
-    """AudioMediaIO implementation using FFmpeg for audio decoding."""
-    
-    def load_bytes(self, data: bytes) -> tuple[np.ndarray, int]:
-        return _ffmpeg_load_bytes(data)
-    
-    def load_base64(self, media_type: str, data: str) -> tuple[np.ndarray, int]:
-        return _ffmpeg_load_bytes(base64.b64decode(data))
-    
-    def load_file(self, filepath) -> tuple[np.ndarray, int]:
-        return _ffmpeg_load_file(filepath)
-
-# Replace globally
-try:
-    # For new vLLM versions
-    import vllm.multimodal.media.audio as _vllm_audio_module
-    _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
-except ImportError:
-    # For old vLLM versions
-    import vllm.multimodal.audio as _vllm_audio_module
-    _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
-
-# Also patch in utils module where it's imported
-try:
-    import vllm.multimodal.utils as _vllm_utils_module
-    _vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
 except (ImportError, AttributeError):
-    # AudioMediaIO might not be imported in utils in newer versions
-    pass
+    try:
+        # Fall back to old location (vLLM < 0.6.x)
+        import vllm.multimodal.audio as _vllm_audio_module
+        _OriginalAudioMediaIO = _vllm_audio_module.AudioMediaIO
+    except (ImportError, AttributeError):
+        pass
+
+if _OriginalAudioMediaIO is None:
+    import sys
+    print(
+        "[VibeVoice] WARN: Could not locate vLLM's AudioMediaIO in either "
+        "the new (vllm.multimodal.media.audio) or old (vllm.multimodal.audio) "
+        "location. Skipping the FFmpeg-based audio loader override; vLLM's "
+        "built-in audio decoding will be used instead.",
+        file=sys.stderr,
+    )
+else:
+    class _PatchedAudioMediaIO(_OriginalAudioMediaIO):
+        """AudioMediaIO implementation using FFmpeg for audio decoding."""
+
+        def load_bytes(self, data: bytes) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_bytes(data)
+
+        def load_base64(self, media_type: str, data: str) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_bytes(base64.b64decode(data))
+
+        def load_file(self, filepath) -> tuple[np.ndarray, int]:
+            return _ffmpeg_load_file(filepath)
+
+    # Replace globally
+    try:
+        # For new vLLM versions
+        import vllm.multimodal.media.audio as _vllm_audio_module
+        _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
+    except ImportError:
+        # For old vLLM versions
+        import vllm.multimodal.audio as _vllm_audio_module
+        _vllm_audio_module.AudioMediaIO = _PatchedAudioMediaIO
+
+    # Also patch in utils module where it's imported
+    try:
+        import vllm.multimodal.utils as _vllm_utils_module
+        _vllm_utils_module.AudioMediaIO = _PatchedAudioMediaIO
+    except (ImportError, AttributeError):
+        # AudioMediaIO might not be imported in utils in newer versions
+        pass
 
 # ============================================================================
 
