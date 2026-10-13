@@ -176,3 +176,4 @@ tags
 exp
 .gradio/
 experimental_voices
+.worktrees/
