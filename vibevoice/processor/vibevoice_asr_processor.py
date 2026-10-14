@@ -334,23 +334,25 @@ class VibeVoiceASRProcessor:
                 audio_array, file_sr = sf.read(audio)
                 if audio_array.ndim > 1:
                     audio_array = audio_array.mean(axis=1)  # Convert to mono
-            
-            # Resample if needed
-            if file_sr != self.target_sample_rate:
-                import librosa
-                audio_array = librosa.resample(
-                    audio_array, 
-                    orig_sr=file_sr, 
-                    target_sr=self.target_sample_rate
-                )
         elif isinstance(audio, torch.Tensor):
             audio_array = audio.cpu().numpy()
             if audio_array.ndim > 1:
                 audio_array = audio_array.squeeze()
+            file_sr = sampling_rate or self.target_sample_rate
         else:
             audio_array = np.array(audio, dtype=np.float32)
             if audio_array.ndim > 1:
                 audio_array = audio_array.squeeze()
+            file_sr = sampling_rate or self.target_sample_rate
+        
+        # Resample if needed
+        if file_sr != self.target_sample_rate:
+            import librosa
+            audio_array = librosa.resample(
+                audio_array, 
+                orig_sr=file_sr, 
+                target_sr=self.target_sample_rate
+            )
         
         # Ensure float32
         audio_array = audio_array.astype(np.float32)
