@@ -9,9 +9,7 @@ import copy
 import glob
 
 from vibevoice.modular.modeling_vibevoice_streaming_inference import VibeVoiceStreamingForConditionalGenerationInference
-from vibevoice.processor.vibevoice_streaming_processor import VibeVoiceStreamingProcessor
-from transformers.cache_utils import DynamicCache
-from transformers.modeling_outputs import BaseModelOutputWithPast
+from vibevoice.processor.vibevoice_streaming_processor import VibeVoiceStreamingProcessor, load_voice_preset
 from transformers.utils import logging
 
 logging.set_verbosity_info()
@@ -224,8 +222,7 @@ def main():
     target_device = args.device if args.device != "cpu" else "cpu"
     voice_sample = voice_mapper.get_voice_path(args.speaker_name)
     print(f"Using voice preset for {args.speaker_name}: {voice_sample}")
-    with torch.serialization.safe_globals([BaseModelOutputWithPast, DynamicCache]):
-        all_prefilled_outputs = torch.load(voice_sample, map_location=target_device, weights_only=True)
+    all_prefilled_outputs = load_voice_preset(voice_sample, map_location=target_device)
 
     # Prepare inputs for the model
     inputs = processor.process_input_with_cached_prompt(
