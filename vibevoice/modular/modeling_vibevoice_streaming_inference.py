@@ -890,7 +890,8 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
         speech = torch.randn(condition.shape[0], self.config.acoustic_vae_dim).to(condition)
         for t in self.model.noise_scheduler.timesteps:
             half = speech[: len(speech) // 2]
-            combined = torch.cat([half, half], dim=0)
+            other_half = speech[len(speech) // 2:]
+            combined = torch.cat([half, other_half], dim=0)
             eps = self.model.prediction_head(combined, t.repeat(combined.shape[0]).to(combined), condition=condition)
             cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
             half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
