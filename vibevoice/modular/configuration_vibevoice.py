@@ -52,22 +52,24 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         weight_init_value: float = 1e-2,
         # encoder specific
         encoder_n_filters: int = 32,
-        encoder_ratios: Optional[List[int]] = [8,5,5,4,2,2],
+        encoder_ratios: Optional[List[int]] = None,
         encoder_depths: str = "3-3-3-3-3-3-8",
         # decoder specific
         decoder_n_filters: int = 32,
-        decoder_ratios: Optional[List[int]] = None, # if None, same as encoder
+        decoder_ratios: Optional[List[int]] = None,
         decoder_depths: Optional[str] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
+        if encoder_ratios is None:
+            encoder_ratios = [8, 5, 5, 4, 2, 2]
         self.channels = channels
         self.corpus_normalize = corpus_normalize
         self.causal = causal
         self.vae_dim = vae_dim
         self.fix_std = fix_std
         self.std_dist_type = std_dist_type
-        
+
         # common parameters
         self.conv_norm = conv_norm
         self.pad_mode = pad_mode
@@ -84,16 +86,16 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         self.encoder_n_filters = encoder_n_filters
         self.encoder_ratios = encoder_ratios
         self.encoder_depths = encoder_depths
-        
+
         # decoder specific parameters
-        self.decoder_ratios = decoder_ratios if decoder_ratios is not None else encoder_ratios
+        self.decoder_ratios = decoder_ratios if decoder_ratios is not None else list(encoder_ratios)
         self.decoder_n_filters = decoder_n_filters
         self.decoder_depths = decoder_depths
 
 
 class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
     model_type = "vibevoice_semantic_tokenizer"
-    
+
     def __init__(
         self,
         channels: int = 1,
@@ -102,7 +104,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         vae_dim: int = 64,
         fix_std: float = 0,
         std_dist_type: str = 'none',
-        # common 
+        # common
         mixer_layer: str = 'depthwise_conv',
         conv_norm: str = 'none',
         pad_mode: str = 'constant',
@@ -115,18 +117,20 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         weight_init_value: float = 1e-2,
         # encoder specific
         encoder_n_filters: int = 32,
-        encoder_ratios: Optional[List[int]] = [8,5,5,4,2,2],
+        encoder_ratios: Optional[List[int]] = None,
         encoder_depths: str = "3-3-3-3-3-3-8",
         **kwargs
     ):
         super().__init__(**kwargs)
+        if encoder_ratios is None:
+            encoder_ratios = [8, 5, 5, 4, 2, 2]
         self.channels = channels
         self.corpus_normalize = corpus_normalize
         self.causal = causal
         self.vae_dim = vae_dim
         self.fix_std = fix_std
         self.std_dist_type = std_dist_type
-        
+
         # common parameters
         self.conv_norm = conv_norm
         self.pad_mode = pad_mode
