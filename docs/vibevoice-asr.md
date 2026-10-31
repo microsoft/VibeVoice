@@ -87,6 +87,31 @@ python demo/vibevoice_asr_gradio_demo.py --model_path microsoft/VibeVoice-ASR --
 python demo/vibevoice_asr_inference_from_file.py --model_path microsoft/VibeVoice-ASR --audio_files [add an audio path here] 
 ```
 
+#### Optional repetition recovery
+
+Recovery is opt-in for single-input, non-streaming greedy inference. Each retry
+reuses the same speech features and excludes a previously taken prefix/token
+branch, without deduplicating text or adjusting temperature.
+
+```bash
+python demo/vibevoice_asr_inference_from_file.py \
+  --model_path microsoft/VibeVoice-ASR --audio_files input.wav \
+  --batch_size 1 --temperature 0 --num_beams 1 \
+  --recovery_max_retries 2 --recovery_max_period 32 \
+  --max_new_tokens 4096 --recover_repetition --output_json results.json
+```
+
+Defaults are two retries and a maximum repeating-unit length of 32 tokens.
+Set retries to 0 to retain only the original decode; period must be positive.
+`max_new_tokens` bounds each attempt. The original runs to EOS or its limit;
+retries stop at detected repetition. `results.json` retains all raw attempts,
+token IDs, configured bounds, EOS/limit flags, and unresolved status.
+
+The three-repeat heuristic can miss loops or flag legitimate repetition.
+`no_repetition_detected` does not verify accuracy: retries can still omit speech
+or hallucinate. Reported evaluation uses the defaults; other bounds are not
+accuracy-benchmarked. Evaluate WER/CER and recovered content separately.
+
 
 ## Finetuning
 LoRA (Low-Rank Adaptation) fine-tuning is supported. See [Finetuning](../finetuning-asr/README.md) for detailed guide.

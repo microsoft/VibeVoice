@@ -358,10 +358,14 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
         speech_masks: Optional[torch.BoolTensor] = None,
         speech_semantic_tensors: Optional[torch.FloatTensor] = None,
         acoustic_input_mask: Optional[torch.BoolTensor] = None,
+        speech_features: Optional[torch.FloatTensor] = None,
         **kwargs,
     ) -> Union[Tuple, CausalLMOutput]:
         """
         Forward pass for the model. Handles both training and generation scenarios.
+
+        speech_features, when provided, must have shape [masked positions, hidden size]
+        and replaces speech encoding. Use the masked output of encode_speech.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -373,12 +377,21 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
             inputs_embeds = self.get_input_embeddings()(input_ids)
             
         # If we have speech input and acoustic_input_mask, encode and insert speech features
-        if speech_tensors is not None and acoustic_input_mask is not None:
-            speech_features = self.encode_speech(
-                speech_tensors=speech_tensors,
-                speech_masks=speech_masks,
-                speech_semantic_tensors=speech_semantic_tensors,
-            )
+        if speech_features is not None and speech_tensors is not None:
+            raise ValueError("Provide speech_tensors or speech_features, not both.")
+        if speech_features is not None and acoustic_input_mask is None:
+            raise ValueError("speech_features requires acoustic_input_mask.")
+        if speech_features is not None:
+            expected_shape = (int(acoustic_input_mask.sum()), inputs_embeds.shape[-1])
+            if speech_features.shape != expected_shape:
+                raise ValueError("speech_features shape must match the masked input embeddings.")
+        if acoustic_input_mask is not None and (speech_tensors is not None or speech_features is not None):
+            if speech_features is None:
+                speech_features = self.encode_speech(
+                    speech_tensors=speech_tensors,
+                    speech_masks=speech_masks,
+                    speech_semantic_tensors=speech_semantic_tensors,
+                )
             # Clone to avoid in-place operation on leaf variable during training
             inputs_embeds = inputs_embeds.clone()
             inputs_embeds[acoustic_input_mask] = speech_features
@@ -712,6 +725,7 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
         speech_masks=None,
         speech_semantic_tensors=None,
         acoustic_input_mask=None,
+        speech_features=None,
         **kwargs,
     ):
         """
@@ -773,6 +787,7 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
                 "speech_masks": speech_masks,
                 "speech_semantic_tensors": speech_semantic_tensors,
                 "acoustic_input_mask": acoustic_input_mask,
+                "speech_features": speech_features,
             })
         else:
             # Subsequent generation steps - exclude speech inputs
