@@ -19,6 +19,7 @@ from typing import List, Dict, Any, Optional
 from functools import wraps
 
 from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
+from vibevoice.modular.asr_repetition import generate_with_repetition_recovery
 from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
 from vibevoice.processor.audio_utils import COMMON_AUDIO_EXTS
 
@@ -105,6 +106,9 @@ class VibeVoiceASRBatchInference:
         top_p: float = 1.0,
         do_sample: bool = True,
         num_beams: int = 1,
+        recover_repetition: bool = False,
+        recovery_max_retries: int = 2,
+        recovery_max_period: int = 32,
     ) -> List[Dict[str, Any]]:
         """
         Transcribe multiple audio files/arrays in a single batch.
@@ -115,12 +119,15 @@ class VibeVoiceASRBatchInference:
             temperature: Temperature for sampling
             top_p: Top-p for nucleus sampling
             do_sample: Whether to use sampling
+            recover_repetition: Retry repetitive output (single-input greedy only)
             
         Returns:
             List of transcription results
         """
         if len(audio_inputs) == 0:
             return []
+        if recover_repetition and (len(audio_inputs) != 1 or do_sample or num_beams != 1):
+            raise ValueError("Repetition recovery requires batch_size=1 and greedy decoding.")
         
         batch_size = len(audio_inputs)
         print(f"\nProcessing batch of {batch_size} audio(s)...")
@@ -155,10 +162,19 @@ class VibeVoiceASRBatchInference:
         start_time = time.time()
         
         with torch.no_grad():
-            output_ids = self.model.generate(
-                **inputs,
-                **generation_config
-            )
+            if recover_repetition:
+                output_ids, recovery = generate_with_repetition_recovery(
+                    self.model, self.processor.tokenizer, inputs,
+                    max_new_tokens=max_new_tokens,
+                    eos_token_id=self.processor.tokenizer.eos_token_id,
+                    pad_token_id=self.processor.pad_id,
+                    max_retries=recovery_max_retries, max_period=recovery_max_period,
+                )
+            else:
+                output_ids = self.model.generate(
+                    **inputs,
+                    **generation_config
+                )
         
         generation_time = time.time() - start_time
         
@@ -199,6 +215,8 @@ class VibeVoiceASRBatchInference:
                 "segments": transcription_segments,
                 "generation_time": generation_time / batch_size,
             })
+            if recover_repetition:
+                results[-1]["recovery"] = recovery
         
         print(f"  Total generation time: {generation_time:.2f}s")
         print(f"  Average time per sample: {generation_time/batch_size:.2f}s")
@@ -214,6 +232,9 @@ class VibeVoiceASRBatchInference:
         top_p: float = 1.0,
         do_sample: bool = True,
         num_beams: int = 1,
+        recover_repetition: bool = False,
+        recovery_max_retries: int = 2,
+        recovery_max_period: int = 32,
     ) -> List[Dict[str, Any]]:
         """
         Transcribe multiple audio files/arrays with automatic batching.
@@ -230,6 +251,8 @@ class VibeVoiceASRBatchInference:
             List of transcription results
         """
         all_results = []
+        if recover_repetition and (batch_size != 1 or do_sample or num_beams != 1):
+            raise ValueError("Repetition recovery requires batch_size=1 and greedy decoding.")
         
         # Process in batches
         for i in range(0, len(audio_inputs), batch_size):
@@ -244,6 +267,9 @@ class VibeVoiceASRBatchInference:
                 top_p=top_p,
                 do_sample=do_sample,
                 num_beams=num_beams,
+                recover_repetition=recover_repetition,
+                recovery_max_retries=recovery_max_retries,
+                recovery_max_period=recovery_max_period,
             )
             all_results.extend(batch_results)
         
@@ -254,6 +280,8 @@ def print_result(result: Dict[str, Any]):
     """Pretty print a single transcription result."""
     print(f"\nFile: {result['file']}")
     print(f"Generation Time: {result['generation_time']:.2f}s")
+    if "recovery" in result:
+        print(f"Repetition recovery: {result['recovery']['status']} (not an accuracy check)")
     print(f"\n--- Raw Output ---")
     print(result['raw_text'][:500] + "..." if len(result['raw_text']) > 500 else result['raw_text'])
     
@@ -479,7 +507,23 @@ def main():
         help="Attention implementation to use. 'auto' will select the best available for your device (flash_attention_2 for CUDA, sdpa for MPS/CPU/XPU)"
     )
     
+    parser.add_argument(
+        "--recover_repetition", action="store_true",
+        help="Retry repetitive output; requires batch_size=1, temperature=0, num_beams=1",
+    )
+    parser.add_argument("--recovery_max_retries", type=int, default=2,
+                        help="Maximum recovery retries; 0 retains only the original decode")
+    parser.add_argument("--recovery_max_period", type=int, default=32,
+                        help="Maximum repeating-unit length to search, in tokens")
+    parser.add_argument(
+        "--output_json", type=str,
+        help="Save full results, including original output and all recovery attempts",
+    )
     args = parser.parse_args()
+    if args.recovery_max_retries < 0 or args.recovery_max_period < 1:
+        parser.error("recovery_max_retries must be nonnegative and recovery_max_period must be positive")
+    if args.recover_repetition and (args.batch_size != 1 or args.temperature != 0 or args.num_beams != 1):
+        parser.error("--recover_repetition requires --batch_size 1 --temperature 0 --num_beams 1")
     
     # Auto-detect best attention implementation based on device
     if args.attn_implementation == "auto":
@@ -566,7 +610,13 @@ def main():
         top_p=args.top_p,
         do_sample=do_sample,
         num_beams=args.num_beams,
+        recover_repetition=args.recover_repetition,
+        recovery_max_retries=args.recovery_max_retries,
+        recovery_max_period=args.recovery_max_period,
     )
+    if args.output_json:
+        with open(args.output_json, "w", encoding="utf-8") as output_file:
+            json.dump(all_results, output_file, ensure_ascii=False, indent=2)
     
     # Print results
     print("\n" + "="*80)
