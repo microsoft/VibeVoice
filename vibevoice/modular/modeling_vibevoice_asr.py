@@ -358,10 +358,14 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
         speech_masks: Optional[torch.BoolTensor] = None,
         speech_semantic_tensors: Optional[torch.FloatTensor] = None,
         acoustic_input_mask: Optional[torch.BoolTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[Tuple, CausalLMOutput]:
         """
         Forward pass for the model. Handles both training and generation scenarios.
+
+        logits_to_keep selects positions to project during inference (0 keeps all).
+        With labels, all positions are retained for the shifted training loss.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -398,6 +402,12 @@ class VibeVoiceASRForConditionalGeneration(VibeVoiceASRPreTrainedModel, Generati
         )
 
         hidden_states = outputs[0] if not return_dict else outputs.last_hidden_state
+        # GenerationMixin requests the final position at prefill. Avoid a
+        # [batch, audio-context length, vocabulary] allocation for unused logits.
+        # Training retains the existing full-sequence shifted-loss contract.
+        if labels is None:
+            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+            hidden_states = hidden_states[:, slice_indices, :]
         logits = self.lm_head(hidden_states)
 
         loss = None
