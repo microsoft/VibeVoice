@@ -228,7 +228,10 @@ class VibeVoiceTokenizerStreamingCache:
         """Set cached states for given layer and sample indices"""
         for i, idx in enumerate(sample_indices.tolist()):
             key = (layer_id, idx)
-            self.cache[key] = states[i].detach()
+            # Streaming callers pass a short tail view of a much larger chunk.
+            # detach() alone keeps that entire chunk's storage alive. Own only
+            # this sample's context so old chunks and cleared samples can die.
+            self.cache[key] = states[i].detach().clone()
 
     def set_to_zero(self, sample_indices: torch.Tensor):
         """Set all cached states to zero for given sample indices"""
